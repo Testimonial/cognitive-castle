@@ -412,7 +412,7 @@ def _maybe_run_mine_after_init(args, cfg) -> None:
     Behaviour matrix:
 
     - default (no flags) — prompt, default Yes, mine in-process if accepted
-    - ``--yes`` — entity auto-accept only; STILL prompts for the mine step
+    - ``--yes`` — suppresses the mine prompt and mines directly
     - ``--auto-mine`` — skip the mine prompt and mine directly
     - ``--yes --auto-mine`` — fully non-interactive
 
@@ -424,7 +424,7 @@ def _maybe_run_mine_after_init(args, cfg) -> None:
     from .miner import mine, scan_project
 
     project_dir = args.dir
-    auto_mine = bool(getattr(args, "auto_mine", False))
+    auto_mine = bool(getattr(args, "auto_mine", False)) or bool(getattr(args, "yes", False))
 
     # Single corpus walk: this scan feeds BOTH the "what would be mined"
     # estimate the user sees in the prompt AND the file list mine() will

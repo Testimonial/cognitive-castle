@@ -322,29 +322,28 @@ def test_maybe_run_mine_prompt_declined_prints_hint(tmp_path, capsys):
     # shlex.quote is a no-op on POSIX-safe paths but wraps Windows paths
     # (which contain backslashes) in single quotes, so the assertion has
     # to mirror what the production code actually emits.
-    assert f"mempalace mine {shlex.quote(str(tmp_path))}" in out
+    assert f"castle mine {shlex.quote(str(tmp_path))}" in out
     assert "Skipped" in out
 
 
-def test_maybe_run_mine_yes_alone_still_prompts(tmp_path):
-    """`--yes` is scoped to entity auto-accept and MUST still prompt for mine.
-
-    Regression guard for the flag-overload review feedback on #1183: extending
-    `--yes` to also auto-mine would silently change behaviour for scripted
-    callers and turn a fast command into a minutes-long ChromaDB write.
-    """
+def test_yes_flag_suppresses_mine_prompt(tmp_path):
+    """--yes should suppress 'Mine this directory now?' without requiring --auto-mine."""
     from cognitive_castle.cli import _maybe_run_mine_after_init
 
     args = _init_args(tmp_path, yes=True, auto_mine=False)
     cfg = _fake_cfg(tmp_path)
+    scanned = _fake_scanned(tmp_path, n=2)
     with (
         patch("cognitive_castle.miner.mine") as mock_mine,
-        patch("cognitive_castle.miner.scan_project", return_value=[]),
-        patch("builtins.input", return_value="n") as mock_input,
+        patch("cognitive_castle.miner.scan_project", return_value=scanned),
+        patch("builtins.input", side_effect=AssertionError("input() must not be called")),
     ):
         _maybe_run_mine_after_init(args, cfg)
-        mock_input.assert_called_once()  # the prompt MUST fire
-        mock_mine.assert_not_called()
+        mock_mine.assert_called_once_with(
+            project_dir=str(tmp_path),
+            palace_path=cfg.palace_path,
+            files=scanned,
+        )
 
 
 def test_maybe_run_mine_auto_mine_skips_prompt(tmp_path):
@@ -401,10 +400,10 @@ def test_maybe_run_mine_decline_quotes_path_with_spaces(tmp_path, capsys):
     # shlex.quote wraps paths with spaces (and Windows backslashes) in
     # single quotes — the assertion must use the same shlex form so the
     # test passes on every platform's tmp_path layout.
-    assert f"mempalace mine {shlex.quote(str(spaced_dir))}" in out
+    assert f"castle mine {shlex.quote(str(spaced_dir))}" in out
     # Bare unquoted form must NOT appear — that's the bug we're guarding.
-    assert f"mempalace mine {spaced_dir} " not in out
-    assert f"mempalace mine {spaced_dir}`" not in out
+    assert f"castle mine {spaced_dir} " not in out
+    assert f"castle mine {spaced_dir}`" not in out
 
 
 def test_maybe_run_mine_eof_on_stdin_treated_as_decline(tmp_path, capsys):
