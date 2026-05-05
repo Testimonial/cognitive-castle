@@ -232,7 +232,7 @@ def detect_rooms_from_files(project_dir: str) -> list:
 
 def print_proposed_structure(project_name: str, rooms: list, total_files: int, source: str):
     print(f"\n{'=' * 55}")
-    print("  MemPalace Init — Local setup")
+    print("  Cognitive Castle Init — Local setup")
     print(f"{'=' * 55}")
     print(f"\n  WING: {project_name}")
     print(f"  ({total_files} files found, rooms detected from {source})\n")
@@ -297,7 +297,7 @@ def save_config(project_dir: str, project_name: str, rooms: list):
 
     print(f"\n  Config saved: {config_path}")
     print("\n  Next step:")
-    print(f"    mempalace mine {project_dir}")
+    print(f"    castle mine {project_dir}")
     print(f"\n{'=' * 55}\n")
 
 

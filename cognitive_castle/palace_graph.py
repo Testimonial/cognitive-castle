@@ -1,6 +1,6 @@
 """
-palace_graph.py — Graph traversal layer for MemPalace
-======================================================
+palace_graph.py — Graph traversal layer for Cognitive Castle
+=============================================================
 
 Builds a navigable graph from the palace structure:
   - Nodes = rooms (named ideas)
@@ -8,11 +8,11 @@ Builds a navigable graph from the palace structure:
   - Edge types = halls (the corridors)
 
 Enables queries like:
-  "Start at chromadb-setup in wing_code, walk to wing_myproject"
+  "Start at vector-setup in wing_code, walk to wing_myproject"
   "Find all rooms connected to riley-college-apps"
   "What topics bridge wing_hardware and wing_myproject?"
 
-No external graph DB needed — built from ChromaDB metadata.
+No external graph DB needed — built from palace metadata.
 """
 
 # PEP 604 (``str | None``) needs 3.10+ at runtime; the project still
@@ -41,7 +41,7 @@ def _normalize_wing(wing: str | None) -> str | None:
 
     ``init`` stores wing names with hyphens and spaces replaced by underscores
     (e.g. ``castle_public``).  Callers that pass the raw directory name
-    (``mempalace-public``) would silently miss.  This helper aligns the lookup
+    (``castle-public``) would silently miss.  This helper aligns the lookup
     key with the stored metadata.
     """
     if wing is None:
@@ -81,7 +81,7 @@ def _get_collection(config=None):
 
 def build_graph(col=None, config=None):
     """
-    Build the palace graph from ChromaDB metadata.
+    Build the palace graph from palace metadata.
 
     Returns cached result if fresh (within TTL). Cache is invalidated
     on writes via invalidate_graph_cache(). Thread-safe via _graph_cache_lock.

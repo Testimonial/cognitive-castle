@@ -265,7 +265,7 @@ def _warn_if_legacy_metric(col) -> None:
     similarity interpretation falls apart — distances routinely exceed
     1.0 and the display ``max(0, 1 - dist)`` floors every result to 0.
     Legacy palaces (mined before this metadata was consistently set)
-    need ``mempalace repair`` to rebuild with the correct metric.
+    need ``castle repair`` to rebuild with the correct metric.
 
     The warning fires only for palaces that clearly have the wrong
     metric; palaces with no metadata table at all (empty dict) also
@@ -288,7 +288,7 @@ def _warn_if_legacy_metric(col) -> None:
     print(
         f"\n  NOTICE: this palace was created without cosine distance ({detail}).\n"
         "          Semantic similarity scores will not be meaningful.\n"
-        "          Run `mempalace repair` to rebuild the index with the correct metric.",
+        "          Run `castle repair` to rebuild the index with the correct metric.",
         file=_sys.stderr,
     )
 
@@ -302,7 +302,7 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
         col = get_collection(palace_path, create=False)
     except Exception:
         print(f"\n  No palace found at {palace_path}")
-        print("  Run: mempalace init <dir> then mempalace mine <dir>")
+        print("  Run: castle init <dir> then castle mine <dir>")
         raise SearchError(f"No palace found at {palace_path}")
 
     # Alert the user if this palace predates hnsw:space=cosine being set on
@@ -401,7 +401,7 @@ def _bm25_only_via_lancedb(
     if not os.path.isdir(db_dir):
         return {
             "error": "No palace found",
-            "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
+            "hint": "Run: castle init <dir> && castle mine <dir>",
         }
 
     try:
@@ -678,7 +678,7 @@ def search_memories(
         logger.error("No palace found at %s: %s", palace_path, e)
         return {
             "error": "No palace found",
-            "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
+            "hint": "Run: castle init <dir> && castle mine <dir>",
         }
 
     where = build_where_filter(wing, room)

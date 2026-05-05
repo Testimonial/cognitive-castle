@@ -1227,10 +1227,10 @@ def main():
         help="Print detected poisoned rows and exit without mutation (--mode max-seq-id only)",
     )
 
-    # repair-status — read-only HNSW capacity health check (#1222)
+    # repair-status — read-only palace capacity health check (#1222)
     sub.add_parser(
         "repair-status",
-        help="Compare sqlite vs HNSW element counts (read-only; never opens a chromadb client)",
+        help="Compare stored vs indexed element counts (read-only palace health check)",
     )
 
     # mcp

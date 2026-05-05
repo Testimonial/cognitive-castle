@@ -6,7 +6,7 @@ entity detection by a wide margin: the project's own name is already written
 down in package.json / pyproject.toml / Cargo.toml / go.mod, and the people
 who worked on it are in `git log`.
 
-This module is used as the primary signal in `mempalace init`. The regex
+This module is used as the primary signal in `castle init`. The regex
 detector in entity_detector.py stays as a fallback for prose-only folders
 (notes, research, writing).
 
@@ -569,7 +569,7 @@ def to_detected_dict(
 def _merge_detected(primary: dict, secondary: dict, drop_secondary_uncertain: bool = False) -> dict:
     """Merge two detected dicts. Primary entries win on name conflict.
 
-    Dedup is case-insensitive so "cognitive-castle" (manifest name) absorbs "MemPalace"
+    Dedup is case-insensitive so "cognitive-castle" (manifest name) absorbs "Cognitive Castle"
     (docs/prose reference) instead of surfacing both.
 
     If ``drop_secondary_uncertain`` is True, the secondary's uncertain bucket is
@@ -625,7 +625,7 @@ def discover_entities(
     progress prints to stderr; Ctrl-C returns partial results.
 
     Passing ``corpus_origin`` enables corpus-origin persona reclassification.
-    The expected shape is the dict written by ``mempalace init`` to
+    The expected shape is the dict written by ``castle init`` to
     ``<palace>/.castle/origin.json`` (see ``corpus_origin.py``).
     """
     projects, people = scan(project_dir)
@@ -639,8 +639,8 @@ def discover_entities(
         convo_projects = scan_claude_projects(root_path)
         # Dedup by name against the git-manifest list, preferring entries
         # with more user_commits as signal strength. Keyed case-insensitively
-        # so a `pyproject.toml` name like `mempalace` and a Claude Code
-        # `cwd` variant like `MemPalace` collapse into one entry — matches
+        # so a `pyproject.toml` name like `cognitive-castle` and a Claude Code
+        # `cwd` variant like `Cognitive Castle` collapse into one entry — matches
         # the case-insensitive dedup used in `_merge_detected` and
         # `miner.add_to_known_entities`.
         by_name: dict[str, ProjectInfo] = {p.name.lower(): p for p in projects}

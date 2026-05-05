@@ -311,7 +311,7 @@ def mine_lock(source_file: str):
 
 
 class MineAlreadyRunning(RuntimeError):
-    """Raised when another `mempalace mine` already holds the per-palace lock."""
+    """Raised when another `castle mine` already holds the per-palace lock."""
 
 
 @contextlib.contextmanager
@@ -319,11 +319,10 @@ def mine_palace_lock(palace_path: str):
     """Per-palace non-blocking lock around the full `mine` pipeline.
 
     The per-file `mine_lock` only protects delete+insert interleave for a
-    single source; it does not prevent N copies of `mempalace mine <dir>`
+    single source; it does not prevent N copies of `castle mine <dir>`
     from being spawned concurrently by hooks. When that happens, each copy
-    drives ChromaDB HNSW inserts in parallel against the same palace,
-    which (combined with chromadb's multi-threaded ParallelFor) can
-    corrupt the HNSW graph and produce sparse link_lists.bin blowups.
+    drives vector inserts in parallel against the same palace,
+    which can corrupt the index and produce unexpected blowups.
 
     The lock file is keyed by sha256(palace_path) so mines against
     *different* palaces can still run in parallel — we only serialize
@@ -335,7 +334,7 @@ def mine_palace_lock(palace_path: str):
     normcase, `C:\\Palace` and `c:\\palace` would hash to different keys
     on Windows and let two concurrent mines touch the same on-disk palace.
 
-    Non-blocking: if another `mine` is already writing to this palace,
+    Non-blocking: if another `castle mine` is already writing to this palace,
     raise MineAlreadyRunning so the caller can exit cleanly instead of
     piling up as a waiting worker.
     """
@@ -357,7 +356,7 @@ def mine_palace_lock(palace_path: str):
                 acquired = True
             except OSError as exc:
                 raise MineAlreadyRunning(
-                    f"another `mempalace mine` is already running against {resolved}"
+                    f"another `castle mine` is already running against {resolved}"
                 ) from exc
         else:
             import fcntl
@@ -367,7 +366,7 @@ def mine_palace_lock(palace_path: str):
                 acquired = True
             except BlockingIOError as exc:
                 raise MineAlreadyRunning(
-                    f"another `mempalace mine` is already running against {resolved}"
+                    f"another `castle mine` is already running against {resolved}"
                 ) from exc
         yield
     finally:
