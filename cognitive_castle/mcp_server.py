@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-MemPalace MCP Server — read/write palace access for Claude Code
+Cognitive Castle MCP Server — read/write palace access for Claude Code
 ================================================================
-Install: claude mcp add mempalace -- mempalace-mcp [--palace /path/to/palace]
+Install: claude mcp add castle -- castle-mcp [--palace /path/to/palace]
 
 Tools (read):
   castle_status          — total drawers, wing/room breakdown
@@ -78,7 +78,7 @@ logger = logging.getLogger("castle_mcp")
 
 
 def _parse_args():
-    parser = argparse.ArgumentParser(description="MemPalace MCP Server")
+    parser = argparse.ArgumentParser(description="Cognitive Castle MCP Server")
     parser.add_argument(
         "--palace",
         metavar="PATH",
@@ -180,7 +180,7 @@ def _get_collection(create=False):
 def _no_palace():
     return {
         "error": "No palace found",
-        "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
+        "hint": "Run: castle init <dir> && castle mine <dir>",
     }
 
 
@@ -273,7 +273,7 @@ def tool_status():
 # Included in status response so the AI learns it on first wake-up call.
 # Also available via castle_get_aaak_spec tool.
 
-PALACE_PROTOCOL = """IMPORTANT — MemPalace Memory Protocol:
+PALACE_PROTOCOL = """IMPORTANT — Cognitive Castle Memory Protocol:
 1. ON WAKE-UP: Call castle_status to load palace overview + AAAK spec.
 2. BEFORE RESPONDING about any person, project, or past event: call castle_kg_query or castle_search FIRST. Never guess — verify.
 3. IF UNSURE about a fact (name, gender, age, relationship): say "let me check" and query the palace. Wrong is worse than slow.
@@ -282,7 +282,7 @@ PALACE_PROTOCOL = """IMPORTANT — MemPalace Memory Protocol:
 
 This protocol ensures the AI KNOWS before it speaks. Storage is not memory — but storage + this protocol = memory."""
 
-AAAK_SPEC = """AAAK is a compressed memory dialect that MemPalace uses for efficient storage.
+AAAK_SPEC = """AAAK is a compressed memory dialect that Cognitive Castle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.
 
 FORMAT:
@@ -1054,7 +1054,7 @@ def tool_diary_read(agent_name: str, last_n: int = 10, wing: str = ""):
     Note: ``agent_name`` is normalized to lowercase before filtering so
     that reads are case-insensitive (see #1243). Entries written under
     pre-fix mixed-case agent names will not match the lowercase filter;
-    use ``mempalace repair`` to migrate legacy data if needed.
+    use ``castle repair`` to migrate legacy data if needed.
     """
     try:
         agent_name = sanitize_name(agent_name, "agent_name").lower()
@@ -1247,7 +1247,7 @@ TOOLS = {
         "handler": tool_get_taxonomy,
     },
     "castle_get_aaak_spec": {
-        "description": "Get the AAAK dialect specification — the compressed memory format MemPalace uses. Call this if you need to read or write AAAK-compressed memories.",
+        "description": "Get the AAAK dialect specification — the compressed memory format Cognitive Castle uses. Call this if you need to read or write AAAK-compressed memories.",
         "input_schema": {"type": "object", "properties": {}},
         "handler": tool_get_aaak_spec,
     },
@@ -1788,7 +1788,7 @@ def _restore_stdout():
 
 def main():
     _restore_stdout()
-    logger.info("MemPalace MCP Server starting...")
+    logger.info("Cognitive Castle MCP Server starting...")
     # Pre-flight: probe HNSW capacity before any tool call so the warning
     # is visible at startup rather than on first use (#1222). Pure
     # filesystem read; never opens a chromadb client.

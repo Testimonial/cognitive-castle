@@ -1,30 +1,30 @@
 #!/usr/bin/env python3
 """
-MemPalace — Give your AI a memory. No API key required.
+Cognitive Castle — Give your AI a memory. No API key required.
 
 Two ways to ingest:
-  Projects:      mempalace mine ~/projects/my_app          (code, docs, notes)
-  Conversations: mempalace mine <convo-dir> --mode convos     (Claude Code, Claude.ai, ChatGPT, Slack exports)
+  Projects:      castle mine ~/projects/my_app          (code, docs, notes)
+  Conversations: castle mine <convo-dir> --mode convos     (Claude Code, Claude.ai, ChatGPT, Slack exports)
 
 Same palace. Same search. Different ingest strategies.
 
 Commands:
-    mempalace init <dir>                  Detect rooms from folder structure
-    mempalace split <dir>                 Split concatenated mega-files into per-session files
-    mempalace mine <dir>                  Mine project files (default)
-    mempalace mine <dir> --mode convos    Mine conversation exports
-    mempalace search "query"              Find anything, exact words
-    mempalace mcp                         Show MCP setup command
-    mempalace wake-up                     Show L0 + L1 wake-up context
-    mempalace wake-up --wing my_app       Wake-up for a specific project
-    mempalace status                      Show what's been filed
+    castle init <dir>                  Detect rooms from folder structure
+    castle split <dir>                 Split concatenated mega-files into per-session files
+    castle mine <dir>                  Mine project files (default)
+    castle mine <dir> --mode convos    Mine conversation exports
+    castle search "query"              Find anything, exact words
+    castle mcp                         Show MCP setup command
+    castle wake-up                     Show L0 + L1 wake-up context
+    castle wake-up --wing my_app       Wake-up for a specific project
+    castle status                      Show what's been filed
 
 Examples:
-    mempalace init ~/projects/my_app
-    mempalace mine ~/projects/my_app
-    mempalace mine ~/.claude/projects/-Users-you-Projects-my_app --mode convos --wing my_app
-    mempalace search "why did we switch to GraphQL"
-    mempalace search "pricing discussion" --wing my_app --room costs
+    castle init ~/projects/my_app
+    castle mine ~/projects/my_app
+    castle mine ~/.claude/projects/-Users-you-Projects-my_app --mode convos --wing my_app
+    castle search "why did we switch to GraphQL"
+    castle search "pricing discussion" --wing my_app --room costs
 """
 
 import os
@@ -218,7 +218,7 @@ def _ensure_castle_files_gitignored(project_dir) -> bool:
     if not missing:
         return False
     prefix = "" if not existing or existing.endswith("\n") else "\n"
-    block = prefix + "\n# MemPalace per-project files (issue #185)\n" + "\n".join(missing) + "\n"
+    block = prefix + "\n# Cognitive Castle per-project files (issue #185)\n" + "\n".join(missing) + "\n"
     with open(gitignore, "a") as f:
         f.write(block)
     print(f"  Added {', '.join(missing)} to {gitignore.name}")
@@ -279,7 +279,7 @@ def cmd_init(args):
                     print(
                         f"  ⚠ {provider_name} is an EXTERNAL API. Your folder "
                         f"content will be sent to the provider during init. "
-                        f"MemPalace does not control how the provider logs, "
+                        f"Cognitive Castle does not control how the provider logs, "
                         f"retains, or uses your data. Pass --no-llm to keep "
                         f"init fully local."
                     )
@@ -464,7 +464,7 @@ def _maybe_run_mine_after_init(args, cfg) -> None:
             # we don't block. User can re-run with --auto-mine to opt in.
             answer = "n"
         if answer not in ("", "y", "yes"):
-            print(f"\n  Skipped. Run `mempalace mine {shlex.quote(project_dir)}` when ready.")
+            print(f"\n  Skipped. Run `castle mine {shlex.quote(project_dir)}` when ready.")
             return
 
     palace_path = cfg.palace_path
@@ -615,7 +615,7 @@ def cmd_split(args):
         argv += ["--min-sessions", str(args.min_sessions)]
 
     old_argv = sys.argv
-    sys.argv = ["mempalace split"] + argv
+    sys.argv = ["castle split"] + argv
     try:
         split_main()
     finally:
@@ -683,7 +683,7 @@ def cmd_repair(args):
         return
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair")
+    print("  Cognitive Castle Repair")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
@@ -789,8 +789,8 @@ def cmd_instructions(args):
 
 
 def cmd_mcp(args):
-    """Show how to wire MemPalace into MCP-capable hosts."""
-    base_server_cmd = "mempalace-mcp"
+    """Show how to wire Cognitive Castle into MCP-capable hosts."""
+    base_server_cmd = "castle-mcp"
 
     if args.palace:
         resolved_palace = str(Path(args.palace).expanduser())
@@ -798,14 +798,14 @@ def cmd_mcp(args):
     else:
         server_cmd = base_server_cmd
 
-    print("MemPalace MCP quick setup:")
-    print(f"  claude mcp add mempalace -- {server_cmd}")
+    print("Cognitive Castle MCP quick setup:")
+    print(f"  claude mcp add castle -- {server_cmd}")
     print("\nRun the server directly:")
     print(f"  {server_cmd}")
 
     if not args.palace:
         print("\nOptional custom palace:")
-        print(f"  claude mcp add mempalace -- {base_server_cmd} --palace /path/to/palace")
+        print(f"  claude mcp add castle -- {base_server_cmd} --palace /path/to/palace")
         print(f"  {base_server_cmd} --palace /path/to/palace")
 
 
@@ -836,7 +836,7 @@ def cmd_compress(args):
         col = backend.get_collection(palace_path, "castle_drawers")
     except Exception:
         print(f"\n  No palace found at {palace_path}")
-        print("  Run: mempalace init <dir> then mempalace mine <dir>")
+        print("  Run: castle init <dir> then castle mine <dir>")
         sys.exit(1)
 
     # Query drawers in batches to avoid SQLite variable limit (~999)
@@ -936,9 +936,9 @@ def cmd_compress(args):
 
 
 def main():
-    version_label = f"MemPalace {__version__}"
+    version_label = f"Cognitive Castle {__version__}"
     parser = argparse.ArgumentParser(
-        description="MemPalace — Give your AI a memory. No API key required.",
+        description="Cognitive Castle — Give your AI a memory. No API key required.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=f"{version_label}\n\n{__doc__}",
     )
@@ -1062,7 +1062,7 @@ def main():
     p_mine.add_argument(
         "--agent",
         default="cognitive-castle",
-        help="Your name — recorded on every drawer (default: mempalace)",
+        help="Your name — recorded on every drawer (default: castle)",
     )
     p_mine.add_argument("--limit", type=int, default=0, help="Max files to process (0 = all)")
     p_mine.add_argument(
@@ -1071,8 +1071,8 @@ def main():
         help=(
             "Re-run corpus_origin detection on this directory and overwrite "
             "<palace>/.castle/origin.json. Useful when the corpus has grown "
-            "since `mempalace init` and the stored origin may be stale. "
-            "Heuristic-only (no LLM call) — re-run `mempalace init --llm` for "
+            "since `castle init` and the stored origin may be stale. "
+            "Heuristic-only (no LLM call) — re-run `castle init --llm` for "
             "Tier 2 refinement."
         ),
     )
@@ -1236,7 +1236,7 @@ def main():
     # mcp
     sub.add_parser(
         "mcp",
-        help="Show MCP setup command for connecting MemPalace to your AI client",
+        help="Show MCP setup command for connecting Cognitive Castle to your AI client",
     )
 
     # status

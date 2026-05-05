@@ -1032,7 +1032,7 @@ def mine(
             )
     except MineAlreadyRunning:
         print(
-            f"mempalace: another `mine` is already running against "
+            f"castle: another `mine` is already running against "
             f"{palace_path} — exiting cleanly.",
             file=sys.stderr,
         )
@@ -1068,7 +1068,7 @@ def _mine_impl(
     from .embedding import describe_device
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Mine")
+    print("  Cognitive Castle Mine")
     print(f"{'=' * 55}")
     print(f"  Wing:    {wing}")
     print(f"  Rooms:   {', '.join(r['name'] for r in rooms)}")
@@ -1148,7 +1148,7 @@ def _mine_impl(
         print("\n  By room:")
         for room, count in sorted(room_counts.items(), key=lambda x: x[1], reverse=True):
             print(f"    {room:20} {count} files")
-        print('\n  Next: mempalace search "what you\'re looking for"')
+        print('\n  Next: castle search "what you\'re looking for"')
         print(f"{'=' * 55}\n")
     except KeyboardInterrupt:
         # Idempotent re-mine: deterministic drawer IDs mean already-filed
@@ -1161,7 +1161,7 @@ def _mine_impl(
         print(f"    drawers_filed:   {total_drawers}")
         print(f"    last_file:       {last_file or '<none>'}")
         print(
-            f"\n  Re-run `mempalace mine {shlex.quote(project_dir)}` to resume — "
+            f"\n  Re-run `castle mine {shlex.quote(project_dir)}` to resume — "
             "already-filed drawers are\n  upserted idempotently and will not duplicate.\n"
         )
         sys.exit(130)
@@ -1179,7 +1179,7 @@ def _cleanup_mine_pid_file() -> None:
     """Remove the global mine PID file if it currently points at us.
 
     The PID file (``~/.castle/hook_state/mine.pid``, written by the
-    hook in :func:`mempalace.hooks_cli._spawn_mine`) tracks the PID of
+    hook in :func:`cognitive_castle.hooks_cli._spawn_mine`) tracks the PID of
     the most recently spawned mine subprocess so the hook can dedup
     concurrent auto-ingest fires. When that subprocess exits — cleanly,
     on error, or via Ctrl-C — it should remove its own entry so the
@@ -1235,7 +1235,7 @@ def status(palace_path: str):
         col = get_collection(palace_path, create=False)
     except Exception:
         print(f"\n  No palace found at {palace_path}")
-        print("  Run: mempalace init <dir> then mempalace mine <dir>")
+        print("  Run: castle init <dir> then castle mine <dir>")
         return
 
     # Count by wing and room — paginate to avoid SQLite "too many SQL
@@ -1255,7 +1255,7 @@ def status(palace_path: str):
         offset += len(batch)
 
     print(f"\n{'=' * 55}")
-    print(f"  MemPalace Status — {total} drawers")
+    print(f"  Cognitive Castle Status — {total} drawers")
     print(f"{'=' * 55}\n")
     for wing, rooms in sorted(wing_rooms.items()):
         print(f"  WING: {wing}")
