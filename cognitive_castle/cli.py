@@ -59,8 +59,8 @@ def _gather_origin_samples(project_dir) -> list:
     signal that lives past the first N chars of a file must still trip
     detection, so we read the whole file up to the cap.
 
-    Skips mempalace's own per-project artifacts (``entities.json``,
-    ``castle.yaml``) so a re-run of ``mempalace init`` produces the
+    Skips Cognitive Castle's own per-project artifacts (``entities.json``,
+    ``castle.yaml``) so a re-run of ``castle init`` produces the
     same classification result it did on the first run. Without this
     filter, the first run writes entities.json into the corpus, the
     second run picks it up as a sample, and the Tier-1 density math
@@ -198,11 +198,11 @@ def _run_pass_zero(project_dir, palace_dir, llm_provider) -> dict:
 
 
 def _ensure_castle_files_gitignored(project_dir) -> bool:
-    """If project_dir is a git repo, ensure MemPalace's per-project files
+    """If project_dir is a git repo, ensure Cognitive Castle's per-project files
     are listed in .gitignore so they don't get committed by accident.
 
     Returns True if .gitignore was updated, False otherwise. Issue #185:
-    `mempalace init` writes castle.yaml + entities.json into the
+    `castle init` writes castle.yaml + entities.json into the
     project root, where they previously had no protection against being
     staged into git.
     """
