@@ -271,9 +271,9 @@ def test_init_pass_zero_writes_origin_json_to_palace(ai_dialogue_corpus: Path, t
     args = argparse.Namespace(dir=str(ai_dialogue_corpus), yes=True, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -318,10 +318,10 @@ def test_init_pass_zero_passes_corpus_origin_to_discover_entities(
         return {"people": [], "projects": [], "uncertain": []}
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.project_scanner.discover_entities", side_effect=fake_discover),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.project_scanner.discover_entities", side_effect=fake_discover),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -353,9 +353,9 @@ def test_init_pass_zero_skipped_when_no_readable_files(tmp_path: Path):
     args = argparse.Namespace(dir=str(project), yes=True, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)  # must not raise
 
@@ -398,9 +398,9 @@ def test_init_pass_zero_uses_full_file_content_not_front_sampled(tmp_path: Path)
     args = argparse.Namespace(dir=str(project), yes=True, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -539,8 +539,8 @@ def test_mine_default_does_not_redetect_origin(ai_dialogue_corpus: Path, tmp_pat
     args = _mine_args(ai_dialogue_corpus, redetect=False)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._run_pass_zero") as mock_pass_zero,
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._run_pass_zero") as mock_pass_zero,
         patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
@@ -561,7 +561,7 @@ def test_mine_with_redetect_origin_flag_writes_origin_json(
     args = _mine_args(ai_dialogue_corpus, redetect=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
         patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
@@ -600,7 +600,7 @@ def test_mine_redetect_overwrites_existing_origin_json(ai_dialogue_corpus: Path,
     args = _mine_args(ai_dialogue_corpus, redetect=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
         patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
@@ -631,7 +631,7 @@ def test_mine_redetect_uses_full_content_not_sampled(tmp_path: Path):
     args = _mine_args(project, redetect=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
         patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
@@ -679,10 +679,10 @@ def test_init_default_attempts_llm_provider(ai_dialogue_corpus: Path, tmp_path: 
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider) as mock_get,
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider) as mock_get,
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -705,10 +705,10 @@ def test_init_no_llm_skips_provider_acquisition(ai_dialogue_corpus: Path, tmp_pa
     args = _init_args(ai_dialogue_corpus, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider") as mock_get,
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider") as mock_get,
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -734,10 +734,10 @@ def test_init_graceful_fallback_when_provider_unavailable(
     fake_provider.check_available.return_value = (False, "Ollama not reachable at localhost:11434")
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)  # MUST NOT raise SystemExit
 
@@ -762,10 +762,10 @@ def test_init_graceful_fallback_on_provider_construction_error(
     args = _init_args(ai_dialogue_corpus)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", side_effect=LLMError("no api key")),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", side_effect=LLMError("no api key")),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)  # MUST NOT raise
 
@@ -791,10 +791,10 @@ def test_init_legacy_llm_flag_compatible(ai_dialogue_corpus: Path, tmp_path: Pat
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider) as mock_get,
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider) as mock_get,
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -845,14 +845,14 @@ def test_end_to_end_init_with_llm_separates_personas(ai_dialogue_corpus: Path, t
     )
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
         patch(
             "mempalace.cli.detect_origin_llm",
             return_value=fake_llm_origin_result,
         ),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -900,9 +900,9 @@ def test_no_llm_path_matches_v333_classification(ai_dialogue_corpus: Path, tmp_p
     args = _init_args(ai_dialogue_corpus, no_llm=True)  # explicit opt-out
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -943,9 +943,9 @@ def test_re_init_idempotent(ai_dialogue_corpus: Path, tmp_path: Path):
     args = _init_args(ai_dialogue_corpus, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
         first = json.loads((palace / ".mempalace" / "origin.json").read_text())
@@ -1099,12 +1099,12 @@ def test_integration_cmd_init_runs_pass_zero_to_pass_four_in_order(
         call_log.append("mine_prompt")
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli._run_pass_zero", side_effect=trace_pass_zero),
-        patch("mempalace.project_scanner.discover_entities", side_effect=trace_discover),
-        patch("mempalace.room_detector_local.detect_rooms_local", side_effect=trace_rooms),
-        patch("mempalace.cli._ensure_castle_files_gitignored", side_effect=trace_gitignore),
-        patch("mempalace.cli._maybe_run_mine_after_init", side_effect=trace_mine_prompt),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli._run_pass_zero", side_effect=trace_pass_zero),
+        patch("cognitive_castle.project_scanner.discover_entities", side_effect=trace_discover),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local", side_effect=trace_rooms),
+        patch("cognitive_castle.cli._ensure_castle_files_gitignored", side_effect=trace_gitignore),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init", side_effect=trace_mine_prompt),
     ):
         cmd_init(args)
 
@@ -1184,11 +1184,11 @@ def test_integration_entities_json_includes_topics_excludes_personas(
     )
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli.detect_origin_llm", return_value=fake_origin),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli.detect_origin_llm", return_value=fake_origin),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -1239,11 +1239,11 @@ def test_integration_add_to_known_entities_called_with_wing(
     )
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli.detect_origin_llm", return_value=fake_origin),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli.detect_origin_llm", return_value=fake_origin),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("cognitive_castle.miner.add_to_known_entities") as mock_add,
     ):
         cmd_init(args)
@@ -1469,7 +1469,7 @@ def test_merge_tier_fields_heuristic_yes_llm_no_keeps_heuristic_bool():
             (project_dir / f"log{i}.md").write_text(sample)
         palace_dir = Path(tmp_dir) / "palace"
 
-        with patch("mempalace.cli.detect_origin_llm", return_value=llm_wrong_result):
+        with patch("cognitive_castle.cli.detect_origin_llm", return_value=llm_wrong_result):
             wrapped = _run_pass_zero(
                 project_dir=str(project_dir),
                 palace_dir=str(palace_dir),
@@ -1537,7 +1537,7 @@ def test_merge_tier_fields_heuristic_no_no_personas_leak():
             (project_dir / f"diary{i}.md").write_text(sample)
         palace_dir = Path(tmp_dir) / "palace"
 
-        with patch("mempalace.cli.detect_origin_llm", return_value=llm_agreeing_result):
+        with patch("cognitive_castle.cli.detect_origin_llm", return_value=llm_agreeing_result):
             wrapped = _run_pass_zero(
                 project_dir=str(project_dir),
                 palace_dir=str(palace_dir),
@@ -1592,7 +1592,7 @@ def test_merge_tier_fields_heuristic_yes_llm_yes_combines_evidence():
             (project_dir / f"log{i}.md").write_text(sample)
         palace_dir = Path(tmp_dir) / "palace"
 
-        with patch("mempalace.cli.detect_origin_llm", return_value=llm_agreeing_result):
+        with patch("cognitive_castle.cli.detect_origin_llm", return_value=llm_agreeing_result):
             wrapped = _run_pass_zero(
                 project_dir=str(project_dir),
                 palace_dir=str(palace_dir),
@@ -1672,7 +1672,7 @@ def test_merge_tier_fields_confidence_matches_heuristic_call():
             (project_dir / f"log{i}.md").write_text(sample)
         palace_dir = Path(tmp_dir) / "palace"
 
-        with patch("mempalace.cli.detect_origin_llm", return_value=llm_distinct_result):
+        with patch("cognitive_castle.cli.detect_origin_llm", return_value=llm_distinct_result):
             wrapped = _run_pass_zero(
                 project_dir=str(project_dir),
                 palace_dir=str(palace_dir),
@@ -1750,10 +1750,10 @@ def test_init_prints_privacy_warning_when_provider_is_external(
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -1795,10 +1795,10 @@ def test_init_no_privacy_warning_when_provider_is_local(
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -1818,10 +1818,10 @@ def test_init_no_privacy_warning_with_no_llm_flag(ai_dialogue_corpus: Path, tmp_
     args = _init_args(ai_dialogue_corpus, no_llm=True)
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider") as mock_get,
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider") as mock_get,
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
 
@@ -1868,10 +1868,10 @@ def test_init_blocks_with_consent_prompt_when_api_key_from_env(
     fake_provider = _external_env_provider()
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input", return_value="y") as mock_input,
     ):
         cmd_init(args)
@@ -1892,10 +1892,10 @@ def test_init_consent_prompt_y_proceeds_with_llm(ai_dialogue_corpus: Path, tmp_p
     fake_provider = _external_env_provider()
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input", return_value="y"),
     ):
         cmd_init(args)
@@ -1918,10 +1918,10 @@ def test_init_consent_prompt_n_falls_back_to_heuristic(
     fake_provider = _external_env_provider()
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input", return_value="n"),
     ):
         cmd_init(args)
@@ -1949,10 +1949,10 @@ def test_init_no_consent_prompt_when_api_key_from_flag(
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input") as mock_input,
     ):
         cmd_init(args)
@@ -1976,10 +1976,10 @@ def test_init_accept_external_llm_flag_bypasses_consent_prompt(
     fake_provider = _external_env_provider()
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input") as mock_input,
     ):
         cmd_init(args)
@@ -2010,10 +2010,10 @@ def test_init_no_consent_prompt_when_endpoint_is_local(
     fake_provider.classify.return_value = MagicMock(text='{"classifications": []}')
 
     with (
-        patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.cli.get_provider", return_value=fake_provider),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
+        patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.input") as mock_input,
     ):
         cmd_init(args)

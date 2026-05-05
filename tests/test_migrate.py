@@ -31,14 +31,14 @@ def test_migrate_aborts_without_confirmation(tmp_path, capsys):
 
     with (
         patch.dict("sys.modules", {"chromadb": mock_chromadb}),
-        patch("mempalace.migrate.detect_chromadb_version", return_value="0.5.x"),
+        patch("cognitive_castle.migrate.detect_chromadb_version", return_value="0.5.x"),
         patch(
             "mempalace.migrate.extract_drawers_from_sqlite",
             return_value=[{"id": "id1", "document": "doc", "metadata": {"wing": "w", "room": "r"}}],
         ),
         patch("builtins.input", return_value="n"),
-        patch("mempalace.migrate.shutil.copytree") as mock_copytree,
-        patch("mempalace.migrate.shutil.rmtree") as mock_rmtree,
+        patch("cognitive_castle.migrate.shutil.copytree") as mock_copytree,
+        patch("cognitive_castle.migrate.shutil.rmtree") as mock_rmtree,
     ):
         result = migrate(str(palace_dir))
 
@@ -94,7 +94,7 @@ def test_restore_stale_palace_logs_and_swallows_on_failure(tmp_path, capsys):
     stale_path.mkdir()
 
     # Force os.replace to fail deterministically.
-    with patch("mempalace.migrate.os.replace", side_effect=OSError("boom")):
+    with patch("cognitive_castle.migrate.os.replace", side_effect=OSError("boom")):
         _restore_stale_palace(str(palace_path), str(stale_path))
 
     out = capsys.readouterr().out

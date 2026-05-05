@@ -386,8 +386,8 @@ def test_auto_detect_filters_known(tmp_path):
         "uncertain": [],
     }
     with (
-        patch("mempalace.onboarding.scan_for_detection", return_value=["file.txt"]),
-        patch("mempalace.onboarding.detect_entities", return_value=fake_detected),
+        patch("cognitive_castle.onboarding.scan_for_detection", return_value=["file.txt"]),
+        patch("cognitive_castle.onboarding.detect_entities", return_value=fake_detected),
     ):
         result = _auto_detect(str(tmp_path), known)
     names = [p["name"] for p in result]
@@ -402,15 +402,15 @@ def test_auto_detect_filters_low_confidence(tmp_path):
         "uncertain": [],
     }
     with (
-        patch("mempalace.onboarding.scan_for_detection", return_value=["file.txt"]),
-        patch("mempalace.onboarding.detect_entities", return_value=fake_detected),
+        patch("cognitive_castle.onboarding.scan_for_detection", return_value=["file.txt"]),
+        patch("cognitive_castle.onboarding.detect_entities", return_value=fake_detected),
     ):
         result = _auto_detect(str(tmp_path), [])
     assert len(result) == 0
 
 
 def test_auto_detect_handles_exception(tmp_path):
-    with patch("mempalace.onboarding.scan_for_detection", side_effect=Exception("boom")):
+    with patch("cognitive_castle.onboarding.scan_for_detection", side_effect=Exception("boom")):
         result = _auto_detect(str(tmp_path), [])
     assert result == []
 
@@ -421,15 +421,15 @@ def test_auto_detect_handles_exception(tmp_path):
 def test_run_onboarding_basic_flow(tmp_path):
     """Test the full onboarding flow with minimal mocking."""
     with (
-        patch("mempalace.onboarding._ask_mode", return_value="work"),
+        patch("cognitive_castle.onboarding._ask_mode", return_value="work"),
         patch(
             "mempalace.onboarding._ask_people",
             return_value=([{"name": "Bob", "relationship": "boss", "context": "work"}], {}),
         ),
-        patch("mempalace.onboarding._ask_projects", return_value=["Acme"]),
-        patch("mempalace.onboarding._ask_wings", return_value=["projects", "team"]),
-        patch("mempalace.onboarding._yn", return_value=False),
-        patch("mempalace.onboarding._warn_ambiguous", return_value=[]),
+        patch("cognitive_castle.onboarding._ask_projects", return_value=["Acme"]),
+        patch("cognitive_castle.onboarding._ask_wings", return_value=["projects", "team"]),
+        patch("cognitive_castle.onboarding._yn", return_value=False),
+        patch("cognitive_castle.onboarding._warn_ambiguous", return_value=[]),
     ):
         registry = run_onboarding(directory=".", config_dir=tmp_path, auto_detect=False)
     assert "Bob" in registry.people
@@ -439,14 +439,14 @@ def test_run_onboarding_basic_flow(tmp_path):
 def test_run_onboarding_with_ambiguous_names(tmp_path):
     """Onboarding prints a warning for ambiguous names."""
     with (
-        patch("mempalace.onboarding._ask_mode", return_value="personal"),
+        patch("cognitive_castle.onboarding._ask_mode", return_value="personal"),
         patch(
             "mempalace.onboarding._ask_people",
             return_value=([{"name": "Grace", "relationship": "friend", "context": "personal"}], {}),
         ),
-        patch("mempalace.onboarding._ask_projects", return_value=[]),
-        patch("mempalace.onboarding._ask_wings", return_value=["family"]),
-        patch("mempalace.onboarding._yn", return_value=False),
+        patch("cognitive_castle.onboarding._ask_projects", return_value=[]),
+        patch("cognitive_castle.onboarding._ask_wings", return_value=["family"]),
+        patch("cognitive_castle.onboarding._yn", return_value=False),
     ):
         registry = run_onboarding(directory=".", config_dir=tmp_path, auto_detect=False)
     assert "Grace" in registry.people

@@ -17,7 +17,7 @@ class TestLoadKnownNames:
                 "e2": {"canonical": "Bob", "aliases": []},
             }
         }
-        with patch("mempalace.entity_registry.EntityRegistry") as MockER:
+        with patch("cognitive_castle.entity_registry.EntityRegistry") as MockER:
             MockER.load.return_value = mock_reg
             names = _load_known_names()
             assert "alice" in names
@@ -40,9 +40,9 @@ class TestSpellerEdgeCases:
         def fake_speller(word):
             return "WRONG"
 
-        with patch("mempalace.spellcheck._get_speller", return_value=fake_speller):
-            with patch("mempalace.spellcheck._get_system_words", return_value=set()):
-                with patch("mempalace.spellcheck._load_known_names", return_value=set()):
+        with patch("cognitive_castle.spellcheck._get_speller", return_value=fake_speller):
+            with patch("cognitive_castle.spellcheck._get_system_words", return_value=set()):
+                with patch("cognitive_castle.spellcheck._load_known_names", return_value=set()):
                     result = spellcheck_user_text("Alice went home")
                     assert "Alice" in result
                     assert "WRONG" not in result
@@ -53,9 +53,9 @@ class TestSpellerEdgeCases:
         def fake_speller(word):
             return "WRONG"
 
-        with patch("mempalace.spellcheck._get_speller", return_value=fake_speller):
-            with patch("mempalace.spellcheck._get_system_words", return_value={"coherently"}):
-                with patch("mempalace.spellcheck._load_known_names", return_value=set()):
+        with patch("cognitive_castle.spellcheck._get_speller", return_value=fake_speller):
+            with patch("cognitive_castle.spellcheck._get_system_words", return_value={"coherently"}):
+                with patch("cognitive_castle.spellcheck._load_known_names", return_value=set()):
                     result = spellcheck_user_text("coherently")
                     assert "coherently" in result
 
@@ -65,8 +65,8 @@ class TestSpellerEdgeCases:
         def fake_speller(word):
             return "completely_different_word"
 
-        with patch("mempalace.spellcheck._get_speller", return_value=fake_speller):
-            with patch("mempalace.spellcheck._get_system_words", return_value=set()):
-                with patch("mempalace.spellcheck._load_known_names", return_value=set()):
+        with patch("cognitive_castle.spellcheck._get_speller", return_value=fake_speller):
+            with patch("cognitive_castle.spellcheck._get_system_words", return_value=set()):
+                with patch("cognitive_castle.spellcheck._load_known_names", return_value=set()):
                     result = spellcheck_user_text("hello")
                     assert "hello" in result

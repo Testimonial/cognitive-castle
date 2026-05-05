@@ -26,7 +26,7 @@ from cognitive_castle.cli import (
 # ── cmd_status ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_status_default_palace(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None)
@@ -36,7 +36,7 @@ def test_cmd_status_default_palace(mock_config_cls):
         mock_miner.status.assert_called_once_with(palace_path="/fake/palace")
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_status_custom_palace(mock_config_cls):
     args = argparse.Namespace(palace="~/my_palace")
     mock_miner = MagicMock()
@@ -51,7 +51,7 @@ def test_cmd_status_custom_palace(mock_config_cls):
 # ── cmd_search ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -68,7 +68,7 @@ def test_cmd_search_calls_search(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_search_error_exits(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, query="q", wing=None, room=None, results=5)
@@ -85,7 +85,7 @@ def test_cmd_search_error_exits(mock_config_cls):
 
 def test_cmd_instructions_calls_run_instructions():
     args = argparse.Namespace(name="help")
-    with patch("mempalace.instructions_cli.run_instructions") as mock_run:
+    with patch("cognitive_castle.instructions_cli.run_instructions") as mock_run:
         cmd_instructions(args)
         mock_run.assert_called_once_with(name="help")
 
@@ -95,7 +95,7 @@ def test_cmd_instructions_calls_run_instructions():
 
 def test_cmd_hook_calls_run_hook():
     args = argparse.Namespace(hook="session-start", harness="claude-code")
-    with patch("mempalace.hooks_cli.run_hook") as mock_run:
+    with patch("cognitive_castle.hooks_cli.run_hook") as mock_run:
         cmd_hook(args)
         mock_run.assert_called_once_with(hook_name="session-start", harness="claude-code")
 
@@ -103,42 +103,42 @@ def test_cmd_hook_calls_run_hook():
 # ── cmd_init ───────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_init_no_entities(mock_config_cls, tmp_path):
     args = argparse.Namespace(dir=str(tmp_path), yes=True)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=[]),
-        patch("mempalace.room_detector_local.detect_rooms_local") as mock_rooms,
-        patch("mempalace.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.entity_detector.scan_for_detection", return_value=[]),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local") as mock_rooms,
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
     ):
         cmd_init(args)
         mock_rooms.assert_called_once_with(project_dir=str(tmp_path), yes=True)
         mock_config_cls.return_value.init.assert_called_once()
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_init_with_entities(mock_config_cls, tmp_path):
     fake_files = [tmp_path / "a.txt"]
     detected = {"people": [{"name": "Alice"}], "projects": [], "uncertain": []}
     confirmed = {"people": ["Alice"], "projects": []}
     args = argparse.Namespace(dir=str(tmp_path), yes=True)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=fake_files),
-        patch("mempalace.entity_detector.detect_entities", return_value=detected),
-        patch("mempalace.entity_detector.confirm_entities", return_value=confirmed),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.entity_detector.scan_for_detection", return_value=fake_files),
+        patch("cognitive_castle.entity_detector.detect_entities", return_value=detected),
+        patch("cognitive_castle.entity_detector.confirm_entities", return_value=confirmed),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         # Pass 0 (corpus_origin) needs real file IO; this test mocks
         # builtins.open globally for the entities.json write, which would
         # break Pass 0's file-reading path. Patch Pass 0 out — a separate
         # suite (tests/test_corpus_origin_integration.py) covers it directly.
-        patch("mempalace.cli._run_pass_zero", return_value=None),
+        patch("cognitive_castle.cli._run_pass_zero", return_value=None),
         patch("builtins.open", MagicMock()),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
     ):
         cmd_init(args)
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_init_normalizes_wing_name_for_topics_registry(mock_config_cls, tmp_path):
     """Regression for #1194: hyphenated dir names must be normalized to the
     same slug ``mempalace.yaml`` uses, otherwise ``topics_by_wing`` keys
@@ -156,18 +156,18 @@ def test_cmd_init_normalizes_wing_name_for_topics_registry(mock_config_cls, tmp_
     confirmed = {"people": ["Alice"], "projects": [], "topics": ["Bun"]}
     args = argparse.Namespace(dir=str(project), yes=True)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=fake_files),
-        patch("mempalace.entity_detector.detect_entities", return_value=detected),
-        patch("mempalace.entity_detector.confirm_entities", return_value=confirmed),
+        patch("cognitive_castle.entity_detector.scan_for_detection", return_value=fake_files),
+        patch("cognitive_castle.entity_detector.detect_entities", return_value=detected),
+        patch("cognitive_castle.entity_detector.confirm_entities", return_value=confirmed),
         patch("cognitive_castle.miner.add_to_known_entities") as mock_register,
-        patch("mempalace.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
         patch("builtins.open", MagicMock()),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
         # Pass-zero corpus-origin detection runs unconditionally inside
         # cmd_init now (#1221 / #1223). It accesses MempalaceConfig fields
         # that don't survive MagicMock stringification, so stub it out —
         # this test only cares about the wing-slug write to the registry.
-        patch("mempalace.cli._run_pass_zero", return_value=None),
+        patch("cognitive_castle.cli._run_pass_zero", return_value=None),
     ):
         mock_register.return_value = "/tmp/known_entities.json"
         cmd_init(args)
@@ -213,10 +213,10 @@ def test_cmd_init_honors_palace_flag(tmp_path, monkeypatch):
         return None
 
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=[]),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
-        patch("mempalace.cli._run_pass_zero", side_effect=fake_pass_zero),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.entity_detector.scan_for_detection", return_value=[]),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli._run_pass_zero", side_effect=fake_pass_zero),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
     ):
         cmd_init(args)
 
@@ -230,17 +230,17 @@ def test_cmd_init_honors_palace_flag(tmp_path, monkeypatch):
     assert os.environ.get("MEMPALACE_PALACE_PATH") == os.path.abspath(expected)
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_init_with_entities_zero_total(mock_config_cls, tmp_path, capsys):
     """When entities detected but total is 0, prints 'No entities' message."""
     fake_files = [tmp_path / "a.txt"]
     detected = {"people": [], "projects": [], "uncertain": []}
     args = argparse.Namespace(dir=str(tmp_path), yes=False)
     with (
-        patch("mempalace.entity_detector.scan_for_detection", return_value=fake_files),
-        patch("mempalace.entity_detector.detect_entities", return_value=detected),
-        patch("mempalace.room_detector_local.detect_rooms_local"),
-        patch("mempalace.cli._maybe_run_mine_after_init"),
+        patch("cognitive_castle.entity_detector.scan_for_detection", return_value=fake_files),
+        patch("cognitive_castle.entity_detector.detect_entities", return_value=detected),
+        patch("cognitive_castle.room_detector_local.detect_rooms_local"),
+        patch("cognitive_castle.cli._maybe_run_mine_after_init"),
     ):
         cmd_init(args)
     out = capsys.readouterr().out
@@ -475,7 +475,7 @@ def test_maybe_run_mine_estimate_appears_before_prompt(tmp_path, capsys):
 # ── cmd_mine ───────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_mine_projects_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -504,7 +504,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_mine_convos_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -519,7 +519,7 @@ def test_cmd_mine_convos_mode(mock_config_cls):
         include_ignored=[],
         extract="general",
     )
-    with patch("mempalace.convo_miner.mine_convos") as mock_mine:
+    with patch("cognitive_castle.convo_miner.mine_convos") as mock_mine:
         cmd_mine(args)
         mock_mine.assert_called_once_with(
             convo_dir="/chats",
@@ -532,7 +532,7 @@ def test_cmd_mine_convos_mode(mock_config_cls):
         )
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -557,7 +557,7 @@ def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
 # ── cmd_wakeup ─────────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_wakeup(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None)
@@ -575,14 +575,14 @@ def test_cmd_wakeup(mock_config_cls, capsys):
 
 def test_cmd_split_basic():
     args = argparse.Namespace(dir="/chats", output_dir=None, dry_run=False, min_sessions=2)
-    with patch("mempalace.split_mega_files.main") as mock_main:
+    with patch("cognitive_castle.split_mega_files.main") as mock_main:
         cmd_split(args)
         mock_main.assert_called_once()
 
 
 def test_cmd_split_all_options():
     args = argparse.Namespace(dir="/chats", output_dir="/out", dry_run=True, min_sessions=5)
-    with patch("mempalace.split_mega_files.main") as mock_main:
+    with patch("cognitive_castle.split_mega_files.main") as mock_main:
         cmd_split(args)
         mock_main.assert_called_once()
     # sys.argv should be restored
@@ -602,7 +602,7 @@ def test_main_no_args_prints_help(capsys):
 def test_main_status_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "status"]),
-        patch("mempalace.cli.cmd_status") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_status") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -611,7 +611,7 @@ def test_main_status_dispatches():
 def test_main_search_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "search", "my query"]),
-        patch("mempalace.cli.cmd_search") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_search") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -620,7 +620,7 @@ def test_main_search_dispatches():
 def test_main_init_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "init", "/some/dir"]),
-        patch("mempalace.cli.cmd_init") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_init") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -629,7 +629,7 @@ def test_main_init_dispatches():
 def test_main_mine_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "mine", "/some/dir"]),
-        patch("mempalace.cli.cmd_mine") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_mine") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -638,7 +638,7 @@ def test_main_mine_dispatches():
 def test_main_wakeup_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "wake-up"]),
-        patch("mempalace.cli.cmd_wakeup") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_wakeup") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -647,7 +647,7 @@ def test_main_wakeup_dispatches():
 def test_main_split_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "split", "/chats"]),
-        patch("mempalace.cli.cmd_split") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_split") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -695,7 +695,7 @@ def test_main_hook_run_dispatches():
             "sys.argv",
             ["cognitive-castle", "hook", "run", "--hook", "session-start", "--harness", "claude-code"],
         ),
-        patch("mempalace.cli.cmd_hook") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_hook") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -711,7 +711,7 @@ def test_main_instructions_no_subcommand_prints_help(capsys):
 def test_main_instructions_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "instructions", "help"]),
-        patch("mempalace.cli.cmd_instructions") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_instructions") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -720,7 +720,7 @@ def test_main_instructions_dispatches():
 def test_main_repair_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "repair"]),
-        patch("mempalace.cli.cmd_repair") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_repair") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -729,7 +729,7 @@ def test_main_repair_dispatches():
 def test_main_compress_dispatches():
     with (
         patch("sys.argv", ["cognitive-castle", "compress"]),
-        patch("mempalace.cli.cmd_compress") as mock_cmd,
+        patch("cognitive_castle.cli.cmd_compress") as mock_cmd,
     ):
         main()
         mock_cmd.assert_called_once()
@@ -748,7 +748,7 @@ def _mock_backend_for(col=None, new_col=None):
     return mock_backend
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_no_palace(mock_config_cls, tmp_path, capsys):
     mock_config_cls.return_value.palace_path = str(tmp_path / "nonexistent")
     args = argparse.Namespace(palace=None)
@@ -758,7 +758,7 @@ def test_cmd_repair_no_palace(mock_config_cls, tmp_path, capsys):
     assert "No palace found" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_requires_palace_database(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -770,7 +770,7 @@ def test_cmd_repair_requires_palace_database(mock_config_cls, tmp_path, capsys):
     assert "No palace database found" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_error_reading(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -785,7 +785,7 @@ def test_cmd_repair_error_reading(mock_config_cls, tmp_path, capsys):
     assert "Error reading palace" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_zero_drawers(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -801,7 +801,7 @@ def test_cmd_repair_zero_drawers(mock_config_cls, tmp_path, capsys):
     assert "Nothing to repair" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_success(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -824,7 +824,7 @@ def test_cmd_repair_success(mock_config_cls, tmp_path, capsys):
     assert "2 drawers rebuilt" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_repair_aborts_without_confirmation(mock_config_cls, tmp_path, capsys):
     palace_dir = tmp_path / "palace"
     palace_dir.mkdir()
@@ -847,7 +847,7 @@ def test_cmd_repair_aborts_without_confirmation(mock_config_cls, tmp_path, capsy
 # ── cmd_compress ───────────────────────────────────────────────────────
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_compress_no_palace(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None, dry_run=False, config=None)
@@ -860,7 +860,7 @@ def test_cmd_compress_no_palace(mock_config_cls, capsys):
         cmd_compress(args)
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_compress_no_drawers(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing="mywing", dry_run=False, config=None)
@@ -882,7 +882,7 @@ def _make_mock_dialect_module(dialect_instance):
     return mock_mod
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_compress_dry_run(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None, dry_run=True, config=None)
@@ -920,7 +920,7 @@ def test_cmd_compress_dry_run(mock_config_cls, capsys):
     assert "Total:" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_compress_with_config(mock_config_cls, tmp_path, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     config_file = tmp_path / "entities.json"
@@ -942,7 +942,7 @@ def test_cmd_compress_with_config(mock_config_cls, tmp_path, capsys):
     assert "Loaded entity config" in out
 
 
-@patch("mempalace.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.MempalaceConfig")
 def test_cmd_compress_stores_results(mock_config_cls, capsys):
     """Non-dry-run compress stores to castle_closets collection (#1244)."""
     mock_config_cls.return_value.palace_path = "/fake/palace"
@@ -1008,7 +1008,7 @@ def test_cmd_compress_output_readable_via_get_closets_collection(tmp_path, capsy
     )
 
     args = argparse.Namespace(palace=palace_path, wing=None, dry_run=False, config=None)
-    with patch("mempalace.cli.MempalaceConfig") as mock_config_cls:
+    with patch("cognitive_castle.cli.MempalaceConfig") as mock_config_cls:
         mock_config_cls.return_value.palace_path = palace_path
         # Use a real ChromaBackend so the write actually lands on disk and
         # the read-side helper can find it.
@@ -1036,7 +1036,7 @@ def test_cmd_repair_trailing_slash_does_not_recurse():
     import os
 
     args = argparse.Namespace(palace="/tmp/fake_palace/")
-    with patch("mempalace.cli.os.path.isdir", return_value=False):
+    with patch("cognitive_castle.cli.os.path.isdir", return_value=False):
         cmd_repair(args)
     # Verify the rstrip logic: palace_path should not end with separator
     palace_path = os.path.expanduser(args.palace).rstrip(os.sep)

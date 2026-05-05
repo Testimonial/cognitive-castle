@@ -311,7 +311,7 @@ def test_wikipedia_404_returns_unknown(tmp_path):
         "wiki_title": None,
         "note": "not found in Wikipedia",
     }
-    with patch("mempalace.entity_registry._wikipedia_lookup", return_value=mock_result):
+    with patch("cognitive_castle.entity_registry._wikipedia_lookup", return_value=mock_result):
         result = registry.research("Zzxqy", auto_confirm=False, allow_network=True)
 
     assert result["inferred_type"] == "unknown"

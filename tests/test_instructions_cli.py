@@ -36,8 +36,8 @@ def test_run_instructions_invalid_name(capsys):
 
 def test_run_instructions_missing_md_file(capsys, tmp_path):
     """If the .md file is missing on disk, should sys.exit(1)."""
-    with patch("mempalace.instructions_cli.INSTRUCTIONS_DIR", tmp_path):
-        with patch("mempalace.instructions_cli.AVAILABLE", ["fakecmd"]):
+    with patch("cognitive_castle.instructions_cli.INSTRUCTIONS_DIR", tmp_path):
+        with patch("cognitive_castle.instructions_cli.AVAILABLE", ["fakecmd"]):
             with pytest.raises(SystemExit) as exc_info:
                 run_instructions("fakecmd")
             assert exc_info.value.code == 1

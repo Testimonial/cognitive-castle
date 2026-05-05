@@ -170,9 +170,9 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     from unittest.mock import PropertyMock
 
     buf = io.StringIO()
-    patches = [patch("mempalace.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
+    patches = [patch("cognitive_castle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
     if state_dir:
-        patches.append(patch("mempalace.hooks_cli.STATE_DIR", state_dir))
+        patches.append(patch("cognitive_castle.hooks_cli.STATE_DIR", state_dir))
     # Mock MempalaceConfig so tests don't depend on user's ~/.mempalace/config.json
     mock_config = MagicMock()
     type(mock_config).hook_silent_save = PropertyMock(return_value=True)
@@ -186,7 +186,7 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
 
 
 def test_stop_hook_passthrough_when_active(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": True, "transcript_path": ""},
@@ -196,7 +196,7 @@ def test_stop_hook_passthrough_when_active(tmp_path):
 
 
 def test_stop_hook_passthrough_when_active_string(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": "true", "transcript_path": ""},
@@ -226,7 +226,7 @@ def test_stop_hook_saves_silently_at_interval(tmp_path):
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
     save_result = {"count": 15, "themes": ["hooks", "notifications"]}
-    with patch("mempalace.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
+    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
@@ -249,7 +249,7 @@ def test_stop_hook_derives_wing_from_transcript_path(tmp_path):
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
     save_result = {"count": 15, "themes": []}
-    with patch("mempalace.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
+    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
         _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
@@ -268,12 +268,12 @@ def test_stop_hook_tracks_save_point(tmp_path):
 
     # First call saves silently with systemMessage notification
     save_result = {"count": 15, "themes": ["hooks"]}
-    with patch("mempalace.hooks_cli._save_diary_direct", return_value=save_result):
+    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result):
         result = _capture_hook_output(hook_stop, data, state_dir=tmp_path)
     assert "systemMessage" in result
 
     # Second call with same count passes through (already saved)
-    with patch("mempalace.hooks_cli._save_diary_direct") as mock_save:
+    with patch("cognitive_castle.hooks_cli._save_diary_direct") as mock_save:
         result = _capture_hook_output(hook_stop, data, state_dir=tmp_path)
     assert result == {}
     mock_save.assert_not_called()
@@ -409,7 +409,7 @@ def test_output_falls_back_to_fd1_when_mcp_server_absent():
 
 
 def test_log_writes_to_hook_log(tmp_path):
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
         _log("test message")
     log_path = tmp_path / "hook.log"
     assert log_path.is_file()
@@ -419,7 +419,7 @@ def test_log_writes_to_hook_log(tmp_path):
 
 def test_log_oserror_is_silenced(tmp_path):
     """_log should not raise if the directory cannot be created."""
-    with patch("mempalace.hooks_cli.STATE_DIR", Path("/nonexistent/deeply/nested/dir")):
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", Path("/nonexistent/deeply/nested/dir")):
         # Should not raise
         _log("this will fail silently")
 
@@ -430,7 +430,7 @@ def test_log_oserror_is_silenced(tmp_path):
 def test_maybe_auto_ingest_no_env(tmp_path):
     """Without MEMPAL_DIR or transcript_path, does nothing."""
     with patch.dict("os.environ", {}, clear=True):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
             _maybe_auto_ingest()  # should not raise
 
 
@@ -439,9 +439,9 @@ def test_maybe_auto_ingest_with_env(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
-                with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
+                with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                     _maybe_auto_ingest()
                     mock_popen.assert_called_once()
                     cmd = mock_popen.call_args[0][0]
@@ -461,12 +461,12 @@ def test_maybe_auto_ingest_uses_castle_python(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
                 with patch(
                     "mempalace.hooks_cli._castle_python", return_value="/fake/venv/python"
                 ):
-                    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+                    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                         _maybe_auto_ingest()
                         cmd = mock_popen.call_args[0][0]
                         assert cmd[0] == "/fake/venv/python"
@@ -477,8 +477,8 @@ def test_mine_sync_with_env_uses_projects_mode(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
                 _mine_sync()
                 mock_run.assert_called_once()
                 cmd = mock_run.call_args[0][0]
@@ -490,9 +490,9 @@ def test_mine_sync_uses_castle_python(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._castle_python", return_value="/fake/venv/python"):
-                with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"):
+                with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
                     _mine_sync()
                     cmd = mock_run.call_args[0][0]
                     assert cmd[0] == "/fake/venv/python"
@@ -511,9 +511,9 @@ def test_maybe_auto_ingest_ignores_transcript_arg_path(tmp_path):
     transcript = convo_dir / "session.jsonl"
     transcript.write_text("")
     with patch.dict("os.environ", {}, clear=True):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
-                with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
+                with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                     _maybe_auto_ingest()
                     mock_popen.assert_not_called()
 
@@ -530,8 +530,8 @@ def test_mine_sync_ignores_transcript(tmp_path):
     transcript = convo_dir / "session.jsonl"
     transcript.write_text("")
     with patch.dict("os.environ", {}, clear=True):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
                 _mine_sync()
                 mock_run.assert_not_called()
 
@@ -541,9 +541,9 @@ def test_maybe_auto_ingest_oserror(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
-                with patch("mempalace.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
+                with patch("cognitive_castle.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
                     _maybe_auto_ingest()  # should not raise
 
 
@@ -552,9 +552,9 @@ def test_maybe_auto_ingest_skips_when_mine_running(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._mine_already_running", return_value=True):
-                with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._mine_already_running", return_value=True):
+                with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                     _maybe_auto_ingest()
                     mock_popen.assert_not_called()
 
@@ -564,7 +564,7 @@ def test_maybe_auto_ingest_skips_when_mine_running(tmp_path):
 
 def test_mine_already_running_no_file(tmp_path):
     """Returns False when no PID file exists."""
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
         assert _mine_already_running() is False
 
 
@@ -572,7 +572,7 @@ def test_mine_already_running_dead_pid(tmp_path):
     """Returns False when PID file contains a PID that no longer exists."""
     pid_file = tmp_path / "mine.pid"
     pid_file.write_text("999999999")  # almost certainly not a real PID
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file):
         assert _mine_already_running() is False
 
 
@@ -580,7 +580,7 @@ def test_mine_already_running_live_pid(tmp_path):
     """Returns True when PID file contains the current process's own PID."""
     pid_file = tmp_path / "mine.pid"
     pid_file.write_text(str(os.getpid()))  # current process is definitely alive
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file):
         assert _mine_already_running() is True
 
 
@@ -588,7 +588,7 @@ def test_mine_already_running_corrupt_file(tmp_path):
     """Returns False when PID file contains non-integer content."""
     pid_file = tmp_path / "mine.pid"
     pid_file.write_text("not-a-pid")
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file):
         assert _mine_already_running() is False
 
 
@@ -698,7 +698,7 @@ def test_stop_hook_oserror_on_last_save_read(tmp_path):
     # Write invalid content to last save file
     (tmp_path / "test_last_save").write_text("not_a_number")
     save_result = {"count": 15, "themes": ["testing"]}
-    with patch("mempalace.hooks_cli._save_diary_direct", return_value=save_result):
+    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result):
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
@@ -720,8 +720,8 @@ def test_stop_hook_oserror_on_write(tmp_path):
         raise OSError("disk full")
 
     save_result = {"count": 15, "themes": []}
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-        with patch("mempalace.hooks_cli._save_diary_direct", return_value=save_result):
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result):
             with patch.object(Path, "write_text", bad_write_text):
                 result = _capture_hook_output(
                     hook_stop,
@@ -743,7 +743,7 @@ def test_precompact_with_mempal_dir(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+        with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -758,7 +758,7 @@ def test_precompact_with_mempal_dir_oserror(tmp_path):
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
-        with patch("mempalace.hooks_cli.subprocess.run", side_effect=OSError("fail")):
+        with patch("cognitive_castle.hooks_cli.subprocess.run", side_effect=OSError("fail")):
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test"},
@@ -795,8 +795,8 @@ def test_precompact_mines_transcript_dir(tmp_path, monkeypatch):
     # _ingest_transcript skips files smaller than 100 bytes, so pad it.
     transcript.write_text("x" * 200)
     monkeypatch.delenv("MEMPAL_DIR", raising=False)
-    with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
-        with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
+    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+        with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
             result = _capture_hook_output(
                 hook_precompact,
                 {"session_id": "test", "transcript_path": str(transcript)},
@@ -819,8 +819,8 @@ def test_run_hook_dispatches_session_start(tmp_path):
     """run_hook reads stdin JSON and dispatches to correct handler."""
     stdin_data = json.dumps({"session_id": "run-test"})
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._output") as mock_output:
                 run_hook("session-start", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -838,8 +838,8 @@ def test_run_hook_dispatches_stop(tmp_path):
         }
     )
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._output") as mock_output:
                 run_hook("stop", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -847,8 +847,8 @@ def test_run_hook_dispatches_stop(tmp_path):
 def test_run_hook_dispatches_precompact(tmp_path):
     stdin_data = json.dumps({"session_id": "run-test"})
     with patch("sys.stdin", io.StringIO(stdin_data)):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._output") as mock_output:
                 run_hook("precompact", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -864,8 +864,8 @@ def test_run_hook_unknown_hook():
 def test_run_hook_invalid_json(tmp_path):
     """Invalid stdin JSON should not crash — falls back to empty dict."""
     with patch("sys.stdin", io.StringIO("not valid json")):
-        with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._output") as mock_output:
+        with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+            with patch("cognitive_castle.hooks_cli._output") as mock_output:
                 run_hook("session-start", "claude-code")
     mock_output.assert_called_once_with({})
 
@@ -913,8 +913,8 @@ def test_count_rejects_traversal_path():
 
 def test_count_logs_warning_on_rejected_path(tmp_path):
     """_count_human_messages should log a warning when a non-empty path is rejected."""
-    with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-        with patch("mempalace.hooks_cli._log") as mock_log:
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._log") as mock_log:
             _count_human_messages("../../etc/passwd")
     mock_log.assert_called_once()
     assert "rejected" in mock_log.call_args[0][0].lower()

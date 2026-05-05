@@ -716,7 +716,7 @@ def test_mine_cleans_up_pid_file_on_interrupt(tmp_path):
         raise KeyboardInterrupt
 
     with (
-        patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file),
+        patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file),
         patch("cognitive_castle.miner.process_file", side_effect=fake_process_file),
     ):
         with pytest.raises(SystemExit):
@@ -737,7 +737,7 @@ def test_mine_cleans_up_pid_file_on_clean_exit(tmp_path):
     pid_file = tmp_path / "mine.pid"
     pid_file.write_text(str(os.getpid()))
 
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file):
         mine(str(project_root), str(palace_path))
 
     assert not pid_file.exists()
@@ -756,7 +756,7 @@ def test_mine_does_not_remove_other_processes_pid_file(tmp_path):
     pid_file = tmp_path / "mine.pid"
     pid_file.write_text(str(other_pid))
 
-    with patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file):
+    with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", pid_file):
         mine(str(project_root), str(palace_path))
 
     assert pid_file.exists(), "Foreign PID entries must not be removed"
