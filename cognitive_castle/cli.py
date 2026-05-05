@@ -651,6 +651,13 @@ def cmd_repair_status(args):
 
 def cmd_repair(args):
     """Rebuild palace vector index from SQLite metadata."""
+    if getattr(args, "clean_locks", False):
+        from .palace import clean_stale_locks, get_lock_dir
+        lock_dir = get_lock_dir()
+        removed, kept = clean_stale_locks(lock_dir)
+        print(f"Removed {removed} stale lock(s). Kept {kept} active lock(s).")
+        return
+
     import shutil
     from .backends.chroma import ChromaBackend
     from .migrate import confirm_destructive_action, contains_palace_database
@@ -1225,6 +1232,11 @@ def main():
         "--dry-run",
         action="store_true",
         help="Print detected poisoned rows and exit without mutation (--mode max-seq-id only)",
+    )
+    p_repair.add_argument(
+        "--clean-locks",
+        action="store_true",
+        help="Remove stale lock files older than 24 h",
     )
 
     # repair-status — read-only palace capacity health check (#1222)

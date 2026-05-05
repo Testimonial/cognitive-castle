@@ -391,6 +391,38 @@ def mine_palace_lock(palace_path: str):
 mine_global_lock = mine_palace_lock
 
 
+def get_lock_dir() -> str:
+    """Return the path to the castle lock directory (creates it if needed)."""
+    lock_dir = os.path.join(os.path.expanduser("~"), ".castle", "locks")
+    os.makedirs(lock_dir, exist_ok=True)
+    return lock_dir
+
+
+def clean_stale_locks(lock_dir: str, max_age_seconds: int = 86400) -> tuple[int, int]:
+    """Delete lock files older than max_age_seconds. Returns (removed, kept)."""
+    import time
+    if not os.path.isdir(lock_dir):
+        return 0, 0
+    cutoff = time.time() - max_age_seconds
+    removed = kept = 0
+    for entry in os.scandir(lock_dir):
+        if not entry.name.endswith(".lock"):
+            continue
+        try:
+            mtime = entry.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < cutoff:
+            try:
+                os.remove(entry.path)
+                removed += 1
+            except OSError:
+                kept += 1
+        else:
+            kept += 1
+    return removed, kept
+
+
 def file_already_mined(collection, source_file: str, check_mtime: bool = False) -> bool:
     """Check if a file has already been filed in the palace.
 
