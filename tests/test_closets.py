@@ -32,12 +32,12 @@ import time
 
 import yaml
 
-from mempalace.miner import (
+from cognitive_castle.miner import (
     _extract_entities_for_metadata,
     _load_known_entities,
     mine,
 )
-from mempalace.palace import (
+from cognitive_castle.palace import (
     CLOSET_CHAR_LIMIT,
     build_closet_lines,
     get_closets_collection,
@@ -46,13 +46,13 @@ from mempalace.palace import (
     purge_file_closets,
     upsert_closet_lines,
 )
-from mempalace.palace_graph import (
+from cognitive_castle.palace_graph import (
     create_tunnel,
     delete_tunnel,
     follow_tunnels,
     list_tunnels,
 )
-from mempalace.searcher import (
+from cognitive_castle.searcher import (
     _bm25_scores,
     _expand_with_neighbors,
     _extract_drawer_ids_from_closet,
@@ -70,7 +70,7 @@ def _lock_worker(target: str, name: str, hold_seconds: float, log_path: str) -> 
     can verify the sections did not overlap in time."""
     import time as _time
 
-    from mempalace.palace import mine_lock as _mine_lock
+    from cognitive_castle.palace import mine_lock as _mine_lock
 
     with _mine_lock(target):
         t_enter = _time.time()
@@ -585,7 +585,7 @@ class TestDiaryIngest:
         )
         palace_dir = tmp_path / "palace"
 
-        from mempalace.diary_ingest import ingest_diaries
+        from cognitive_castle.diary_ingest import ingest_diaries
 
         result = ingest_diaries(str(diary_dir), str(palace_dir), force=True)
         assert result["days_updated"] >= 1
@@ -599,7 +599,7 @@ class TestDiaryIngest:
         )
         palace_dir = tmp_path / "palace"
 
-        from mempalace.diary_ingest import ingest_diaries
+        from cognitive_castle.diary_ingest import ingest_diaries
 
         ingest_diaries(str(diary_dir), str(palace_dir), force=True)
         result = ingest_diaries(str(diary_dir), str(palace_dir))
@@ -617,7 +617,7 @@ class TestDiaryIngest:
         )
         palace_dir = tmp_path / "palace"
 
-        from mempalace.diary_ingest import _state_file_for, ingest_diaries
+        from cognitive_castle.diary_ingest import _state_file_for, ingest_diaries
 
         ingest_diaries(str(diary_dir), str(palace_dir), force=True)
 
@@ -653,7 +653,7 @@ class TestDiaryIngest:
 
         palace_dir = tmp_path / "palace"
 
-        from mempalace.diary_ingest import _diary_drawer_id, ingest_diaries
+        from cognitive_castle.diary_ingest import _diary_drawer_id, ingest_diaries
 
         ingest_diaries(str(personal_dir), str(palace_dir), wing="personal", force=True)
         ingest_diaries(str(work_dir), str(palace_dir), wing="work", force=True)
@@ -681,14 +681,14 @@ class TestTunnels:
     or touch the user's real tunnels."""
 
     def setup_method(self):
-        import mempalace.palace_graph as pg
+        import cognitive_castle.palace_graph as pg
 
         self._orig = pg._TUNNEL_FILE
         self._tmpdir = tempfile.mkdtemp()
         pg._TUNNEL_FILE = os.path.join(self._tmpdir, "tunnels.json")
 
     def teardown_method(self):
-        import mempalace.palace_graph as pg
+        import cognitive_castle.palace_graph as pg
 
         pg._TUNNEL_FILE = self._orig
         import shutil
@@ -781,7 +781,7 @@ class TestTunnels:
         without atomic rename) must not leak into subsequent reads — the
         file should be treated as empty and a fresh create_tunnel should
         persist cleanly."""
-        import mempalace.palace_graph as pg
+        import cognitive_castle.palace_graph as pg
 
         # Simulate a crash that left a truncated file behind.
         with open(pg._TUNNEL_FILE, "w") as f:
@@ -797,7 +797,7 @@ class TestTunnels:
     def test_atomic_write_leaves_no_stray_tmp_file(self):
         """Regression: _save_tunnels uses write-then-os.replace. After a
         successful create, there must be no leftover ``tunnels.json.tmp``."""
-        import mempalace.palace_graph as pg
+        import cognitive_castle.palace_graph as pg
 
         create_tunnel("wing_a", "r1", "wing_b", "r2")
         assert os.path.exists(pg._TUNNEL_FILE)

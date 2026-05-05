@@ -7,12 +7,12 @@ regex extraction on narrative content) could hide drawers that direct
 search would have found.
 """
 
-from mempalace.palace import (
+from cognitive_castle.palace import (
     get_closets_collection,
     get_collection,
     upsert_closet_lines,
 )
-from mempalace.searcher import search_memories
+from cognitive_castle.searcher import search_memories
 
 
 def _seed_drawers(palace_path):

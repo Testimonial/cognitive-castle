@@ -9,7 +9,7 @@ pattern as the project miner's.
 Written BEFORE the fix.
 """
 
-from mempalace.convo_miner import MAX_FILE_SIZE
+from cognitive_castle.convo_miner import MAX_FILE_SIZE
 
 
 class TestConvoMinerSizeCap:

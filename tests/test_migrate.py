@@ -4,7 +4,7 @@ import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from mempalace.migrate import _restore_stale_palace, migrate
+from cognitive_castle.migrate import _restore_stale_palace, migrate
 
 
 def test_migrate_requires_palace_database(tmp_path, capsys):

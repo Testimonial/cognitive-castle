@@ -68,12 +68,12 @@ def test_restore_stdout_returns_real_stdout():
 
 
 def test_mcp_server_no_stdout_noise_on_clean_exit():
-    """`python -m mempalace.mcp_server` with empty stdin must produce
+    """`python -m cognitive_castle.mcp_server` with empty stdin must produce
     nothing on stdout. Empty input → readline() returns '' → main()
     breaks out cleanly. Any stdout content here would corrupt the
     JSON-RPC stream in real use."""
     proc = subprocess.run(
-        [sys.executable, "-m", "mempalace.mcp_server"],
+        [sys.executable, "-m", "cognitive_castle.mcp_server"],
         input=b"",
         capture_output=True,
         timeout=60,

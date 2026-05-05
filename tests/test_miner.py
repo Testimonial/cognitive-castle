@@ -7,8 +7,8 @@ from pathlib import Path
 import chromadb
 import yaml
 
-from mempalace.miner import load_config, mine, scan_project, status
-from mempalace.palace import NORMALIZE_VERSION, file_already_mined
+from cognitive_castle.miner import load_config, mine, scan_project, status
+from cognitive_castle.palace import NORMALIZE_VERSION, file_already_mined
 
 
 def write_file(path: Path, content: str):
@@ -47,7 +47,7 @@ def test_project_mining():
         mine(str(project_root), str(palace_path))
 
         client = chromadb.PersistentClient(path=str(palace_path))
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("castle_drawers")
         assert col.count() > 0
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -85,7 +85,7 @@ def test_load_config_no_yaml_normalizes_hyphenated_wing():
         shutil.rmtree(parent)
 
 
-def test_scan_project_skips_mempalace_generated_files():
+def test_scan_project_skips_castle_generated_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir).resolve()
         write_file(project_root / "entities.json", '{"people": [], "projects": []}')
@@ -255,13 +255,13 @@ def test_scan_project_skip_dirs_still_apply_without_override():
 
 def test_entity_metadata_finds_cyrillic_names(monkeypatch):
     """Entity extraction must find non-Latin names when entity_languages includes the locale."""
-    import mempalace.palace as palace_mod
-    from mempalace.miner import _extract_entities_for_metadata
+    import cognitive_castle.palace as palace_mod
+    from cognitive_castle.miner import _extract_entities_for_metadata
 
     # Reset cached patterns so they reload with the monkeypatched languages
     monkeypatch.setattr(palace_mod, "_CANDIDATE_RX_CACHE", None)
     monkeypatch.setattr(
-        "mempalace.config.MempalaceConfig.entity_languages",
+        "cognitive_castle.config.MempalaceConfig.entity_languages",
         property(lambda self: ("en", "ru")),
     )
 
@@ -277,7 +277,7 @@ def test_file_already_mined_check_mtime():
         os.makedirs(palace_path)
         client = chromadb.PersistentClient(path=palace_path)
         col = client.get_or_create_collection(
-            "mempalace_drawers", metadata={"hnsw:space": "cosine"}
+            "castle_drawers", metadata={"hnsw:space": "cosine"}
         )
 
         test_file = os.path.join(tmpdir, "test.txt")
@@ -392,7 +392,7 @@ def test_status_handles_none_metadata_without_crash(tmp_path, capsys):
                 "metadatas": [{"wing": "proj", "room": "r"}, None],
             }
 
-    with patch("mempalace.miner.get_collection", return_value=FakeCol()):
+    with patch("cognitive_castle.miner.get_collection", return_value=FakeCol()):
         status(str(tmp_path))
 
     out = capsys.readouterr().out
@@ -456,7 +456,7 @@ def test_file_already_mined_returns_false_for_stale_normalize_version():
         palace_path = os.path.join(tmpdir, "palace")
         os.makedirs(palace_path)
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_or_create_collection("mempalace_drawers")
+        col = client.get_or_create_collection("castle_drawers")
 
         # Pre-v2 drawer: no normalize_version field at all
         col.add(
@@ -493,12 +493,12 @@ def test_file_already_mined_returns_false_for_stale_normalize_version():
 
 def test_add_drawer_stamps_normalize_version(tmp_path):
     """Fresh drawers carry the current schema version so future upgrades work."""
-    from mempalace.miner import add_drawer
+    from cognitive_castle.miner import add_drawer
 
     palace_path = tmp_path / "palace"
     palace_path.mkdir()
     client = chromadb.PersistentClient(path=str(palace_path))
-    col = client.get_or_create_collection("mempalace_drawers")
+    col = client.get_or_create_collection("castle_drawers")
     try:
         added = add_drawer(
             collection=col,
@@ -659,7 +659,7 @@ def test_mine_keyboard_interrupt_prints_summary_and_exits_130(tmp_path, capsys):
             raise KeyboardInterrupt
         return (1, "general")
 
-    with patch("mempalace.miner.process_file", side_effect=fake_process_file):
+    with patch("cognitive_castle.miner.process_file", side_effect=fake_process_file):
         with pytest.raises(SystemExit) as exc_info:
             mine(str(project_root), str(palace_path))
 
@@ -688,7 +688,7 @@ def test_mine_keyboard_interrupt_quotes_path_with_spaces_in_resume_hint(tmp_path
     def fake_process_file(*args, **kwargs):
         raise KeyboardInterrupt
 
-    with patch("mempalace.miner.process_file", side_effect=fake_process_file):
+    with patch("cognitive_castle.miner.process_file", side_effect=fake_process_file):
         with pytest.raises(SystemExit):
             mine(str(project_root), str(palace_path))
 
@@ -717,7 +717,7 @@ def test_mine_cleans_up_pid_file_on_interrupt(tmp_path):
 
     with (
         patch("mempalace.hooks_cli._MINE_PID_FILE", pid_file),
-        patch("mempalace.miner.process_file", side_effect=fake_process_file),
+        patch("cognitive_castle.miner.process_file", side_effect=fake_process_file),
     ):
         with pytest.raises(SystemExit):
             mine(str(project_root), str(palace_path))

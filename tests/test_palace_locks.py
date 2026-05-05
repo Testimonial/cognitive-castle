@@ -15,7 +15,7 @@ import time
 
 import pytest
 
-from mempalace.palace import (
+from cognitive_castle.palace import (
     MineAlreadyRunning,
     mine_global_lock,
     mine_palace_lock,

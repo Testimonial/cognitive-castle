@@ -8,7 +8,7 @@ Tests cover all 4 pipeline stages:
   Step 4: tail truncation (fallback)
 """
 
-from mempalace.query_sanitizer import (
+from cognitive_castle.query_sanitizer import (
     MAX_QUERY_LENGTH,
     MIN_QUERY_LENGTH,
     SAFE_QUERY_LENGTH,
@@ -193,7 +193,7 @@ class TestMetadata:
 class TestRealWorldScenarios:
     """Simulate realistic system prompt contamination patterns."""
 
-    def test_mempalace_wakeup_prepended(self):
+    def test_castle_wakeup_prepended(self):
         """Simulates mempalace wake-up output prepended to a query."""
         wakeup = (
             "MemPalace loaded. Wings: technical, emotions, identity. "

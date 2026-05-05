@@ -9,7 +9,7 @@ to the canonical file rather than silently falling back to English.
 import pytest
 
 from mempalace import i18n
-from mempalace.i18n import (
+from cognitive_castle.i18n import (
     _canonical_lang,
     _load_entity_section,
     available_languages,

@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from mempalace.normalize import (
+from cognitive_castle.normalize import (
     _SLACK_PROVENANCE_FOOTER,
     _extract_content,
     _format_tool_result,
@@ -209,11 +209,11 @@ def test_format_tool_use_unknown_tool():
     block = {
         "type": "tool_use",
         "id": "t1",
-        "name": "mcp__mempalace__search",
+        "name": "mcp__castle__search",
         "input": {"query": "firmware probe", "limit": 5},
     }
     result = _format_tool_use(block)
-    assert result.startswith("[mcp__mempalace__search]")
+    assert result.startswith("[mcp__castle__search]")
     assert "firmware probe" in result
 
 
@@ -306,7 +306,7 @@ def test_format_tool_result_glob_caps_at_20():
 
 def test_format_tool_result_unknown_short():
     """Unknown tool with short output is kept."""
-    result = _format_tool_result("some output", "mcp__mempalace__search")
+    result = _format_tool_result("some output", "mcp__castle__search")
     assert result == "→ some output"
 
 

@@ -5,8 +5,8 @@ from pathlib import Path
 
 import yaml
 
-from mempalace.miner import mine
-from mempalace.exporter import export_palace
+from cognitive_castle.miner import mine
+from cognitive_castle.exporter import export_palace
 
 
 def write_file(path: Path, content: str):

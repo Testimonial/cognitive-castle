@@ -5,7 +5,7 @@ from pathlib import Path
 import chromadb
 import pytest
 
-from mempalace.backends import (
+from cognitive_cognitive_castle.backends import (
     GetResult,
     PalaceRef,
     QueryResult,
@@ -13,7 +13,7 @@ from mempalace.backends import (
     available_backends,
     get_backend,
 )
-from mempalace.backends.chroma import (
+from cognitive_cognitive_castle.backends.chroma import (
     ChromaBackend,
     ChromaCollection,
     _fix_blob_seq_ids,
@@ -154,7 +154,7 @@ def test_registry_unknown_backend_raises():
 
 
 def test_resolve_backend_priority_order(tmp_path):
-    from mempalace.backends import resolve_backend_for_palace
+    from cognitive_cognitive_castle.backends import resolve_backend_for_palace
 
     # explicit kwarg wins over everything
     assert resolve_backend_for_palace(explicit="pg", config_value="lance") == "pg"
@@ -270,7 +270,7 @@ def test_chroma_cache_picks_up_db_created_after_first_open(tmp_path):
 
 def test_base_collection_update_default_rejects_mismatched_lengths():
     """The ABC default update() raises ValueError rather than silently misaligning."""
-    from mempalace.backends.base import BaseCollection
+    from cognitive_cognitive_castle.backends.base import BaseCollection
 
     collection = ChromaCollection(_FakeCollection())
 
@@ -286,7 +286,7 @@ def test_chroma_backend_accepts_palace_ref_kwarg(tmp_path):
     backend = ChromaBackend()
     collection = backend.get_collection(
         palace=PalaceRef(id=str(palace_path), local_path=str(palace_path)),
-        collection_name="mempalace_drawers",
+        collection_name="castle_drawers",
         create=True,
     )
     assert palace_path.is_dir()
@@ -299,7 +299,7 @@ def test_chroma_backend_create_false_raises_without_creating_directory(tmp_path)
     with pytest.raises(FileNotFoundError):
         ChromaBackend().get_collection(
             str(palace_path),
-            collection_name="mempalace_drawers",
+            collection_name="castle_drawers",
             create=False,
         )
 
@@ -311,7 +311,7 @@ def test_chroma_backend_create_true_creates_directory_and_collection(tmp_path):
 
     collection = ChromaBackend().get_collection(
         str(palace_path),
-        collection_name="mempalace_drawers",
+        collection_name="castle_drawers",
         create=True,
     )
 
@@ -319,7 +319,7 @@ def test_chroma_backend_create_true_creates_directory_and_collection(tmp_path):
     assert isinstance(collection, ChromaCollection)
 
     client = chromadb.PersistentClient(path=str(palace_path))
-    client.get_collection("mempalace_drawers")
+    client.get_collection("castle_drawers")
 
 
 def test_chroma_backend_creates_collection_with_cosine_distance(tmp_path):
@@ -327,12 +327,12 @@ def test_chroma_backend_creates_collection_with_cosine_distance(tmp_path):
 
     ChromaBackend().get_collection(
         str(palace_path),
-        collection_name="mempalace_drawers",
+        collection_name="castle_drawers",
         create=True,
     )
 
     client = chromadb.PersistentClient(path=str(palace_path))
-    col = client.get_collection("mempalace_drawers")
+    col = client.get_collection("castle_drawers")
     assert col.metadata.get("hnsw:space") == "cosine"
 
 
@@ -350,12 +350,12 @@ def test_chroma_backend_sets_hnsw_bloat_guard_on_creation(tmp_path):
 
     ChromaBackend().get_collection(
         str(palace_path),
-        collection_name="mempalace_drawers",
+        collection_name="castle_drawers",
         create=True,
     )
 
     client = chromadb.PersistentClient(path=str(palace_path))
-    col = client.get_collection("mempalace_drawers")
+    col = client.get_collection("castle_drawers")
     assert col.metadata.get("hnsw:batch_size") == 50_000
     assert col.metadata.get("hnsw:sync_threshold") == 50_000
 
@@ -364,10 +364,10 @@ def test_chroma_backend_create_collection_sets_hnsw_bloat_guard(tmp_path):
     """Same guard must apply via the legacy create_collection() path."""
     palace_path = tmp_path / "palace"
 
-    ChromaBackend().create_collection(str(palace_path), "mempalace_drawers")
+    ChromaBackend().create_collection(str(palace_path), "castle_drawers")
 
     client = chromadb.PersistentClient(path=str(palace_path))
-    col = client.get_collection("mempalace_drawers")
+    col = client.get_collection("castle_drawers")
     assert col.metadata.get("hnsw:batch_size") == 50_000
     assert col.metadata.get("hnsw:sync_threshold") == 50_000
 
@@ -383,8 +383,8 @@ def test_get_collection_create_true_is_idempotent(tmp_path):
     """
     palace = str(tmp_path / "palace")
     backend = ChromaBackend()
-    backend.get_collection(palace, collection_name="mempalace_drawers", create=True)
-    col2 = backend.get_collection(palace, collection_name="mempalace_drawers", create=True)
+    backend.get_collection(palace, collection_name="castle_drawers", create=True)
+    col2 = backend.get_collection(palace, collection_name="castle_drawers", create=True)
     assert isinstance(col2, ChromaCollection)
 
 
@@ -392,8 +392,8 @@ def test_get_collection_create_true_preserves_existing_metadata(tmp_path):
     """Existing collection metadata is not overwritten when reopened with create=True."""
     palace = str(tmp_path / "palace")
     backend = ChromaBackend()
-    backend.get_collection(palace, collection_name="mempalace_drawers", create=True)
-    col = backend.get_collection(palace, collection_name="mempalace_drawers", create=True)
+    backend.get_collection(palace, collection_name="castle_drawers", create=True)
+    col = backend.get_collection(palace, collection_name="castle_drawers", create=True)
     assert col._collection.metadata["hnsw:space"] == "cosine"
     assert col._collection.metadata.get("hnsw:batch_size") == 50_000
 
@@ -506,7 +506,7 @@ def test_fix_blob_seq_ids_still_converts_legacy_blobs_in_embeddings(tmp_path):
 
 def test_fix_blob_seq_ids_writes_marker_after_blob_path(tmp_path):
     """The .blob_seq_ids_migrated marker is written after a successful BLOB → INTEGER conversion."""
-    from mempalace.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     db_path = tmp_path / "chroma.sqlite3"
     conn = sqlite3.connect(str(db_path))
@@ -531,7 +531,7 @@ def test_fix_blob_seq_ids_writes_marker_when_already_integer(tmp_path):
     marker on first run too — next ``_fix_blob_seq_ids`` call short-circuits
     before touching the sqlite3 file.
     """
-    from mempalace.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     db_path = tmp_path / "chroma.sqlite3"
     conn = sqlite3.connect(str(db_path))
@@ -557,14 +557,14 @@ def test_fix_blob_seq_ids_skips_sqlite_when_marker_present(tmp_path):
     never want to open it again, even read-only.
     """
     from unittest.mock import patch
-    from mempalace.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     # Pre-create the marker so the function should short-circuit.
     db_path = tmp_path / "chroma.sqlite3"
     db_path.write_bytes(b"sentinel")  # presence required for the function to proceed
     (tmp_path / _BLOB_FIX_MARKER).touch()
 
-    with patch("mempalace.backends.chroma.sqlite3.connect") as mock_connect:
+    with patch("cognitive_cognitive_castle.backends.chroma.sqlite3.connect") as mock_connect:
         _fix_blob_seq_ids(str(tmp_path))
 
     mock_connect.assert_not_called()
@@ -709,7 +709,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
     skipped on subsequent calls — prevents runtime thrash where a daemon's
     own steady writes bump ``chroma.sqlite3`` faster than HNSW flushes,
     making the mtime heuristic falsely trigger every reconnect."""
-    from mempalace.backends.chroma import ChromaBackend
+    from cognitive_cognitive_castle.backends.chroma import ChromaBackend
 
     palace_path = str(tmp_path / "palace")
     os.makedirs(palace_path, exist_ok=True)
@@ -724,7 +724,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
         calls.append(path)
         return []
 
-    monkeypatch.setattr("mempalace.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     ChromaBackend.make_client(palace_path)
     ChromaBackend.make_client(palace_path)
@@ -738,7 +738,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
 def test_make_client_quarantines_each_palace_independently(tmp_path, monkeypatch):
     """Two distinct palaces each get one quarantine attempt — the gate is
     keyed by palace path, not global."""
-    from mempalace.backends.chroma import ChromaBackend
+    from cognitive_cognitive_castle.backends.chroma import ChromaBackend
 
     palace_a = str(tmp_path / "palace_a")
     palace_b = str(tmp_path / "palace_b")
@@ -754,7 +754,7 @@ def test_make_client_quarantines_each_palace_independently(tmp_path, monkeypatch
         calls.append(path)
         return []
 
-    monkeypatch.setattr("mempalace.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     ChromaBackend.make_client(palace_a)
     ChromaBackend.make_client(palace_b)
@@ -810,7 +810,7 @@ def test_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeypatch)
         calls.append(path)
         return []
 
-    monkeypatch.setattr("mempalace.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     backend = ChromaBackend()
     try:
@@ -835,7 +835,7 @@ def test_pin_hnsw_threads_retrofits_legacy_collection(tmp_path):
 
     client = chromadb.PersistentClient(path=str(palace_path))
     col = client.create_collection(
-        "mempalace_drawers",
+        "castle_drawers",
         metadata={"hnsw:space": "cosine"},  # no num_threads — legacy
     )
     assert col.configuration_json.get("hnsw", {}).get("num_threads") is None
@@ -862,12 +862,12 @@ def test_get_collection_applies_retrofit_on_existing_palace(tmp_path):
 
     # Simulate a legacy palace: create collection without num_threads
     bootstrap_client = chromadb.PersistentClient(path=str(palace_path))
-    bootstrap_client.create_collection("mempalace_drawers", metadata={"hnsw:space": "cosine"})
+    bootstrap_client.create_collection("castle_drawers", metadata={"hnsw:space": "cosine"})
     del bootstrap_client  # drop reference so a fresh client reopens cleanly
 
     wrapper = ChromaBackend().get_collection(
         str(palace_path),
-        collection_name="mempalace_drawers",
+        collection_name="castle_drawers",
         create=False,
     )
 

@@ -16,7 +16,7 @@ import tempfile
 
 # ── Isolate HOME before any mempalace imports ──────────────────────────
 _original_env = {}
-_session_tmp = tempfile.mkdtemp(prefix="mempalace_session_")
+_session_tmp = tempfile.mkdtemp(prefix="castle_session_")
 
 for _var in ("HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"):
     _original_env[_var] = os.environ.get(_var)
@@ -30,8 +30,8 @@ os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 import chromadb  # noqa: E402
 import pytest  # noqa: E402
 
-from mempalace.config import MempalaceConfig  # noqa: E402
-from mempalace.knowledge_graph import KnowledgeGraph  # noqa: E402
+from cognitive_castle.config import MempalaceConfig  # noqa: E402
+from cognitive_castle.knowledge_graph import KnowledgeGraph  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +49,7 @@ def _reset_mcp_cache():
         try:
             # Reset the per-process quarantine gate so tests don't leak
             # state through ChromaBackend._quarantined_paths.
-            from mempalace.backends.chroma import ChromaBackend
+            from cognitive_cognitive_castle.backends.chroma import ChromaBackend
 
             ChromaBackend._quarantined_paths.clear()
         except (ImportError, AttributeError):
@@ -80,7 +80,7 @@ def _isolate_home():
 @pytest.fixture
 def tmp_dir():
     """Create and auto-cleanup a temporary directory."""
-    d = tempfile.mkdtemp(prefix="mempalace_test_")
+    d = tempfile.mkdtemp(prefix="castle_test_")
     yield d
     shutil.rmtree(d, ignore_errors=True)
 
@@ -109,9 +109,9 @@ def config(tmp_dir, palace_path):
 def collection(palace_path):
     """A ChromaDB collection pre-seeded in the temp palace."""
     client = chromadb.PersistentClient(path=palace_path)
-    col = client.get_or_create_collection("mempalace_drawers", metadata={"hnsw:space": "cosine"})
+    col = client.get_or_create_collection("castle_drawers", metadata={"hnsw:space": "cosine"})
     yield col
-    client.delete_collection("mempalace_drawers")
+    client.delete_collection("castle_drawers")
     del client
 
 

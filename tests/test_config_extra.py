@@ -1,9 +1,9 @@
-"""Extra tests for mempalace.config to cover remaining gaps."""
+"""Extra tests for cognitive_castle.config to cover remaining gaps."""
 
 import json
 import os
 
-from mempalace.config import MempalaceConfig
+from cognitive_castle.config import MempalaceConfig
 
 
 def test_config_bad_json(tmp_path):

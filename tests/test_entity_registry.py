@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from mempalace.entity_registry import (
+from cognitive_castle.entity_registry import (
     COMMON_ENGLISH_WORDS,
     PERSON_CONTEXT_PATTERNS,
     EntityRegistry,

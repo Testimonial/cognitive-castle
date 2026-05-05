@@ -20,7 +20,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MEMPALACE_PKG = REPO_ROOT / "mempalace"
+MEMPALACE_PKG = REPO_ROOT / "cognitive-castle"
 README_PATH = REPO_ROOT / "README.md"
 MCP_TOOLS_DOC_PATH = REPO_ROOT / "website" / "reference" / "mcp-tools.md"
 MODULES_DOC_PATH = REPO_ROOT / "website" / "reference" / "modules.md"
@@ -39,7 +39,7 @@ def _tools_dict_keys() -> list:
     # Import the module-level TOOLS dict.  We can't just import mcp_server
     # because it calls chromadb on import, so we parse the source instead.
     src = _read(MEMPALACE_PKG / "mcp_server.py")
-    return re.findall(r'"(mempalace_\w+)":\s*\{', src)
+    return re.findall(r'"(castle_\w+)":\s*\{', src)
 
 
 def _doc_tool_names() -> list:
@@ -47,10 +47,10 @@ def _doc_tool_names() -> list:
 
     The MCP tool table lived in README.md prior to the #875 rewrite; it now
     lives in website/reference/mcp-tools.md (linked from README). Each tool
-    is introduced by a level-3 heading `### \\`mempalace_xxx\\``.
+    is introduced by a level-3 heading `### \\`castle_xxx\\``.
     """
     doc = _read(MCP_TOOLS_DOC_PATH)
-    return re.findall(r"^###\s+`(mempalace_\w+)`", doc, re.MULTILINE)
+    return re.findall(r"^###\s+`(castle_\w+)`", doc, re.MULTILINE)
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ class TestReadmeToolsExistInCode:
 
     def test_every_readme_tool_exists_in_tools_dict(self):
         """Claim: the MCP tools reference (website/reference/mcp-tools.md)
-        lists tools like mempalace_get_aaak_spec. Each one must actually be
+        lists tools like castle_get_aaak_spec. Each one must actually be
         registered in the TOOLS dict in mempalace/mcp_server.py.
 
         Pre-#875 this parsed the tool table that lived in README.md; that
@@ -98,7 +98,7 @@ class TestReadmeToolsExistInCode:
         doc_tools = _doc_tool_names()
         assert len(doc_tools) > 0, (
             f"Could not parse any tools from {MCP_TOOLS_DOC_PATH.relative_to(REPO_ROOT)} "
-            f"— expected `### \\`mempalace_xxx\\`` headings."
+            f"— expected `### \\`castle_xxx\\`` headings."
         )
 
         missing = [t for t in doc_tools if t not in code_tools]
@@ -150,8 +150,8 @@ class TestClosetsExist:
         )
 
     def test_closets_importable(self):
-        """get_closets_collection should be importable from mempalace.palace."""
-        from mempalace.palace import get_closets_collection
+        """get_closets_collection should be importable from cognitive_castle.palace."""
+        from cognitive_castle.palace import get_closets_collection
 
         assert callable(get_closets_collection)
 
@@ -252,8 +252,8 @@ class TestStripNoise:
         )
 
     def test_strip_noise_importable(self):
-        """strip_noise should be importable from mempalace.normalize."""
-        from mempalace.normalize import strip_noise
+        """strip_noise should be importable from cognitive_castle.normalize."""
+        from cognitive_castle.normalize import strip_noise
 
         assert callable(strip_noise)
 
@@ -342,7 +342,7 @@ class TestTunnelFunctions:
 
     def test_tunnel_functions_importable(self):
         """find_tunnels, traverse, graph_stats should be importable."""
-        from mempalace.palace_graph import find_tunnels, traverse, graph_stats
+        from cognitive_castle.palace_graph import find_tunnels, traverse, graph_stats
 
         assert callable(find_tunnels)
         assert callable(traverse)
@@ -394,8 +394,8 @@ class TestMineLock:
         )
 
     def test_mine_lock_importable(self):
-        """mine_lock should be importable from mempalace.palace."""
-        from mempalace.palace import mine_lock
+        """mine_lock should be importable from cognitive_castle.palace."""
+        from cognitive_castle.palace import mine_lock
 
         assert callable(mine_lock)
 
@@ -617,8 +617,8 @@ class TestBackendAbstraction:
 
     def test_backends_importable(self):
         """Both backend modules should be importable."""
-        from mempalace.backends.base import BaseCollection
-        from mempalace.backends.chroma import ChromaBackend
+        from cognitive_cognitive_castle.backends.base import BaseCollection
+        from cognitive_cognitive_castle.backends.chroma import ChromaBackend
 
         assert BaseCollection is not None
         assert ChromaBackend is not None
@@ -748,14 +748,14 @@ class TestReadmeToolCountConsistency:
 
 
 class TestAAAKSpecToolHandler:
-    """If mempalace_get_aaak_spec is in TOOLS, its handler must exist."""
+    """If castle_get_aaak_spec is in TOOLS, its handler must exist."""
 
     def test_aaak_spec_handler_exists(self):
         """The handler function for get_aaak_spec must be defined."""
         src = _read(MEMPALACE_PKG / "mcp_server.py")
         tools = _tools_dict_keys()
-        if "mempalace_get_aaak_spec" in tools:
+        if "castle_get_aaak_spec" in tools:
             assert "def tool_get_aaak_spec(" in src, (
-                "mempalace_get_aaak_spec is in TOOLS dict but "
+                "castle_get_aaak_spec is in TOOLS dict but "
                 "tool_get_aaak_spec() handler function is not defined."
             )

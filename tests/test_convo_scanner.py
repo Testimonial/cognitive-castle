@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from mempalace.convo_scanner import (
+from cognitive_castle.convo_scanner import (
     _decode_slug_fallback,
     _extract_cwd_from_session,
     _resolve_project_name,

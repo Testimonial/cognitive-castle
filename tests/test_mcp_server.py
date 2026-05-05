@@ -33,9 +33,9 @@ def _get_collection(palace_path, create=False):
     if create:
         return (
             client,
-            client.get_or_create_collection("mempalace_drawers", metadata={"hnsw:space": "cosine"}),
+            client.get_or_create_collection("castle_drawers", metadata={"hnsw:space": "cosine"}),
         )
-    return client, client.get_collection("mempalace_drawers")
+    return client, client.get_collection("castle_drawers")
 
 
 # ── Protocol Layer ──────────────────────────────────────────────────────
@@ -43,14 +43,14 @@ def _get_collection(palace_path, create=False):
 
 class TestHandleRequest:
     def test_initialize(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "initialize", "id": 1, "params": {}})
-        assert resp["result"]["serverInfo"]["name"] == "mempalace"
+        assert resp["result"]["serverInfo"]["name"] == "cognitive-castle"
         assert resp["id"] == 1
 
     def test_initialize_negotiates_client_version(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request(
             {
@@ -62,7 +62,7 @@ class TestHandleRequest:
         assert resp["result"]["protocolVersion"] == "2025-11-25"
 
     def test_initialize_negotiates_older_supported_version(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request(
             {
@@ -74,7 +74,7 @@ class TestHandleRequest:
         assert resp["result"]["protocolVersion"] == "2025-03-26"
 
     def test_initialize_unknown_version_falls_back_to_latest(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request(
             {
@@ -83,44 +83,44 @@ class TestHandleRequest:
                 "params": {"protocolVersion": "9999-12-31"},
             }
         )
-        from mempalace.mcp_server import SUPPORTED_PROTOCOL_VERSIONS
+        from cognitive_castle.mcp_server import SUPPORTED_PROTOCOL_VERSIONS
 
         assert resp["result"]["protocolVersion"] == SUPPORTED_PROTOCOL_VERSIONS[0]
 
     def test_initialize_missing_version_uses_oldest(self):
-        from mempalace.mcp_server import handle_request, SUPPORTED_PROTOCOL_VERSIONS
+        from cognitive_castle.mcp_server import handle_request, SUPPORTED_PROTOCOL_VERSIONS
 
         resp = handle_request({"method": "initialize", "id": 1, "params": {}})
         assert resp["result"]["protocolVersion"] == SUPPORTED_PROTOCOL_VERSIONS[-1]
 
     def test_notifications_initialized_returns_none(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "notifications/initialized", "id": None, "params": {}})
         assert resp is None
 
     def test_ping_returns_empty_result(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "ping", "id": 11, "params": {}})
         assert resp["id"] == 11
         assert resp["result"] == {}
 
     def test_tools_list(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "tools/list", "id": 2, "params": {}})
         tools = resp["result"]["tools"]
         names = {t["name"] for t in tools}
-        assert "mempalace_status" in names
-        assert "mempalace_search" in names
-        assert "mempalace_add_drawer" in names
-        assert "mempalace_kg_add" in names
+        assert "castle_status" in names
+        assert "castle_search" in names
+        assert "castle_add_drawer" in names
+        assert "castle_kg_add" in names
 
     def test_null_arguments_does_not_hang(self, monkeypatch, config, palace_path, seeded_kg):
         """Sending arguments: null should return a result, not hang (#394)."""
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         _client, _col = _get_collection(palace_path, create=True)
         del _client
@@ -128,14 +128,14 @@ class TestHandleRequest:
             {
                 "method": "tools/call",
                 "id": 10,
-                "params": {"name": "mempalace_status", "arguments": None},
+                "params": {"name": "castle_status", "arguments": None},
             }
         )
         assert "error" not in resp
         assert resp["result"] is not None
 
     def test_unknown_tool(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request(
             {
@@ -147,14 +147,14 @@ class TestHandleRequest:
         assert resp["error"]["code"] == -32601
 
     def test_unknown_method(self):
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "unknown/method", "id": 4, "params": {}})
         assert resp["error"]["code"] == -32601
 
     def test_any_notification_returns_none(self):
         """All notifications/* methods should return None (no response)."""
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         for method in [
             "notifications/initialized",
@@ -167,14 +167,14 @@ class TestHandleRequest:
 
     def test_unknown_method_no_id_returns_none(self):
         """Messages without id (notifications) must never get a response."""
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         resp = handle_request({"method": "unknown/thing", "params": {}})
         assert resp is None
 
     def test_malformed_method_none(self):
         """method=None or missing should not crash."""
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         # Explicit None
         resp = handle_request({"method": None, "params": {}})
@@ -190,7 +190,7 @@ class TestHandleRequest:
 
     def test_tools_call_dispatches(self, monkeypatch, config, palace_path, seeded_kg):
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import handle_request
+        from cognitive_castle.mcp_server import handle_request
 
         # Create a collection so status works
         _client, _col = _get_collection(palace_path, create=True)
@@ -200,7 +200,7 @@ class TestHandleRequest:
             {
                 "method": "tools/call",
                 "id": 5,
-                "params": {"name": "mempalace_status", "arguments": {}},
+                "params": {"name": "castle_status", "arguments": {}},
             }
         )
         assert "result" in resp
@@ -215,7 +215,7 @@ class TestReadTools:
     def test_status_cold_start_no_collection(self, monkeypatch, config, palace_path, kg):
         """Status on a valid palace with no ChromaDB collection yet (#830).
 
-        After `mempalace init`, chroma.sqlite3 exists but the mempalace_drawers
+        After `mempalace init`, chroma.sqlite3 exists but the castle_drawers
         collection has not been created (no mine or add_drawer yet).  Status
         should return total_drawers: 0, not 'No palace found'.
         """
@@ -225,7 +225,7 @@ class TestReadTools:
         # Create the DB file (init does this) but NOT the collection
         client = chromadb.PersistentClient(path=palace_path)
         del client
-        from mempalace.mcp_server import tool_status
+        from cognitive_castle.mcp_server import tool_status
 
         result = tool_status()
         assert "error" not in result, f"cold-start should not error: {result}"
@@ -235,7 +235,7 @@ class TestReadTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_status
+        from cognitive_castle.mcp_server import tool_status
 
         result = tool_status()
         assert result["total_drawers"] == 0
@@ -243,7 +243,7 @@ class TestReadTools:
 
     def test_status_with_data(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_status
+        from cognitive_castle.mcp_server import tool_status
 
         result = tool_status()
         assert result["total_drawers"] == 4
@@ -262,14 +262,14 @@ class TestReadTools:
         from unittest.mock import patch as _patch
 
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_status
+        from cognitive_castle.mcp_server import tool_status
 
         # Inject a metadata cache where one entry is None
-        with _patch("mempalace.mcp_server._get_collection") as mock_get_col:
+        with _patch("cognitive_castle.mcp_server._get_collection") as mock_get_col:
             fake_col = type("C", (), {"count": lambda self: 2})()
             mock_get_col.return_value = fake_col
             with _patch(
-                "mempalace.mcp_server._get_cached_metadata",
+                "cognitive_castle.mcp_server._get_cached_metadata",
                 return_value=[{"wing": "proj", "room": "r"}, None],
             ):
                 result = tool_status()
@@ -284,7 +284,7 @@ class TestReadTools:
 
     def test_list_wings(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_wings
+        from cognitive_castle.mcp_server import tool_list_wings
 
         result = tool_list_wings()
         assert result["wings"]["project"] == 3
@@ -292,7 +292,7 @@ class TestReadTools:
 
     def test_list_rooms_all(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_rooms
+        from cognitive_castle.mcp_server import tool_list_rooms
 
         result = tool_list_rooms()
         assert "backend" in result["rooms"]
@@ -301,7 +301,7 @@ class TestReadTools:
 
     def test_list_rooms_filtered(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_rooms
+        from cognitive_castle.mcp_server import tool_list_rooms
 
         result = tool_list_rooms(wing="project")
         assert "backend" in result["rooms"]
@@ -309,7 +309,7 @@ class TestReadTools:
 
     def test_get_taxonomy(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_get_taxonomy
+        from cognitive_castle.mcp_server import tool_get_taxonomy
 
         result = tool_get_taxonomy()
         assert result["taxonomy"]["project"]["backend"] == 2
@@ -318,7 +318,7 @@ class TestReadTools:
 
     def test_no_palace_returns_error(self, monkeypatch, config, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_status
+        from cognitive_castle.mcp_server import tool_status
 
         result = tool_status()
         assert "error" in result
@@ -330,7 +330,7 @@ class TestReadTools:
 class TestSearchTool:
     def test_search_basic(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_search
+        from cognitive_castle.mcp_server import tool_search
 
         result = tool_search(query="JWT authentication tokens")
         assert "results" in result
@@ -341,14 +341,14 @@ class TestSearchTool:
 
     def test_search_with_wing_filter(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_search
+        from cognitive_castle.mcp_server import tool_search
 
         result = tool_search(query="planning", wing="notes")
         assert all(r["wing"] == "notes" for r in result["results"])
 
     def test_search_with_room_filter(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_search
+        from cognitive_castle.mcp_server import tool_search
 
         result = tool_search(query="database", room="backend")
         assert all(r["room"] == "backend" for r in result["results"])
@@ -358,7 +358,7 @@ class TestSearchTool:
     ):
         """Old min_similarity param still works via backwards-compat shim."""
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_search
+        from cognitive_castle.mcp_server import tool_search
 
         # Old name should work
         result = tool_search(query="JWT", min_similarity=1.5)
@@ -431,7 +431,7 @@ class TestWriteTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_add_drawer
+        from cognitive_castle.mcp_server import tool_add_drawer
 
         result = tool_add_drawer(
             wing="test_wing",
@@ -447,7 +447,7 @@ class TestWriteTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_add_drawer
+        from cognitive_castle.mcp_server import tool_add_drawer
 
         content = "This is a unique test memory about Rust ownership and borrowing."
         result1 = tool_add_drawer(wing="w", room="r", content=content)
@@ -462,7 +462,7 @@ class TestWriteTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_add_drawer
+        from cognitive_castle.mcp_server import tool_add_drawer
 
         header = "# ACME Corp Knowledge Base\n**Project:** Alpha | **Team:** Backend | **Status:** Active\n\n"
         doc1 = (
@@ -482,7 +482,7 @@ class TestWriteTools:
 
     def test_delete_drawer(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_delete_drawer
+        from cognitive_castle.mcp_server import tool_delete_drawer
 
         result = tool_delete_drawer("drawer_proj_backend_aaa")
         assert result["success"] is True
@@ -490,14 +490,14 @@ class TestWriteTools:
 
     def test_delete_drawer_not_found(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_delete_drawer
+        from cognitive_castle.mcp_server import tool_delete_drawer
 
         result = tool_delete_drawer("nonexistent_drawer")
         assert result["success"] is False
 
     def test_check_duplicate(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_check_duplicate
+        from cognitive_castle.mcp_server import tool_check_duplicate
 
         # Exact match text from seeded_collection should be flagged
         result = tool_check_duplicate(
@@ -516,7 +516,7 @@ class TestWriteTools:
 
     def test_get_drawer(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_get_drawer
+        from cognitive_castle.mcp_server import tool_get_drawer
 
         result = tool_get_drawer("drawer_proj_backend_aaa")
         assert result["drawer_id"] == "drawer_proj_backend_aaa"
@@ -526,7 +526,7 @@ class TestWriteTools:
 
     def test_get_drawer_not_found(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_get_drawer
+        from cognitive_castle.mcp_server import tool_get_drawer
 
         result = tool_get_drawer("nonexistent_drawer")
         assert "error" in result
@@ -536,7 +536,7 @@ class TestWriteTools:
     ):
         """tool_get_drawer must not expose the absolute filesystem path
         that the miners write into ``source_file``. Same threat class as
-        the palace_path leak in mempalace_status: in nested-agent or
+        the palace_path leak in castle_status: in nested-agent or
         multi-server MCP topologies the client is a separate trust
         domain, and the directory layout of the host has no documented
         client-side use. Basename is enough for citation."""
@@ -559,7 +559,7 @@ class TestWriteTools:
             ],
         )
 
-        from mempalace.mcp_server import tool_get_drawer
+        from cognitive_castle.mcp_server import tool_get_drawer
 
         result = tool_get_drawer("drawer_leak_probe")
         assert result["drawer_id"] == "drawer_leak_probe"
@@ -572,7 +572,7 @@ class TestWriteTools:
 
     def test_list_drawers(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_drawers
+        from cognitive_castle.mcp_server import tool_list_drawers
 
         result = tool_list_drawers()
         assert result["count"] == 4
@@ -582,7 +582,7 @@ class TestWriteTools:
         self, monkeypatch, config, palace_path, seeded_collection, kg
     ):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_drawers
+        from cognitive_castle.mcp_server import tool_list_drawers
 
         result = tool_list_drawers(wing="project")
         assert result["count"] == 3
@@ -592,7 +592,7 @@ class TestWriteTools:
         self, monkeypatch, config, palace_path, seeded_collection, kg
     ):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_drawers
+        from cognitive_castle.mcp_server import tool_list_drawers
 
         result = tool_list_drawers(wing="project", room="backend")
         assert result["count"] == 2
@@ -600,7 +600,7 @@ class TestWriteTools:
 
     def test_list_drawers_pagination(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_drawers
+        from cognitive_castle.mcp_server import tool_list_drawers
 
         result = tool_list_drawers(limit=2, offset=0)
         assert result["count"] == 2
@@ -611,14 +611,14 @@ class TestWriteTools:
         self, monkeypatch, config, palace_path, seeded_collection, kg
     ):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_list_drawers
+        from cognitive_castle.mcp_server import tool_list_drawers
 
         result = tool_list_drawers(offset=-5)
         assert result["offset"] == 0
 
     def test_update_drawer_content(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_update_drawer, tool_get_drawer
+        from cognitive_castle.mcp_server import tool_update_drawer, tool_get_drawer
 
         result = tool_update_drawer(
             "drawer_proj_backend_aaa", content="Updated content about auth."
@@ -632,7 +632,7 @@ class TestWriteTools:
         self, monkeypatch, config, palace_path, seeded_collection, kg
     ):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_update_drawer
+        from cognitive_castle.mcp_server import tool_update_drawer
 
         result = tool_update_drawer("drawer_proj_backend_aaa", wing="new_wing", room="new_room")
         assert result["success"] is True
@@ -641,14 +641,14 @@ class TestWriteTools:
 
     def test_update_drawer_not_found(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_update_drawer
+        from cognitive_castle.mcp_server import tool_update_drawer
 
         result = tool_update_drawer("nonexistent_drawer", content="hello")
         assert result["success"] is False
 
     def test_update_drawer_noop(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_update_drawer
+        from cognitive_castle.mcp_server import tool_update_drawer
 
         result = tool_update_drawer("drawer_proj_backend_aaa")
         assert result["success"] is True
@@ -661,7 +661,7 @@ class TestWriteTools:
 class TestKGTools:
     def test_kg_add(self, monkeypatch, config, palace_path, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_kg_add
+        from cognitive_castle.mcp_server import tool_kg_add
 
         result = tool_kg_add(
             subject="Alice",
@@ -673,14 +673,14 @@ class TestKGTools:
 
     def test_kg_query(self, monkeypatch, config, palace_path, seeded_kg):
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import tool_kg_query
+        from cognitive_castle.mcp_server import tool_kg_query
 
         result = tool_kg_query(entity="Max")
         assert result["count"] > 0
 
     def test_kg_invalidate(self, monkeypatch, config, palace_path, seeded_kg):
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import tool_kg_invalidate
+        from cognitive_castle.mcp_server import tool_kg_invalidate
 
         result = tool_kg_invalidate(
             subject="Max",
@@ -696,7 +696,7 @@ class TestKGTools:
     def test_kg_add_forwards_valid_to(self, monkeypatch, config, palace_path, kg):
         """Regression #1314 case 1: valid_to must round-trip through kg_add."""
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_kg_add
+        from cognitive_castle.mcp_server import tool_kg_add
 
         result = tool_kg_add(
             subject="_test_temporal",
@@ -717,7 +717,7 @@ class TestKGTools:
     def test_kg_add_forwards_source_provenance(self, monkeypatch, config, palace_path, kg):
         """Regression #1314 case 3: source_file / source_drawer_id reach storage."""
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace.mcp_server import tool_kg_add
+        from cognitive_castle.mcp_server import tool_kg_add
 
         result = tool_kg_add(
             subject="operating-verb",
@@ -753,7 +753,7 @@ class TestKGTools:
         from datetime import date as _date
 
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import tool_kg_invalidate
+        from cognitive_castle.mcp_server import tool_kg_invalidate
 
         # Caller-supplied date round-trips into the response.
         explicit = tool_kg_invalidate(
@@ -776,14 +776,14 @@ class TestKGTools:
 
     def test_kg_timeline(self, monkeypatch, config, palace_path, seeded_kg):
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import tool_kg_timeline
+        from cognitive_castle.mcp_server import tool_kg_timeline
 
         result = tool_kg_timeline(entity="Alice")
         assert result["count"] > 0
 
     def test_kg_stats(self, monkeypatch, config, palace_path, seeded_kg):
         _patch_mcp_server(monkeypatch, config, seeded_kg)
-        from mempalace.mcp_server import tool_kg_stats
+        from cognitive_castle.mcp_server import tool_kg_stats
 
         result = tool_kg_stats()
         assert result["entities"] >= 4
@@ -797,7 +797,7 @@ class TestDiaryTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_diary_write, tool_diary_read
+        from cognitive_castle.mcp_server import tool_diary_write, tool_diary_read
 
         w = tool_diary_write(
             agent_name="TestAgent",
@@ -817,7 +817,7 @@ class TestDiaryTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_diary_read
+        from cognitive_castle.mcp_server import tool_diary_read
 
         r = tool_diary_read(agent_name="Nobody")
         assert r["entries"] == []
@@ -846,7 +846,7 @@ class TestDiaryTools:
 
         monkeypatch.setattr(mcp_server, "datetime", FrozenDateTime)
 
-        from mempalace.mcp_server import tool_diary_read, tool_diary_write
+        from cognitive_castle.mcp_server import tool_diary_read, tool_diary_write
 
         entry1 = "A" * 50 + " entry one"
         entry2 = "A" * 50 + " entry two"
@@ -871,7 +871,7 @@ class TestDiaryTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_diary_read, tool_diary_write
+        from cognitive_castle.mcp_server import tool_diary_read, tool_diary_write
 
         w1 = tool_diary_write(
             agent_name="TestAgent",
@@ -907,7 +907,7 @@ class TestDiaryTools:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace.mcp_server import tool_diary_read, tool_diary_write
+        from cognitive_castle.mcp_server import tool_diary_read, tool_diary_write
 
         # Write as "Claude" → read as "claude" should match.
         w1 = tool_diary_write(

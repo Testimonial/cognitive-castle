@@ -1,7 +1,7 @@
 """Smoke tests for i18n dictionaries + Dialect integration."""
 
-from mempalace.i18n import load_lang, t, available_languages
-from mempalace.dialect import Dialect
+from cognitive_castle.i18n import load_lang, t, available_languages
+from cognitive_castle.dialect import Dialect
 
 
 def test_all_languages_load():
@@ -90,7 +90,7 @@ def test_from_config_defaults_to_english(tmp_path):
 
 def test_de_entity_section_loads():
     """German entity section loads all pattern lists non-empty."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     p = get_entity_patterns(("de",))
     assert p["candidate_patterns"], "de: empty candidate_patterns"
@@ -105,7 +105,7 @@ def test_de_entity_section_loads():
 
 def test_es_entity_section_loads():
     """Spanish entity section loads all pattern lists non-empty."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     p = get_entity_patterns(("es",))
     assert p["candidate_patterns"], "es: empty candidate_patterns"
@@ -120,7 +120,7 @@ def test_es_entity_section_loads():
 
 def test_fr_entity_section_loads():
     """French entity section loads all pattern lists non-empty."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     p = get_entity_patterns(("fr",))
     assert p["candidate_patterns"], "fr: empty candidate_patterns"
@@ -142,7 +142,7 @@ def test_direct_address_key_is_singular_string_for_all_locales():
     Declaring the plural form in a locale file silently drops every direct-address
     pattern in that locale after load.
     """
-    from mempalace.i18n import _load_entity_section, available_languages
+    from cognitive_castle.i18n import _load_entity_section, available_languages
 
     for lang in available_languages():
         section = _load_entity_section(lang)

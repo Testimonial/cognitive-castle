@@ -1,4 +1,4 @@
-"""Tests for explicit tunnel helpers in mempalace.palace_graph."""
+"""Tests for explicit tunnel helpers in cognitive_castle.palace_graph."""
 
 import os
 import stat
@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 with patch.dict("sys.modules", {"chromadb": MagicMock()}):
-    import mempalace.palace_graph as palace_graph
+    import cognitive_castle.palace_graph as palace_graph
 
 
 def _use_tmp_tunnel_file(monkeypatch, tmp_path):
@@ -335,25 +335,25 @@ class TestHyphenatedWingNormalization:
     """Wing names with hyphens or spaces are normalized to underscores on init.
 
     Tunnel helpers must apply the same normalization at lookup time so that
-    ``mempalace-public`` resolves to ``mempalace_public`` and matches the
+    ``mempalace-public`` resolves to ``castle_public`` and matches the
     metadata written by ``room_detector_local.py``.
     """
 
     def test_list_tunnels_filters_hyphenated_wing(self, tmp_path, monkeypatch):
         _use_tmp_tunnel_file(monkeypatch, tmp_path)
 
-        palace_graph.create_tunnel("mempalace_public", "auth", "wing_people", "users")
+        palace_graph.create_tunnel("castle_public", "auth", "wing_people", "users")
 
         assert len(palace_graph.list_tunnels("mempalace-public")) == 1
-        assert len(palace_graph.list_tunnels("mempalace_public")) == 1
+        assert len(palace_graph.list_tunnels("castle_public")) == 1
 
     def test_follow_tunnels_matches_hyphenated_wing(self, tmp_path, monkeypatch):
         _use_tmp_tunnel_file(monkeypatch, tmp_path)
 
-        palace_graph.create_tunnel("mempalace_public", "auth", "wing_people", "users")
+        palace_graph.create_tunnel("castle_public", "auth", "wing_people", "users")
 
         by_hyphen = palace_graph.follow_tunnels("mempalace-public", "auth")
-        by_under = palace_graph.follow_tunnels("mempalace_public", "auth")
+        by_under = palace_graph.follow_tunnels("castle_public", "auth")
         assert len(by_hyphen) == 1
         assert len(by_under) == 1
         assert by_hyphen[0]["connected_wing"] == "wing_people"
@@ -370,7 +370,7 @@ class TestHyphenatedWingNormalization:
     def test_find_tunnels_warns_on_empty_result(self, tmp_path, monkeypatch, caplog):
         _use_tmp_tunnel_file(monkeypatch, tmp_path)
         # No data in collection, so build_graph returns empty nodes
-        with caplog.at_level("WARNING", logger="mempalace_graph"):
+        with caplog.at_level("WARNING", logger="castle_graph"):
             result = palace_graph.find_tunnels("nonexistent-wing")
         assert result == []
         assert "No tunnels found" in caplog.text

@@ -23,14 +23,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mempalace.fact_checker import (
+from cognitive_castle.fact_checker import (
     _check_entity_confusion,
     _edit_distance,
     _extract_claims,
     _flatten_names,
     check_text,
 )
-from mempalace.knowledge_graph import KnowledgeGraph
+from cognitive_castle.knowledge_graph import KnowledgeGraph
 
 
 # ── claim extraction ─────────────────────────────────────────────────

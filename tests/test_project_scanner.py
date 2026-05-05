@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from mempalace.project_scanner import (
+from cognitive_castle.project_scanner import (
     PersonInfo,
     ProjectInfo,
     _dedupe_people,
@@ -382,7 +382,7 @@ def test_merge_primary_wins_case_insensitive():
         "people": [],
         "projects": [
             {
-                "name": "mempalace",
+                "name": "cognitive-castle",
                 "type": "project",
                 "confidence": 0.99,
                 "frequency": 10,

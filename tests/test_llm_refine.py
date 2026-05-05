@@ -6,8 +6,8 @@ Uses a fake provider for deterministic, offline tests. No network.
 from dataclasses import dataclass
 
 
-from mempalace.llm_client import LLMError, LLMResponse
-from mempalace.llm_refine import (
+from cognitive_castle.llm_client import LLMError, LLMResponse
+from cognitive_castle.llm_refine import (
     _apply_classifications,
     _build_user_prompt,
     _collect_contexts,
@@ -132,7 +132,7 @@ def test_parse_response_maps_unknown_label_to_ambiguous():
 
 def test_parse_response_restores_canonical_casing():
     """Model may lowercase the name; we restore against the expected set."""
-    text = '{"classifications": [{"name": "mempalace", "label": "PROJECT"}]}'
+    text = '{"classifications": [{"name": "cognitive-castle", "label": "PROJECT"}]}'
     out = _parse_response(text, ["MemPalace"])
     assert "MemPalace" in out
     assert out["MemPalace"][0] == "PROJECT"

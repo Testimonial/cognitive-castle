@@ -1,0 +1,59 @@
+##
+## castle-chunk.soar
+## Chunking candidates: when multiple memories share the same boost-tag,
+## flag them as a chunking group. The Python bridge detects the flag and
+## can auto-generate a summarising "chunk" memory that replaces the set.
+##
+## SOAR's native chunking (learn --on) would normally handle this, but
+## since the external Python environment manages persistence we use explicit
+## elaboration rules to produce chunk-candidate signals on the output-link.
+##
+
+## ── Elaborate: co-boosted pair ────────────────────────────────────────────
+## Two memories sharing a boost-tag frequently retrieved together are a
+## chunking seed. Three are a confirmed candidate.
+sp {castle*elaborate*chunk-pair
+   "Two memories with the same boost-tag are a chunking seed."
+   (state <s> ^io.input-link <il>)
+   (<il> ^memory <m1>
+         ^memory {<m2> <> <m1>})
+   (<m1> ^boost-tag <tag>)
+   (<m2> ^boost-tag <tag>)
+-->
+   (<s> ^chunk-seed <tag>)
+}
+
+sp {castle*elaborate*chunk-trio
+   "Three memories with the same boost-tag form a confirmed chunking candidate."
+   (state <s> ^io.input-link <il>)
+   (<il> ^memory <m1>
+         ^memory {<m2> <> <m1>}
+         ^memory {<m3> <> <m1> <> <m2>})
+   (<m1> ^boost-tag <tag>)
+   (<m2> ^boost-tag <tag>)
+   (<m3> ^boost-tag <tag>)
+-->
+   (<s> ^chunk-candidate <tag>)
+}
+
+## ── Propose: create-chunk operator ────────────────────────────────────────
+sp {castle*propose*create-chunk
+   "When a chunk candidate is detected, propose creating a summary memory."
+   (state <s> ^chunk-candidate <tag>)
+-->
+   (<s> ^operator <op> +)
+   (<op> ^name |create-chunk|
+         ^chunk-tag <tag>)
+}
+
+## ── Apply: create-chunk ───────────────────────────────────────────────────
+sp {castle*apply*create-chunk
+   "Signal to the Python bridge to create a chunk memory for this tag group."
+   (state <s> ^operator <op>
+              ^io.output-link <ol>)
+   (<op> ^name |create-chunk|
+         ^chunk-tag <tag>)
+-->
+   (<ol> ^action |create-chunk|
+         ^chunk-tag <tag>)
+}

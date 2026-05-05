@@ -9,7 +9,7 @@ returning a graceful "no results" response.
 
 import pytest
 
-from mempalace.searcher import _first_or_empty
+from cognitive_castle.searcher import _first_or_empty
 
 
 def test_first_or_empty_handles_empty_outer_list():

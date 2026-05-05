@@ -239,8 +239,8 @@ def test_rebuild_index_success(mock_backend_cls, mock_shutil, tmp_path):
     assert "chroma.sqlite3" in str(mock_shutil.copy2.call_args)
 
     # Verify: deleted and recreated (cosine is the backend default)
-    mock_backend.delete_collection.assert_called_once_with(str(tmp_path), "mempalace_drawers")
-    mock_backend.create_collection.assert_called_once_with(str(tmp_path), "mempalace_drawers")
+    mock_backend.delete_collection.assert_called_once_with(str(tmp_path), "castle_drawers")
+    mock_backend.create_collection.assert_called_once_with(str(tmp_path), "castle_drawers")
 
     # Verify: used upsert not add
     mock_new_col.upsert.assert_called_once()

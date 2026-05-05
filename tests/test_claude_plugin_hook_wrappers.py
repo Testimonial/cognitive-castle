@@ -70,7 +70,7 @@ def _run_hook(
 
 
 @pytest.mark.parametrize(("script_name", "hook_name"), SCRIPT_CASES)
-def test_plugin_hook_wrapper_prefers_mempalace_cli(
+def test_plugin_hook_wrapper_prefers_castle_cli(
     tmp_path: Path, script_name: str, hook_name: str
 ) -> None:
     args_file = tmp_path / "args.txt"
@@ -79,7 +79,7 @@ def test_plugin_hook_wrapper_prefers_mempalace_cli(
     bin_dir = _make_bin_dir(
         tmp_path,
         {
-            "mempalace": (
+            "cognitive-castle": (
                 "#!/bin/sh\n"
                 f'printf \'%s\' "$*" > "{_shell_path(args_file)}"\n'
                 f"{_capture_stdin_to(stdin_file)}"

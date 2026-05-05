@@ -3,13 +3,13 @@ import json
 import tempfile
 
 import pytest
-from mempalace.config import MempalaceConfig, normalize_wing_name, sanitize_kg_value, sanitize_name
+from cognitive_castle.config import MempalaceConfig, normalize_wing_name, sanitize_kg_value, sanitize_name
 
 
 def test_default_config():
     cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
     assert "palace" in cfg.palace_path
-    assert cfg.collection_name == "mempalace_drawers"
+    assert cfg.collection_name == "castle_drawers"
 
 
 def test_config_from_file():

@@ -1,6 +1,6 @@
 """TDD: miner.py must not silently drop .jsonl files.
 
-The project miner (mempalace.miner.scan_project) walks a directory and
+The project miner (cognitive_castle.miner.scan_project) walks a directory and
 keeps only files whose suffix is in READABLE_EXTENSIONS. The whitelist
 contains `.json` but NOT `.jsonl`. Every ChatGPT export, Claude Code
 transcript, or any other jsonl transcript dumped into a project
@@ -25,7 +25,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from mempalace.miner import MAX_FILE_SIZE, READABLE_EXTENSIONS, scan_project
+from cognitive_castle.miner import MAX_FILE_SIZE, READABLE_EXTENSIONS, scan_project
 
 
 class TestJsonlNotSilentlySkipped:

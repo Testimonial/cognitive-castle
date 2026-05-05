@@ -5,8 +5,8 @@ from pathlib import Path
 
 import chromadb
 
-from mempalace.convo_miner import mine_convos
-from mempalace.palace import file_already_mined
+from cognitive_castle.convo_miner import mine_convos
+from cognitive_castle.palace import file_already_mined
 
 
 def test_convo_mining():
@@ -20,7 +20,7 @@ def test_convo_mining():
     mine_convos(tmpdir, palace_path, wing="test_convos")
 
     client = chromadb.PersistentClient(path=palace_path)
-    col = client.get_collection("mempalace_drawers")
+    col = client.get_collection("castle_drawers")
     assert col.count() >= 2
 
     # Verify search works
@@ -47,7 +47,7 @@ def test_mine_convos_does_not_reprocess_short_files(capsys):
         # Verify sentinel was written (resolve path -- macOS /var -> /private/var)
         resolved_file = str(Path(tmpdir).resolve() / "tiny.txt")
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("castle_drawers")
         assert file_already_mined(col, resolved_file)
 
         # Second run -- file should be skipped
@@ -84,7 +84,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
     This is what makes the strip_noise upgrade apply to existing corpora:
     users just run `mempalace mine` again and old noise-filled drawers get
     replaced with clean ones."""
-    from mempalace.palace import NORMALIZE_VERSION
+    from cognitive_castle.palace import NORMALIZE_VERSION
 
     tmpdir = tempfile.mkdtemp()
     try:
@@ -101,7 +101,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         capsys.readouterr()
 
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("castle_drawers")
         resolved = str(Path(tmpdir).resolve() / "chat.txt")
         first_pass = col.get(where={"source_file": resolved})
         first_ids = set(first_pass["ids"])
@@ -145,7 +145,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         ), "stale drawers should force a rebuild, not a skip"
 
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("mempalace_drawers")
+        col = client.get_collection("castle_drawers")
         rebuilt = col.get(where={"source_file": resolved})
         # Orphan is gone
         assert "orphan_drawer" not in rebuilt["ids"]

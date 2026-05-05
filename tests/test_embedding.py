@@ -1,6 +1,6 @@
 import pytest
 
-import mempalace.embedding as embedding
+import cognitive_castle.embedding as embedding
 
 
 @pytest.fixture(autouse=True)

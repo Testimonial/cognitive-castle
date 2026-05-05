@@ -2,7 +2,7 @@
 
 import pytest
 
-from mempalace.sources import (
+from cognitive_castle.sources import (
     AdapterSchema,
     BaseSourceAdapter,
     DrawerRecord,
@@ -20,7 +20,7 @@ from mempalace.sources import (
     resolve_adapter_for_source,
     unregister,
 )
-from mempalace.sources.transforms import (
+from cognitive_castle.sources.transforms import (
     RESERVED_TRANSFORMATIONS,
     blank_line_drop,
     get_transformation,
@@ -288,7 +288,7 @@ def test_palace_context_drawer_id_is_sha256_prefix_not_sha1():
     """
     import hashlib
 
-    from mempalace.sources.context import _build_drawer_id
+    from cognitive_castle.sources.context import _build_drawer_id
 
     src = "/an/absolute/path/to/a/file.txt"
     record = DrawerRecord(content="x", source_file=src, chunk_index=3)
@@ -347,7 +347,7 @@ def test_palace_context_uses_route_hint_when_present():
 
 
 def test_knowledge_graph_add_triple_accepts_source_drawer_id_and_adapter_name(tmp_path):
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
 
     kg = KnowledgeGraph(db_path=str(tmp_path / "kg.sqlite3"))
     try:
@@ -382,7 +382,7 @@ def test_knowledge_graph_fresh_schema_includes_new_columns(tmp_path):
     for legacy palaces."""
     import sqlite3
 
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
 
     kg = KnowledgeGraph(db_path=str(tmp_path / "fresh.sqlite3"))
     try:
@@ -425,7 +425,7 @@ def test_knowledge_graph_migration_adds_missing_columns_to_old_schema(tmp_path):
     conn.commit()
     conn.close()
 
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
 
     kg = KnowledgeGraph(db_path=str(db_path))
     try:
@@ -444,7 +444,7 @@ def test_knowledge_graph_migration_adds_missing_columns_to_old_schema(tmp_path):
 
 def test_knowledge_graph_add_triple_backwards_compatible_without_new_kwargs(tmp_path):
     """Existing callers that omit the RFC 002 kwargs keep working unchanged."""
-    from mempalace.knowledge_graph import KnowledgeGraph
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
 
     kg = KnowledgeGraph(db_path=str(tmp_path / "kg.sqlite3"))
     try:

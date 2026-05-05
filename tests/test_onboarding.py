@@ -3,7 +3,7 @@
 import os
 from unittest.mock import patch
 
-from mempalace.onboarding import (
+from cognitive_castle.onboarding import (
     DEFAULT_WINGS,
     _ask,
     _ask_mode,

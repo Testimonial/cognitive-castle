@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mempalace.searcher import SearchError, search, search_memories
+from cognitive_castle.searcher import SearchError, search, search_memories
 
 
 # ── search_memories (API) ──────────────────────────────────────────────
@@ -69,7 +69,7 @@ class TestSearchMemories:
             "distances": [[0.1]],
         }
 
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             result = search_memories("test", "/fake/path")
         hit = result["results"][0]
         assert hit["created_at"] == "unknown"
@@ -79,7 +79,7 @@ class TestSearchMemories:
         mock_col = MagicMock()
         mock_col.query.side_effect = RuntimeError("query failed")
 
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             result = search_memories("test", "/fake/path")
         assert "error" in result
         assert "query failed" in result["error"]
@@ -110,7 +110,7 @@ class TestSearchMemories:
                 return mock_col
             raise RuntimeError("no closets")
 
-        with patch("mempalace.searcher.get_collection", side_effect=mock_get_collection):
+        with patch("cognitive_castle.searcher.get_collection", side_effect=mock_get_collection):
             result = search_memories("anything", "/fake/path")
         assert "results" in result
         assert len(result["results"]) == 2
@@ -137,19 +137,19 @@ class TestBM25NoneSafety:
     """
 
     def test_tokenize_handles_none(self):
-        from mempalace.searcher import _tokenize
+        from cognitive_castle.searcher import _tokenize
 
         assert _tokenize(None) == []
 
     def test_tokenize_handles_empty_string(self):
-        from mempalace.searcher import _tokenize
+        from cognitive_castle.searcher import _tokenize
 
         assert _tokenize("") == []
 
     def test_bm25_scores_does_not_crash_on_none_documents(self):
         """A ``None`` mixed into the corpus must yield score 0.0 for that doc
         and finite scores for the rest, not raise AttributeError."""
-        from mempalace.searcher import _bm25_scores
+        from cognitive_castle.searcher import _bm25_scores
 
         scores = _bm25_scores(
             "postgres migration", ["postgres migration done", None, "kafka rebalance"]
@@ -201,7 +201,7 @@ class TestSearchCLI:
         mock_col = MagicMock()
         mock_col.query.side_effect = RuntimeError("boom")
 
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             with pytest.raises(SearchError, match="Search error"):
                 search("test", "/fake/path")
 
@@ -245,7 +245,7 @@ class TestSearchCLI:
             ],
             "distances": [[1.5, 1.5, 1.5]],
         }
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             search("foo bar baz", "/fake/path")
         captured = capsys.readouterr()
         first_block, _, _ = captured.out.partition("[2]")
@@ -271,7 +271,7 @@ class TestSearchCLI:
             "metadatas": [[{"source_file": "a.md", "wing": "w", "room": "r"}]],
             "distances": [[1.2]],
         }
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             search("anything", "/fake/path")
         captured = capsys.readouterr()
         assert "mempalace repair" in captured.err
@@ -285,7 +285,7 @@ class TestSearchCLI:
             "metadatas": [[{"source_file": "a.md", "wing": "w", "room": "r"}]],
             "distances": [[0.3]],
         }
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             search("anything", "/fake/path")
         captured = capsys.readouterr()
         assert "mempalace repair" not in captured.err
@@ -301,7 +301,7 @@ class TestSearchCLI:
             "metadatas": [[{"source_file": "a.md", "wing": "w", "room": "r"}, None]],
             "distances": [[0.1, 0.2]],
         }
-        with patch("mempalace.searcher.get_collection", return_value=mock_col):
+        with patch("cognitive_castle.searcher.get_collection", return_value=mock_col):
             search("anything", "/fake/path")
         captured = capsys.readouterr()
         assert "[1]" in captured.out

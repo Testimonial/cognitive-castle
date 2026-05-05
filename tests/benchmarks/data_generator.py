@@ -413,7 +413,7 @@ class PalaceDataGenerator:
         n_drawers = n_drawers or self.cfg["drawers"]
         os.makedirs(palace_path, exist_ok=True)
         client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_or_create_collection("mempalace_drawers")
+        col = client.get_or_create_collection("castle_drawers")
 
         batch_size = 500
         docs = []

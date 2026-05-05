@@ -2,7 +2,7 @@
 
 from unittest.mock import patch, MagicMock
 
-from mempalace.spellcheck import (
+from cognitive_castle.spellcheck import (
     _load_known_names,
     spellcheck_user_text,
 )

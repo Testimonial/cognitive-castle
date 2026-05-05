@@ -72,7 +72,7 @@ def mock_claude_jsonl(tmp_path):
 
 class TestSweeperParsing:
     def test_parse_yields_only_user_and_assistant(self, mock_claude_jsonl):
-        from mempalace.sweeper import parse_claude_jsonl
+        from cognitive_castle.sweeper import parse_claude_jsonl
 
         records = list(parse_claude_jsonl(str(mock_claude_jsonl)))
         roles = [r["role"] for r in records]
@@ -83,7 +83,7 @@ class TestSweeperParsing:
         )
 
     def test_parse_extracts_session_id_and_timestamp(self, mock_claude_jsonl):
-        from mempalace.sweeper import parse_claude_jsonl
+        from cognitive_castle.sweeper import parse_claude_jsonl
 
         records = list(parse_claude_jsonl(str(mock_claude_jsonl)))
         first = records[0]
@@ -92,7 +92,7 @@ class TestSweeperParsing:
         assert first["uuid"] == "u-1"
 
     def test_parse_normalizes_assistant_content_list_to_text(self, mock_claude_jsonl):
-        from mempalace.sweeper import parse_claude_jsonl
+        from cognitive_castle.sweeper import parse_claude_jsonl
 
         records = list(parse_claude_jsonl(str(mock_claude_jsonl)))
         assistant_rec = records[1]
@@ -109,7 +109,7 @@ class TestSweeperParsing:
         """
         import json as _json
 
-        from mempalace.sweeper import parse_claude_jsonl
+        from cognitive_castle.sweeper import parse_claude_jsonl
 
         big_input = {"diff": "x" * 5000}  # well past the old 500-char cap
         path = tmp_path / "session_tools.jsonl"
@@ -146,7 +146,7 @@ class TestSweeperTandem:
     """The sweeper coordinates with other miners via max(timestamp)."""
 
     def test_sweep_empty_palace_ingests_all_messages(self, mock_claude_jsonl, tmp_path):
-        from mempalace.sweeper import sweep
+        from cognitive_castle.sweeper import sweep
 
         palace_path = str(tmp_path / "palace")
         result = sweep(str(mock_claude_jsonl), palace_path)
@@ -157,7 +157,7 @@ class TestSweeperTandem:
 
     def test_sweep_is_idempotent(self, mock_claude_jsonl, tmp_path):
         """Running the sweep twice must not duplicate drawers."""
-        from mempalace.sweeper import sweep
+        from cognitive_castle.sweeper import sweep
 
         palace_path = str(tmp_path / "palace")
         first = sweep(str(mock_claude_jsonl), palace_path)
@@ -172,7 +172,7 @@ class TestSweeperTandem:
     def test_sweep_resumes_from_cursor(self, tmp_path):
         """If half the messages are already in the palace, sweep picks up
         only the later half."""
-        from mempalace.sweeper import sweep
+        from cognitive_castle.sweeper import sweep
 
         jsonl_path = tmp_path / "session.jsonl"
         lines = [
@@ -235,8 +235,8 @@ class TestSweeperTandem:
         two of them and the process dies before the third. Second sweep
         must pick up the third — not skip it because cursor == T.
         """
-        from mempalace.palace import get_collection
-        from mempalace.sweeper import (
+        from cognitive_castle.palace import get_collection
+        from cognitive_castle.sweeper import (
             _drawer_id_for_message,
             parse_claude_jsonl,
             sweep,
@@ -297,8 +297,8 @@ class TestSweeperDrawerMetadata:
     depends on: session_id, timestamp, uuid, role."""
 
     def test_drawer_has_session_id_and_timestamp_metadata(self, mock_claude_jsonl, tmp_path):
-        from mempalace.sweeper import sweep
-        from mempalace.palace import get_collection
+        from cognitive_castle.sweeper import sweep
+        from cognitive_castle.palace import get_collection
 
         palace_path = str(tmp_path / "palace")
         sweep(str(mock_claude_jsonl), palace_path)

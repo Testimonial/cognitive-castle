@@ -8,14 +8,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from mempalace.hooks_cli import (
+from cognitive_castle.hooks_cli import (
     SAVE_INTERVAL,
     _count_human_messages,
     _extract_recent_messages,
     _get_mine_targets,
     _log,
     _maybe_auto_ingest,
-    _mempalace_python,
+    _castle_python,
     _mine_already_running,
     _mine_sync,
     _parse_harness_input,
@@ -29,18 +29,18 @@ from mempalace.hooks_cli import (
 )
 
 
-# --- _mempalace_python ---
+# --- _castle_python ---
 
 
-def test_mempalace_python_returns_string():
-    result = _mempalace_python()
+def test_castle_python_returns_string():
+    result = _castle_python()
     assert isinstance(result, str)
     assert "python" in result
 
 
-def test_mempalace_python_finds_venv():
+def test_castle_python_finds_venv():
     """Should resolve to a valid Python interpreter path."""
-    result = _mempalace_python()
+    result = _castle_python()
     assert result and "python" in os.path.basename(result).lower()
 
 
@@ -177,7 +177,7 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     mock_config = MagicMock()
     type(mock_config).hook_silent_save = PropertyMock(return_value=True)
     type(mock_config).hook_desktop_toast = PropertyMock(return_value=False)
-    patches.append(patch("mempalace.config.MempalaceConfig", return_value=mock_config))
+    patches.append(patch("cognitive_castle.config.MempalaceConfig", return_value=mock_config))
     with contextlib.ExitStack() as stack:
         for p in patches:
             stack.enter_context(p)
@@ -350,13 +350,13 @@ def test_output_writes_to_real_stdout_fd_when_mcp_server_loaded():
     """_output() must reach fd 1 even when mcp_server has redirected sys.stdout."""
     import types
 
-    fake_module = types.ModuleType("mempalace.mcp_server")
+    fake_module = types.ModuleType("cognitive_castle.mcp_server")
 
     read_fd, write_fd = os.pipe()
     try:
         fake_module._REAL_STDOUT_FD = write_fd
-        with patch.dict("sys.modules", {"mempalace.mcp_server": fake_module}):
-            from mempalace.hooks_cli import _output
+        with patch.dict("sys.modules", {"cognitive_castle.mcp_server": fake_module}):
+            from cognitive_castle.hooks_cli import _output
 
             _output({"systemMessage": "test"})
 
@@ -386,7 +386,7 @@ def test_output_falls_back_to_fd1_when_mcp_server_absent():
                 k: v for k, v in __import__("sys").modules.items() if "mcp_server" not in k
             }
             with patch.dict("sys.modules", modules_without_mcp, clear=True):
-                from mempalace.hooks_cli import _output
+                from cognitive_castle.hooks_cli import _output
 
                 _output({"continue": True})
         finally:
@@ -450,8 +450,8 @@ def test_maybe_auto_ingest_with_env(tmp_path):
                     assert cmd[cmd.index("--mode") + 1] == "projects"
 
 
-def test_maybe_auto_ingest_uses_mempalace_python(tmp_path):
-    """Spawned mine command uses _mempalace_python(), not bare sys.executable.
+def test_maybe_auto_ingest_uses_castle_python(tmp_path):
+    """Spawned mine command uses _castle_python(), not bare sys.executable.
 
     Hook subprocesses inherit the harness PATH which on GUI-launched
     Claude Code may resolve to a system Python without chromadb. The
@@ -464,7 +464,7 @@ def test_maybe_auto_ingest_uses_mempalace_python(tmp_path):
         with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
             with patch("mempalace.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
                 with patch(
-                    "mempalace.hooks_cli._mempalace_python", return_value="/fake/venv/python"
+                    "mempalace.hooks_cli._castle_python", return_value="/fake/venv/python"
                 ):
                     with patch("mempalace.hooks_cli.subprocess.Popen") as mock_popen:
                         _maybe_auto_ingest()
@@ -485,13 +485,13 @@ def test_mine_sync_with_env_uses_projects_mode(tmp_path):
                 assert cmd[cmd.index("--mode") + 1] == "projects"
 
 
-def test_mine_sync_uses_mempalace_python(tmp_path):
-    """Sync mine command uses _mempalace_python(), not bare sys.executable."""
+def test_mine_sync_uses_castle_python(tmp_path):
+    """Sync mine command uses _castle_python(), not bare sys.executable."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch("mempalace.hooks_cli.STATE_DIR", tmp_path):
-            with patch("mempalace.hooks_cli._mempalace_python", return_value="/fake/venv/python"):
+            with patch("mempalace.hooks_cli._castle_python", return_value="/fake/venv/python"):
                 with patch("mempalace.hooks_cli.subprocess.run") as mock_run:
                     _mine_sync()
                     cmd = mock_run.call_args[0][0]

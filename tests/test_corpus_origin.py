@@ -21,7 +21,7 @@ voice-profile detection in later passes.
 
 TDD: these tests fail until mempalace/corpus_origin.py is implemented."""
 
-from mempalace.corpus_origin import (
+from cognitive_castle.corpus_origin import (
     CorpusOriginResult,
     detect_origin_heuristic,
     detect_origin_llm,

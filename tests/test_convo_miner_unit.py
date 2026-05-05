@@ -2,7 +2,7 @@
 
 import contextlib
 
-from mempalace.convo_miner import (
+from cognitive_castle.convo_miner import (
     _file_chunks_locked,
     chunk_exchanges,
     detect_convo_room,
@@ -118,7 +118,7 @@ class TestScanConvos:
 
 class TestFileChunksLocked:
     def test_uses_bounded_upsert_batches(self, monkeypatch):
-        import mempalace.convo_miner as convo_miner
+        import cognitive_castle.convo_miner as convo_miner
 
         class FakeCol:
             def __init__(self):

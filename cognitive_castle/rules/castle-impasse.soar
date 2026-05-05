@@ -1,0 +1,67 @@
+##
+## castle-impasse.soar
+## Operator proposal and application rules for handling low-confidence
+## retrieval — the SOAR impasse mechanism applied to memory search.
+##
+## When no retrieved memory scores above SOAR_IMPASSE_THRESHOLD (0.30),
+## the best-score WME on the input-link triggers an impasse elaboration.
+## SOAR proposes the "widen-search" operator; on apply it writes an action
+## WME to the output-link. The Python bridge reads this and expands the
+## search via the knowledge graph.
+##
+
+## ── Elaborate: detect low-confidence state ────────────────────────────────
+sp {castle*elaborate*low-confidence
+   "Flag the state when no memory has a confident match score."
+   (state <s> ^io.input-link <il>)
+   (<il> ^best-score {< 0.30})
+-->
+   (<s> ^confidence |low|)
+   (write |[SOAR] Impasse — best-score below threshold, widening search.| (crlf))
+}
+
+sp {castle*elaborate*normal-confidence
+   "Confidence is acceptable — no impasse."
+   (state <s> ^io.input-link <il>)
+   (<il> ^best-score {>= 0.30})
+-->
+   (<s> ^confidence |normal|)
+}
+
+## ── Propose: widen-search operator ────────────────────────────────────────
+sp {castle*propose*widen-search
+   "When confidence is low, propose widening the search via graph links."
+   (state <s> ^confidence |low|)
+-->
+   (<s> ^operator <op> +)
+   (<op> ^name |widen-search|)
+}
+
+## ── Propose: summarise operator (when confidence is normal and many hits) ─
+sp {castle*propose*summarise-context
+   "When confidence is good, propose summarising retrieved memories."
+   (state <s> ^confidence |normal|)
+-->
+   (<s> ^operator <op> +)
+   (<op> ^name |summarise-context|)
+}
+
+## ── Apply: widen-search ────────────────────────────────────────────────────
+sp {castle*apply*widen-search
+   "Write widen-search action to output-link for the Python bridge to act on."
+   (state <s> ^operator <op>
+              ^io.output-link <ol>)
+   (<op> ^name |widen-search|)
+-->
+   (<ol> ^action |widen-search|)
+}
+
+## ── Apply: summarise-context ──────────────────────────────────────────────
+sp {castle*apply*summarise-context
+   "Write summarise action to output-link."
+   (state <s> ^operator <op>
+              ^io.output-link <ol>)
+   (<op> ^name |summarise-context|)
+-->
+   (<ol> ^action |summarise-context|)
+}

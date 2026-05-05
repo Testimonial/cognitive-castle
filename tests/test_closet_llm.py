@@ -11,7 +11,7 @@ import json
 import tempfile
 from unittest.mock import patch
 
-from mempalace.closet_llm import (
+from cognitive_castle.closet_llm import (
     LLMConfig,
     _call_llm,
     _parsed_to_closet_lines,
@@ -220,7 +220,7 @@ class TestRegenerateClosets:
         Now we go through ``purge_file_closets`` + ``mine_lock`` + stamp
         ``NORMALIZE_VERSION`` so the next mine's stale-version gate doesn't
         treat the LLM closets as leftovers to rebuild over."""
-        from mempalace.palace import (
+        from cognitive_castle.palace import (
             NORMALIZE_VERSION,
             get_closets_collection,
             get_collection,
@@ -300,7 +300,7 @@ class TestRegenerateClosets:
         """Regression: the old closet_id base used ``source.split('/')[-1]``
         which silently degrades on Windows paths (``C:\\proj\\a.md`` →
         the whole string). ``os.path.basename`` handles both separators."""
-        from mempalace.palace import get_collection, get_closets_collection
+        from cognitive_castle.palace import get_collection, get_closets_collection
 
         palace = str(tmp_path / "palace")
         # Use a path whose basename differs between '/' split and

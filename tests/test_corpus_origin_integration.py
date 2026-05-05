@@ -123,7 +123,7 @@ def test_baseline_v333_misclassifies_persona_names_as_people(ai_dialogue_corpus:
     The corpus-origin feature's job is to fix this, and the post-fix test below
     asserts the fix.
     """
-    from mempalace.entity_detector import detect_entities, scan_for_detection
+    from cognitive_castle.entity_detector import detect_entities, scan_for_detection
 
     files = scan_for_detection(str(ai_dialogue_corpus))
     detected = detect_entities(files)
@@ -161,7 +161,7 @@ def test_corpus_origin_reclassifies_personas(
 
     This is the fix. RED until the consumer wiring lands.
     """
-    from mempalace.entity_detector import detect_entities, scan_for_detection
+    from cognitive_castle.entity_detector import detect_entities, scan_for_detection
 
     files = scan_for_detection(str(ai_dialogue_corpus))
     detected = detect_entities(files, corpus_origin=corpus_origin_for_fixture)
@@ -200,7 +200,7 @@ def test_discover_entities_threads_corpus_origin_through(
     that detect_entities does, regardless of whether candidates entered via
     prose, manifests, or git authors.
     """
-    from mempalace.project_scanner import discover_entities
+    from cognitive_castle.project_scanner import discover_entities
 
     detected = discover_entities(
         str(ai_dialogue_corpus),
@@ -228,7 +228,7 @@ def test_discover_entities_no_origin_unchanged_shape(ai_dialogue_corpus: Path):
     Existing callers that don't pass corpus_origin must see no behavioral
     change.
     """
-    from mempalace.project_scanner import discover_entities
+    from cognitive_castle.project_scanner import discover_entities
 
     detected = discover_entities(str(ai_dialogue_corpus))
 
@@ -260,7 +260,7 @@ def test_init_pass_zero_writes_origin_json_to_palace(ai_dialogue_corpus: Path, t
     and persist the result to ``<palace>/.mempalace/origin.json`` in the
     documented schema_version=1 wrapper.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     # no_llm=True isolates the test from any local LLM provider. With Ollama
@@ -304,7 +304,7 @@ def test_init_pass_zero_passes_corpus_origin_to_discover_entities(
     """The Pass 0 result must reach discover_entities via the corpus_origin
     kwarg — that's what enables persona reclassification end-to-end.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     # no_llm=True isolates the test from any local LLM provider — see note
@@ -343,7 +343,7 @@ def test_init_pass_zero_skipped_when_no_readable_files(tmp_path: Path):
     """Empty project directory → no origin.json written, init still completes
     without crashing. Aya's earlier finding: don't fail init on missing samples.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     project = tmp_path / "empty"
     project.mkdir()
@@ -371,7 +371,7 @@ def test_init_pass_zero_uses_full_file_content_not_front_sampled(tmp_path: Path)
     the first N chars. AI signal that lives past the first 2000 chars must
     still trip detection.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     project = tmp_path / "deep_signal"
     project.mkdir()
@@ -430,7 +430,7 @@ def test_llm_refine_includes_corpus_origin_context_in_prompt(
     """
     from types import SimpleNamespace
 
-    from mempalace.llm_refine import refine_entities
+    from cognitive_castle.llm_refine import refine_entities
 
     captured: dict = {}
 
@@ -476,7 +476,7 @@ def test_llm_refine_no_origin_keeps_v333_prompt_shape(monkeypatch):
     """
     from types import SimpleNamespace
 
-    from mempalace.llm_refine import SYSTEM_PROMPT, refine_entities
+    from cognitive_castle.llm_refine import SYSTEM_PROMPT, refine_entities
 
     captured: dict = {}
 
@@ -521,7 +521,7 @@ def _mine_args(project_dir: Path, *, redetect: bool):
         wing=None,
         no_gitignore=False,
         include_ignored=[],
-        agent="mempalace",
+        agent="cognitive-castle",
         limit=0,
         dry_run=True,
         extract="auto",
@@ -533,7 +533,7 @@ def test_mine_default_does_not_redetect_origin(ai_dialogue_corpus: Path, tmp_pat
     """Default `mempalace mine` (no --redetect-origin flag) must NOT run
     corpus_origin detection — the flag is opt-in.
     """
-    from mempalace.cli import cmd_mine
+    from cognitive_castle.cli import cmd_mine
 
     palace = tmp_path / "palace"
     args = _mine_args(ai_dialogue_corpus, redetect=False)
@@ -541,7 +541,7 @@ def test_mine_default_does_not_redetect_origin(ai_dialogue_corpus: Path, tmp_pat
     with (
         patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
         patch("mempalace.cli._run_pass_zero") as mock_pass_zero,
-        patch("mempalace.miner.mine"),
+        patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
 
@@ -555,14 +555,14 @@ def test_mine_with_redetect_origin_flag_writes_origin_json(
     """`mempalace mine --redetect-origin` re-runs corpus_origin detection
     on the project and persists the result to <palace>/.mempalace/origin.json.
     """
-    from mempalace.cli import cmd_mine
+    from cognitive_castle.cli import cmd_mine
 
     palace = tmp_path / "palace"
     args = _mine_args(ai_dialogue_corpus, redetect=True)
 
     with (
         patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.miner.mine"),
+        patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
 
@@ -578,7 +578,7 @@ def test_mine_redetect_overwrites_existing_origin_json(ai_dialogue_corpus: Path,
     overwrites it with the new detection result rather than skipping.
     Resolved as option (c): explicit user re-runs via flag.
     """
-    from mempalace.cli import cmd_mine
+    from cognitive_castle.cli import cmd_mine
 
     palace = tmp_path / "palace"
     origin_dir = palace / ".mempalace"
@@ -601,7 +601,7 @@ def test_mine_redetect_overwrites_existing_origin_json(ai_dialogue_corpus: Path,
 
     with (
         patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.miner.mine"),
+        patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
 
@@ -616,7 +616,7 @@ def test_mine_redetect_uses_full_content_not_sampled(tmp_path: Path):
     """Regression for Aya's pushback: --redetect-origin must use the same
     full-content reader as Pass 0 (not first-N-chars sampling).
     """
-    from mempalace.cli import cmd_mine
+    from cognitive_castle.cli import cmd_mine
 
     project = tmp_path / "deep_signal"
     project.mkdir()
@@ -632,7 +632,7 @@ def test_mine_redetect_uses_full_content_not_sampled(tmp_path: Path):
 
     with (
         patch("mempalace.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
-        patch("mempalace.miner.mine"),
+        patch("cognitive_castle.miner.mine"),
     ):
         cmd_mine(args)
 
@@ -667,7 +667,7 @@ def test_init_default_attempts_llm_provider(ai_dialogue_corpus: Path, tmp_path: 
     """``mempalace init`` (no flags) MUST try to acquire an LLM
     provider. This is the default-flip — opt-in becomes opt-out.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -699,7 +699,7 @@ def test_init_no_llm_skips_provider_acquisition(ai_dialogue_corpus: Path, tmp_pa
     """``mempalace init --no-llm`` is the explicit opt-out path. No
     provider acquisition attempt; init runs in heuristics-only mode.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, no_llm=True)
@@ -725,7 +725,7 @@ def test_init_graceful_fallback_when_provider_unavailable(
     check_available returns False, init prints a one-line message and
     proceeds without an LLM provider.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -755,8 +755,8 @@ def test_init_graceful_fallback_on_provider_construction_error(
     """When get_provider raises (e.g. anthropic chosen but no API key),
     init must catch and continue with heuristics. Not crash.
     """
-    from mempalace.cli import cmd_init
-    from mempalace.llm_client import LLMError
+    from cognitive_castle.cli import cmd_init
+    from cognitive_castle.llm_client import LLMError
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -781,7 +781,7 @@ def test_init_legacy_llm_flag_compatible(ai_dialogue_corpus: Path, tmp_path: Pat
     before (LLM enabled). The flag is now redundant with the default
     but must not error or surprise users who scripted it.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, llm=True)
@@ -821,8 +821,8 @@ def test_end_to_end_init_with_llm_separates_personas(ai_dialogue_corpus: Path, t
     testing the LLM, we're testing the wiring that flows the LLM's
     persona names into entity classification end-to-end.
     """
-    from mempalace.cli import cmd_init
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import cmd_init
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)  # default = LLM ON
@@ -894,7 +894,7 @@ def test_no_llm_path_matches_v333_classification(ai_dialogue_corpus: Path, tmp_p
     would on plain v3.3.3. Users who want persona reclassification must
     have an LLM provider configured (default behavior).
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, no_llm=True)  # explicit opt-out
@@ -937,7 +937,7 @@ def test_re_init_idempotent(ai_dialogue_corpus: Path, tmp_path: Path):
     Catches: forgotten state, append-instead-of-overwrite bugs, side
     effects accumulating across runs.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, no_llm=True)
@@ -979,7 +979,7 @@ def test_persona_user_name_collision_user_kept_in_people(
     place in the people bucket — they don't get reclassified as an agent.
     The corpus-origin wiring must protect the human from disappearing.
     """
-    from mempalace.entity_detector import detect_entities
+    from cognitive_castle.entity_detector import detect_entities
 
     project = tmp_path / "collision_corpus"
     project.mkdir()
@@ -1009,7 +1009,7 @@ def test_persona_user_name_collision_user_kept_in_people(
         },
     }
 
-    from mempalace.entity_detector import scan_for_detection
+    from cognitive_castle.entity_detector import scan_for_detection
 
     files = scan_for_detection(str(project))
     # Apply corpus-origin with the malformed origin.
@@ -1035,7 +1035,7 @@ def test_persona_user_name_collision_user_kept_in_people(
     Existing callers that don't pass corpus_origin must see no behavioral
     change.
     """
-    from mempalace.project_scanner import discover_entities
+    from cognitive_castle.project_scanner import discover_entities
 
     detected = discover_entities(str(ai_dialogue_corpus))
 
@@ -1072,7 +1072,7 @@ def test_integration_cmd_init_runs_pass_zero_to_pass_four_in_order(
     mine a fully-set-up directory. This test pins the order so any
     future re-shuffle is caught.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, no_llm=True)
@@ -1103,7 +1103,7 @@ def test_integration_cmd_init_runs_pass_zero_to_pass_four_in_order(
         patch("mempalace.cli._run_pass_zero", side_effect=trace_pass_zero),
         patch("mempalace.project_scanner.discover_entities", side_effect=trace_discover),
         patch("mempalace.room_detector_local.detect_rooms_local", side_effect=trace_rooms),
-        patch("mempalace.cli._ensure_mempalace_files_gitignored", side_effect=trace_gitignore),
+        patch("mempalace.cli._ensure_castle_files_gitignored", side_effect=trace_gitignore),
         patch("mempalace.cli._maybe_run_mine_after_init", side_effect=trace_mine_prompt),
     ):
         cmd_init(args)
@@ -1136,7 +1136,7 @@ def test_integration_topics_and_agent_personas_coexist(
     Catches the most-likely merge regression: dropping develop's topics
     list while applying corpus-origin's _apply_corpus_origin.
     """
-    from mempalace.entity_detector import detect_entities, scan_for_detection
+    from cognitive_castle.entity_detector import detect_entities, scan_for_detection
 
     files = scan_for_detection(str(ai_dialogue_corpus))
     detected = detect_entities(files, corpus_origin=corpus_origin_for_fixture)
@@ -1163,8 +1163,8 @@ def test_integration_entities_json_includes_topics_excludes_personas(
     This is the contract downstream tools (miner, palace_graph cross-wing
     tunnels) depend on.
     """
-    from mempalace.cli import cmd_init
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import cmd_init
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -1219,8 +1219,8 @@ def test_integration_add_to_known_entities_called_with_wing(
     corpus-origin path through cmd_init must respect this — calling it
     without ``wing=`` would silently break tunnel computation later.
     """
-    from mempalace.cli import cmd_init
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import cmd_init
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -1244,7 +1244,7 @@ def test_integration_add_to_known_entities_called_with_wing(
         patch("mempalace.cli.detect_origin_llm", return_value=fake_origin),
         patch("mempalace.cli._maybe_run_mine_after_init"),
         patch("mempalace.room_detector_local.detect_rooms_local"),
-        patch("mempalace.miner.add_to_known_entities") as mock_add,
+        patch("cognitive_castle.miner.add_to_known_entities") as mock_add,
     ):
         cmd_init(args)
 
@@ -1271,7 +1271,7 @@ def test_integration_llm_refine_corpus_origin_preamble_does_not_break_topic_labe
     """
     from types import SimpleNamespace
 
-    from mempalace.llm_refine import VALID_LABELS, refine_entities
+    from cognitive_castle.llm_refine import VALID_LABELS, refine_entities
 
     # TOPIC is preserved as a valid label
     assert "TOPIC" in VALID_LABELS, "develop's TOPIC label was dropped during corpus-origin merge"
@@ -1360,7 +1360,7 @@ def test_no_internal_coordination_jargon_in_source_or_tests():
     SELF = Path(__file__).resolve()
 
     leaks: list = []
-    for pattern_dir in ("mempalace", "tests"):
+    for pattern_dir in ("cognitive-castle", "tests"):
         for path in (repo_root / pattern_dir).rglob("*.py"):
             if path.resolve() == SELF:
                 continue
@@ -1439,8 +1439,8 @@ def test_merge_tier_fields_heuristic_yes_llm_no_keeps_heuristic_bool():
     """
     from unittest.mock import MagicMock
 
-    from mempalace.cli import _run_pass_zero
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import _run_pass_zero
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     # Mock the LLM provider so detect_origin_llm returns a CONTRADICTING result.
     fake_provider = MagicMock()
@@ -1487,7 +1487,7 @@ def test_merge_tier_fields_heuristic_yes_llm_no_keeps_heuristic_bool():
     # heuristic. Compare to detect_origin_heuristic on the same samples
     # so this stays correct regardless of what the heuristic computes
     # for these samples (avoids brittleness vs. a hardcoded sentinel).
-    from mempalace.corpus_origin import detect_origin_heuristic
+    from cognitive_castle.corpus_origin import detect_origin_heuristic
 
     expected_confidence = detect_origin_heuristic(_ai_dialogue_samples()).confidence
     assert res["confidence"] == expected_confidence, (
@@ -1514,8 +1514,8 @@ def test_merge_tier_fields_heuristic_no_no_personas_leak():
     """
     from unittest.mock import MagicMock, patch
 
-    from mempalace.cli import _run_pass_zero
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import _run_pass_zero
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     fake_provider = MagicMock()
 
@@ -1569,8 +1569,8 @@ def test_merge_tier_fields_heuristic_yes_llm_yes_combines_evidence():
     """
     from unittest.mock import MagicMock, patch
 
-    from mempalace.cli import _run_pass_zero
-    from mempalace.corpus_origin import CorpusOriginResult
+    from cognitive_castle.cli import _run_pass_zero
+    from cognitive_castle.corpus_origin import CorpusOriginResult
 
     fake_provider = MagicMock()
 
@@ -1646,8 +1646,8 @@ def test_merge_tier_fields_confidence_matches_heuristic_call():
     """
     from unittest.mock import MagicMock, patch
 
-    from mempalace.cli import _run_pass_zero
-    from mempalace.corpus_origin import CorpusOriginResult, detect_origin_heuristic
+    from cognitive_castle.cli import _run_pass_zero
+    from cognitive_castle.corpus_origin import CorpusOriginResult, detect_origin_heuristic
 
     samples = _ai_dialogue_samples()
     expected_confidence = detect_origin_heuristic(samples).confidence
@@ -1693,7 +1693,7 @@ def test_merge_tier_fields_no_llm_provider_returns_heuristic_only():
     path), behavior is identical to today — heuristic-only result, no
     merge logic fires. This pins the v3.3.4 contract.
     """
-    from mempalace.cli import _run_pass_zero
+    from cognitive_castle.cli import _run_pass_zero
 
     import tempfile
 
@@ -1739,7 +1739,7 @@ def test_init_prints_privacy_warning_when_provider_is_external(
     is_external_service is True, output must contain the privacy
     warning text including the EXTERNAL marker.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)  # default = LLM ON
@@ -1784,7 +1784,7 @@ def test_init_no_privacy_warning_when_provider_is_local(
     on localhost, LM Studio on LAN), the privacy warning MUST NOT fire —
     nothing is leaving the user's machine/network.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)  # default = LLM ON
@@ -1812,7 +1812,7 @@ def test_init_no_privacy_warning_with_no_llm_flag(ai_dialogue_corpus: Path, tmp_
     """With --no-llm, no provider is acquired at all, so the privacy
     warning has nothing to fire on. Output must not contain it.
     """
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, no_llm=True)
@@ -1861,7 +1861,7 @@ def test_init_blocks_with_consent_prompt_when_api_key_from_env(
     """When provider is external AND api_key_source=='env' AND
     --accept-external-llm is NOT set, cmd_init MUST call input() to
     block on user consent. No bypass = blocking prompt."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -1885,7 +1885,7 @@ def test_init_blocks_with_consent_prompt_when_api_key_from_env(
 def test_init_consent_prompt_y_proceeds_with_llm(ai_dialogue_corpus: Path, tmp_path: Path, capsys):
     """If user types 'y' at the consent prompt, init proceeds with the
     LLM — provider.classify() is invoked during Pass 0 / refinement."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -1911,7 +1911,7 @@ def test_init_consent_prompt_n_falls_back_to_heuristic(
 ):
     """If user types 'n' (or anything not 'y'), init drops the LLM and
     falls back to heuristics-only — provider.classify() must NOT run."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)
@@ -1938,7 +1938,7 @@ def test_init_no_consent_prompt_when_api_key_from_flag(
     """Explicit --llm-api-key means user already opted in. The consent
     prompt MUST NOT fire when api_key_source == 'flag', even if the
     endpoint is external."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, llm_api_key="sk-explicit")
@@ -1969,7 +1969,7 @@ def test_init_accept_external_llm_flag_bypasses_consent_prompt(
     """--accept-external-llm is the non-interactive bypass for CI. With
     the flag set, the consent prompt MUST NOT fire even when the
     api_key came from env-fallback."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus, accept_external_llm=True)
@@ -1999,7 +1999,7 @@ def test_init_no_consent_prompt_when_endpoint_is_local(
     """Stray env-fallback api_key on a LOCAL endpoint (e.g. LM Studio
     on localhost with OPENAI_API_KEY in shell env) must NOT trigger the
     prompt. Nothing leaves the machine — no consent needed."""
-    from mempalace.cli import cmd_init
+    from cognitive_castle.cli import cmd_init
 
     palace = tmp_path / "palace"
     args = _init_args(ai_dialogue_corpus)

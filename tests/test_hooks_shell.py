@@ -66,7 +66,7 @@ if [ "$CAN_IMPORT" = "0" ]; then
     if [ "$1" = "-c" ] && echo "$2" | grep -q "import mempalace"; then
         exit 1
     fi
-    if [ "$1" = "-m" ] && [ "$2" = "mempalace" ]; then
+    if [ "$1" = "-m" ] && [ "$2" = "cognitive-castle" ]; then
         exit 1
     fi
 fi

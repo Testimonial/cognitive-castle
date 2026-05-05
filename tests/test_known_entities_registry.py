@@ -1,4 +1,4 @@
-"""Tests for mempalace.miner.add_to_known_entities.
+"""Tests for cognitive_castle.miner.add_to_known_entities.
 
 Covers the init → miner wire-up: init's confirmed entities merged into
 ``~/.mempalace/known_entities.json`` so the miner's drawer-tagging path
@@ -192,7 +192,7 @@ def test_populated_registry_improves_miner_recall(temp_registry):
     miner.add_to_known_entities(
         {
             "people": ["Julia Grib", "Kevin Heifner"],
-            "projects": ["hyperion-history", "mempalace"],
+            "projects": ["hyperion-history", "cognitive-castle"],
         }
     )
 
@@ -204,7 +204,7 @@ def test_populated_registry_improves_miner_recall(temp_registry):
     tagged = set(result.split(";")) if result else set()
 
     # All four registered entities should land in the metadata string
-    for expected in ("Julia Grib", "Kevin Heifner", "hyperion-history", "mempalace"):
+    for expected in ("Julia Grib", "Kevin Heifner", "hyperion-history", "cognitive-castle"):
         assert expected in tagged, f"expected '{expected}' in metadata {tagged!r}"
 
 

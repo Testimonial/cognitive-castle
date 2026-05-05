@@ -73,7 +73,7 @@ def _process_file_unbatched(filepath, project_path, collection, wing, rooms, age
     comparison is apples-to-apples; only the upsert granularity differs.
     """
     from mempalace import miner
-    from mempalace.palace import (
+    from cognitive_castle.palace import (
         build_closet_lines,
         file_already_mined,
         mine_lock,
@@ -140,8 +140,8 @@ def _process_file_unbatched(filepath, project_path, collection, wing, rooms, age
 def mine_once(project_dir: str, palace_path: str, batched: bool) -> tuple[int, float]:
     """Mine a project dir with either the batched (new) or per-chunk (old) path."""
     from mempalace import miner
-    from mempalace.miner import load_config, scan_project
-    from mempalace.palace import get_closets_collection, get_collection
+    from cognitive_castle.miner import load_config, scan_project
+    from cognitive_castle.palace import get_closets_collection, get_collection
 
     project_path = Path(project_dir).resolve()
     config = load_config(project_dir)
@@ -175,7 +175,7 @@ def mine_once(project_dir: str, palace_path: str, batched: bool) -> tuple[int, f
 
 def _reset_backend_caches() -> None:
     """Drop the in-process client cache so each run pays cold-open cost equally."""
-    from mempalace.palace import _DEFAULT_BACKEND
+    from cognitive_castle.palace import _DEFAULT_BACKEND
 
     _DEFAULT_BACKEND._clients.clear()
     _DEFAULT_BACKEND._freshness.clear()
@@ -266,7 +266,7 @@ def main() -> None:
     if args.device:
         os.environ["MEMPALACE_EMBEDDING_DEVICE"] = args.device
 
-    from mempalace.embedding import describe_device, get_embedding_function
+    from cognitive_castle.embedding import describe_device, get_embedding_function
 
     device_label = describe_device()
     print(f"Warming up ONNX model on device={device_label}...")

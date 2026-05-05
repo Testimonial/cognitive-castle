@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-from mempalace.llm_client import (
+from cognitive_castle.llm_client import (
     AnthropicProvider,
     LLMError,
     OllamaProvider,

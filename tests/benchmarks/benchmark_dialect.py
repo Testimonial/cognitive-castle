@@ -2,7 +2,7 @@ import pytest
 import timeit
 import re
 
-from mempalace.dialect import Dialect
+from cognitive_castle.dialect import Dialect
 
 def test_detect_entities_benchmark():
     dialect = Dialect()

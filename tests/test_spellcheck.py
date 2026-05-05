@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from mempalace.spellcheck import (
+from cognitive_castle.spellcheck import (
     _edit_distance,
     _get_system_words,
     _should_skip,
@@ -49,7 +49,7 @@ class TestShouldSkip:
         assert _should_skip("**bold**", set()) is True
 
     def test_known_name_skipped(self):
-        assert _should_skip("mempalace", {"mempalace"}) is True
+        assert _should_skip("cognitive-castle", {"cognitive-castle"}) is True
 
     def test_normal_word_not_skipped(self):
         assert _should_skip("hello", set()) is False

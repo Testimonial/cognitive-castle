@@ -14,15 +14,15 @@ import sqlite3
 
 import pytest
 
-from mempalace.backends.chroma import (
+from cognitive_cognitive_castle.backends.chroma import (
     _hnsw_element_count,
     _vector_segment_id,
     hnsw_capacity_status,
 )
-from mempalace.searcher import _bm25_only_via_sqlite
+from cognitive_castle.searcher import _bm25_only_via_sqlite
 
 
-COLLECTION = "mempalace_drawers"
+COLLECTION = "castle_drawers"
 
 
 # ── Fixtures ──────────────────────────────────────────────────────────
@@ -436,7 +436,7 @@ def test_bm25_fallback_handles_short_query(palace_with_drawers):
 
 def test_repair_status_reports_diverged(tmp_path, capsys):
     """The status command prints DIVERGED and recommends rebuild."""
-    from mempalace.repair import status as repair_status
+    from cognitive_castle.repair import status as repair_status
 
     seg = "seg-status"
     _seed_chroma_db(str(tmp_path), sqlite_count=20_000, segment_id=seg)
@@ -449,7 +449,7 @@ def test_repair_status_reports_diverged(tmp_path, capsys):
 
 
 def test_repair_status_quiet_on_healthy_palace(tmp_path, capsys):
-    from mempalace.repair import status as repair_status
+    from cognitive_castle.repair import status as repair_status
 
     seg = "seg-status-ok"
     _seed_chroma_db(str(tmp_path), sqlite_count=500, segment_id=seg)

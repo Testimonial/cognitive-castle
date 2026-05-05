@@ -1,4 +1,4 @@
-"""Tests for mempalace.palace_graph — graph traversal layer.
+"""Tests for cognitive_castle.palace_graph — graph traversal layer.
 
 All ChromaDB access is mocked — no real database needed.
 """
@@ -25,7 +25,7 @@ def _make_fake_collection(metadatas, ids=None):
 
 # Patch chromadb at import time so palace_graph can be imported
 with patch.dict("sys.modules", {"chromadb": MagicMock()}):
-    from mempalace.palace_graph import (
+    from cognitive_castle.palace_graph import (
         _fuzzy_match,
         build_graph,
         find_tunnels,

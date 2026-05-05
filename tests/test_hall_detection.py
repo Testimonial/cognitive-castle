@@ -12,60 +12,60 @@ class TestDetectHall:
     """The detect_hall function should exist and route content to the right hall."""
 
     def test_function_exists(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         assert callable(detect_hall)
 
     def test_technical_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "Fixed the python script bug in the error handler code"
         assert detect_hall(text) == "technical"
 
     def test_emotions_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "I feel so happy today, tears of joy, I love this"
         assert detect_hall(text) == "emotions"
 
     def test_family_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "The kids had a great day, my daughter was amazing"
         assert detect_hall(text) == "family"
 
     def test_memory_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "I remember when we archived all those files, recall the conversation"
         assert detect_hall(text) == "memory"
 
     def test_creative_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "The game design for the player app looks great"
         assert detect_hall(text) == "creative"
 
     def test_identity_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "Who am I really? My identity and persona and sense of self"
         assert detect_hall(text) == "identity"
 
     def test_consciousness_content(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "Am I conscious? Is this awareness real? Does my soul exist?"
         assert detect_hall(text) == "consciousness"
 
     def test_general_fallback(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         text = "The weather is nice today in California"
         assert detect_hall(text) == "general"
 
     def test_highest_score_wins(self):
-        from mempalace.miner import detect_hall
+        from cognitive_castle.miner import detect_hall
 
         # More technical keywords than emotional
         text = "Fixed the python bug in the code script, felt happy about it"
@@ -76,8 +76,8 @@ class TestDrawerHasHallMetadata:
     """When a drawer is created, it must have a hall field in metadata."""
 
     def test_add_drawer_includes_hall(self, palace_path):
-        from mempalace.palace import get_collection
-        from mempalace.miner import add_drawer
+        from cognitive_castle.palace import get_collection
+        from cognitive_castle.miner import add_drawer
 
         col = get_collection(palace_path)
         add_drawer(
@@ -99,8 +99,8 @@ class TestConvoMinerWritesHalls:
     """Conversation miner must also tag drawers with hall metadata."""
 
     def test_convo_miner_drawers_have_hall(self, tmp_dir):
-        from mempalace.palace import get_collection
-        from mempalace.convo_miner import mine_convos
+        from cognitive_castle.palace import get_collection
+        from cognitive_castle.convo_miner import mine_convos
 
         palace_dir = os.path.join(tmp_dir, "palace")
         os.makedirs(palace_dir)
@@ -129,7 +129,7 @@ class TestDetectHallCaching:
 
     def test_detect_hall_does_not_reread_config(self):
         """After first call, config should be cached — no new MempalaceConfig()."""
-        import mempalace.miner as miner_mod
+        import cognitive_castle.miner as miner_mod
 
         # Reset cache
         miner_mod._HALL_KEYWORDS_CACHE = None
@@ -150,8 +150,8 @@ class TestMineProjectWritesHalls:
     """Full mine pipeline must produce drawers with hall metadata."""
 
     def test_mined_drawers_have_hall(self, tmp_dir):
-        from mempalace.palace import get_collection
-        from mempalace.miner import mine
+        from cognitive_castle.palace import get_collection
+        from cognitive_castle.miner import mine
 
         palace_dir = os.path.join(tmp_dir, "palace")
         os.makedirs(palace_dir)

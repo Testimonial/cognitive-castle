@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-from mempalace.entity_detector import (
+from cognitive_castle.entity_detector import (
     PROSE_EXTENSIONS,
     STOPWORDS,
     _print_entity_list,
@@ -529,7 +529,7 @@ def test_score_entity_unions_person_verbs_across_languages():
 
 def test_get_entity_patterns_unknown_lang_falls_back_to_english():
     """Asking for a non-existent language returns English defaults."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     patterns = get_entity_patterns(("zz-does-not-exist",))
     assert len(patterns["stopwords"]) > 0
@@ -538,7 +538,7 @@ def test_get_entity_patterns_unknown_lang_falls_back_to_english():
 
 def test_get_entity_patterns_dedupes_across_overlapping_languages():
     """Loading ('en', 'en') doesn't double-count patterns or stopwords."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     single = get_entity_patterns(("en",))
     doubled = get_entity_patterns(("en", "en"))
@@ -548,7 +548,7 @@ def test_get_entity_patterns_dedupes_across_overlapping_languages():
 
 def test_build_patterns_cache_is_keyed_by_language():
     """Same name with different language tuples yields different compiled sets."""
-    from mempalace.entity_detector import _build_patterns
+    from cognitive_castle.entity_detector import _build_patterns
 
     locale = {
         "candidate_pattern": "[A-Z][a-z]+",
@@ -567,7 +567,7 @@ def test_build_patterns_cache_is_keyed_by_language():
 
 def test_normalize_langs_handles_string_input():
     """Passing a bare string instead of a tuple still works."""
-    from mempalace.entity_detector import _normalize_langs
+    from cognitive_castle.entity_detector import _normalize_langs
 
     assert _normalize_langs("en") == ("en",)
     assert _normalize_langs(["en", "pt-br"]) == ("en", "pt-br")
@@ -577,7 +577,7 @@ def test_normalize_langs_handles_string_input():
 
 def test_config_entity_languages_defaults_to_english(tmp_path, monkeypatch):
     """MempalaceConfig.entity_languages defaults to ['en'] with no config file."""
-    from mempalace.config import MempalaceConfig
+    from cognitive_castle.config import MempalaceConfig
 
     monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
@@ -587,7 +587,7 @@ def test_config_entity_languages_defaults_to_english(tmp_path, monkeypatch):
 
 def test_config_entity_languages_from_env(tmp_path, monkeypatch):
     """Env var overrides config file."""
-    from mempalace.config import MempalaceConfig
+    from cognitive_castle.config import MempalaceConfig
 
     monkeypatch.setenv("MEMPALACE_ENTITY_LANGUAGES", "en,pt-br,ru")
     cfg = MempalaceConfig(config_dir=str(tmp_path))
@@ -596,7 +596,7 @@ def test_config_entity_languages_from_env(tmp_path, monkeypatch):
 
 def test_config_set_entity_languages_persists(tmp_path, monkeypatch):
     """set_entity_languages writes to disk and is read back."""
-    from mempalace.config import MempalaceConfig
+    from cognitive_castle.config import MempalaceConfig
 
     monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
@@ -608,7 +608,7 @@ def test_config_set_entity_languages_persists(tmp_path, monkeypatch):
 
 def test_config_set_entity_languages_empty_falls_back_to_english(tmp_path, monkeypatch):
     """An empty list normalizes to ['en']."""
-    from mempalace.config import MempalaceConfig
+    from cognitive_castle.config import MempalaceConfig
 
     monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
@@ -733,7 +733,7 @@ def test_zh_tw_person_classification():
 def test_zh_tw_stopwords_filter_common_particles():
     """Common Chinese particles / pronouns should be stopword-filtered
     even if they happen to share a surname prefix like 甘 or 習."""
-    from mempalace.i18n import get_entity_patterns
+    from cognitive_castle.i18n import get_entity_patterns
 
     patterns = get_entity_patterns(("zh-TW",))
     stopwords = set(patterns["stopwords"])

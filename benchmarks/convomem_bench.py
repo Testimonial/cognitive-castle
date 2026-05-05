@@ -179,7 +179,7 @@ def retrieve_for_item(item, top_k=10, mode="raw"):
 
         # Optionally compress
         if mode == "aaak":
-            from mempalace.dialect import Dialect
+            from cognitive_castle.dialect import Dialect
 
             dialect = Dialect()
             docs = [dialect.compress(doc) for doc in corpus]
