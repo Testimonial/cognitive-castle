@@ -534,6 +534,8 @@ def _bm25_only_via_sqlite(
                 "similarity": None,
                 "distance": None,
                 "matched_via": "bm25_sqlite",
+                # Full metadata — used by _hybrid_rank (decay_score) and SOAR.
+                "metadata": meta,
                 # Internal: full path + chunk_index let callers (notably
                 # candidate_strategy="union") dedupe at chunk granularity
                 # rather than basename — two files in different directories

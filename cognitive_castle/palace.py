@@ -9,7 +9,7 @@ import hashlib
 import os
 import re
 
-from .backends.chroma import ChromaBackend
+from .backends.lancedb_backend import LanceDBBackend
 
 SKIP_DIRS = {
     ".git",
@@ -37,7 +37,7 @@ SKIP_DIRS = {
     "target",
 }
 
-_DEFAULT_BACKEND = ChromaBackend()
+_DEFAULT_BACKEND = LanceDBBackend()
 
 # Schema version for drawer normalization. Bump when the normalization
 # pipeline changes in a way that existing drawers should be rebuilt to pick up

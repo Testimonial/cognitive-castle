@@ -666,6 +666,12 @@ def tool_search(
         try:
             from .soar_bridge import apply_soar_boosts as _soar_boost
             project_id = os.environ.get("CASTLE_PROJECT", "default")
+            # Composite id avoids collisions when two hits share the same
+            # basename from different directories (e.g. project-a/auth.md
+            # and project-b/auth.md both appear as "auth.md" after stripping).
+            def _soar_id(h: dict) -> str:
+                return f"{h.get('wing','')}/{h.get('room','')}/{h.get('source_file','?')}"
+
             soar_mems = []
             for h in hits:
                 meta = h.get("metadata") or {}
@@ -677,7 +683,7 @@ def tool_search(
                 else:
                     mem_type = meta.get("type", "semantic")
                 soar_mems.append({
-                    "id": h.get("source_file", "?"),
+                    "id": _soar_id(h),
                     "type": mem_type,
                     "subtype": meta.get("subtype", ""),
                     "project_id": meta.get("project_id", ""),
@@ -689,8 +695,7 @@ def tool_search(
             soar_mems = _soar_boost(soar_mems, sanitized["clean_query"], project_id)
             soar_boost_val = {m["id"]: m.get("_soar_boost", 1.0) for m in soar_mems}
             for h in hits:
-                fid = h.get("source_file", "?")
-                boost = float(soar_boost_val.get(fid, 1.0))
+                boost = float(soar_boost_val.get(_soar_id(h), 1.0))
                 h["soar_boost"] = round(boost, 3)
                 # soar_score = similarity × boost — used for ranking only.
                 # similarity is preserved unchanged so callers see the raw
