@@ -36,3 +36,11 @@ venv/
 
 # ChromaDB local data
 *.sqlite3-journal
+
+# MemPalace per-project files (issue #185)
+castle.yaml
+entities.json
+
+# Benchmark result artifacts — not source code, not mined into palace
+benchmarks/*.json
+benchmarks/*.jsonl
