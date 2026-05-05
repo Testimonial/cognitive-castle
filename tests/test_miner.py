@@ -761,3 +761,78 @@ def test_mine_does_not_remove_other_processes_pid_file(tmp_path):
 
     assert pid_file.exists(), "Foreign PID entries must not be removed"
     assert pid_file.read_text().strip() == str(other_pid)
+
+
+# ---------------------------------------------------------------------------
+# Progress visibility tests (flush=True, dot-prefix for skipped files)
+# ---------------------------------------------------------------------------
+
+
+def test_progress_line_flushed(tmp_path, capsys):
+    """Filed files emit a '+' progress line (verifies flush=True path is hit)."""
+    from unittest.mock import patch
+
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    _make_minable_project(project_root, n_files=2)
+    palace_path = project_root / "palace"
+
+    def fake_process_file(*args, **kwargs):
+        return (3, "general")
+
+    with patch("cognitive_castle.miner.process_file", side_effect=fake_process_file):
+        mine(str(project_root), str(palace_path))
+
+    out = capsys.readouterr().out
+    # Each filed file should produce a '+' progress line
+    assert "  + [" in out, "Expected '+' progress lines for filed files"
+
+
+def test_progress_line_already_filed(tmp_path, capsys):
+    """Skipped (already-filed) files emit a dot-prefix line."""
+    from unittest.mock import patch
+
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    _make_minable_project(project_root, n_files=3)
+    palace_path = project_root / "palace"
+
+    # process_file returning (0, "general") simulates an already-filed file
+    def fake_process_file(*args, **kwargs):
+        return (0, "general")
+
+    with patch("cognitive_castle.miner.process_file", side_effect=fake_process_file):
+        mine(str(project_root), str(palace_path))
+
+    out = capsys.readouterr().out
+    assert "  . [" in out, "Expected dot-prefix lines for skipped files"
+    assert "already filed" in out, "Expected 'already filed' text in skipped lines"
+    # Ensure no '+' lines appear when everything is skipped
+    assert "  + [" not in out, "No '+' lines expected when all files are skipped"
+
+
+def test_progress_mixed_filed_and_skipped(tmp_path, capsys):
+    """A mix of filed and skipped files produces both '+' and '.' lines."""
+    from unittest.mock import patch
+
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    _make_minable_project(project_root, n_files=4)
+    palace_path = project_root / "palace"
+
+    call_count = {"n": 0}
+
+    def fake_process_file(*args, **kwargs):
+        call_count["n"] += 1
+        # Alternate: even calls return 0 (skipped), odd calls return drawers
+        if call_count["n"] % 2 == 0:
+            return (0, "general")
+        return (2, "general")
+
+    with patch("cognitive_castle.miner.process_file", side_effect=fake_process_file):
+        mine(str(project_root), str(palace_path))
+
+    out = capsys.readouterr().out
+    assert "  + [" in out, "Expected '+' lines for filed files"
+    assert "  . [" in out, "Expected '.' lines for skipped files"
+    assert "already filed" in out

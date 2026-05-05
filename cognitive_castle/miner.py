@@ -1067,21 +1067,21 @@ def _mine_impl(
 
     from .embedding import describe_device
 
-    print(f"\n{'=' * 55}")
-    print("  Cognitive Castle Mine")
-    print(f"{'=' * 55}")
-    print(f"  Wing:    {wing}")
-    print(f"  Rooms:   {', '.join(r['name'] for r in rooms)}")
-    print(f"  Files:   {len(files)}")
-    print(f"  Palace:  {palace_path}")
-    print(f"  Device:  {describe_device()}")
+    print(f"\n{'=' * 55}", flush=True)
+    print("  Cognitive Castle Mine", flush=True)
+    print(f"{'=' * 55}", flush=True)
+    print(f"  Wing:    {wing}", flush=True)
+    print(f"  Rooms:   {', '.join(r['name'] for r in rooms)}", flush=True)
+    print(f"  Files:   {len(files)}", flush=True)
+    print(f"  Palace:  {palace_path}", flush=True)
+    print(f"  Device:  {describe_device()}", flush=True)
     if dry_run:
-        print("  DRY RUN — nothing will be filed")
+        print("  DRY RUN — nothing will be filed", flush=True)
     if not respect_gitignore:
-        print("  .gitignore: DISABLED")
+        print("  .gitignore: DISABLED", flush=True)
     if include_ignored:
-        print(f"  Include: {', '.join(sorted(normalize_include_paths(include_ignored)))}")
-    print(f"{'-' * 55}\n")
+        print(f"  Include: {', '.join(sorted(normalize_include_paths(include_ignored)))}", flush=True)
+    print(f"{'-' * 55}\n", flush=True)
 
     if not dry_run:
         collection = get_collection(palace_path)
@@ -1118,11 +1118,12 @@ def _mine_impl(
             last_file = filepath.name
             if drawers == 0 and not dry_run:
                 files_skipped += 1
+                print(f"  . [{i:4}/{len(files)}] {filepath.name[:50]:50} (already filed)", flush=True)
             else:
                 total_drawers += drawers
                 room_counts[room] += 1
                 if not dry_run:
-                    print(f"  + [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}")
+                    print(f"  + [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}", flush=True)
 
         if not dry_run:
             # Cross-wing topic tunnels: after every file in this wing has been
