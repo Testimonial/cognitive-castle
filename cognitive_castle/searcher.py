@@ -9,11 +9,11 @@ weak closets (regex extraction on narrative content) can only help, never
 hide drawers the direct path would have found.
 """
 
+import json
 import logging
 import math
 import os
 import re
-import sqlite3
 from pathlib import Path
 
 from .palace import get_closets_collection, get_collection
@@ -377,7 +377,7 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
     print()
 
 
-def _bm25_only_via_sqlite(
+def _bm25_only_via_lancedb(
     query: str,
     palace_path: str,
     wing: str = None,
@@ -386,167 +386,94 @@ def _bm25_only_via_sqlite(
     max_candidates: int = 500,
     _include_internal: bool = False,
 ) -> dict:
-    """BM25-only search reading drawers directly from chroma.sqlite3.
+    """BM25-only search reading drawers directly from the LanceDB table.
 
-    Used when HNSW is diverged or unloadable (#1222). Bypasses chromadb's
-    Python client entirely so a corrupt vector segment can't segfault the
-    MCP server. Routes through chromadb's own FTS5 trigram index
-    (``embedding_fulltext_search``) for candidate selection, then re-ranks
-    with the same Okapi-BM25 used in :func:`_hybrid_rank` so the result
-    shape matches the vector path.
-
-    The query is split into ≥3-char trigram-tokens and OR-joined for the
-    FTS5 MATCH — chromadb writes the index with ``tokenize='trigram'``,
-    so single-character tokens never match. When no usable token survives
-    (e.g. "is a"), candidate selection falls back to the most-recent
-    ``max_candidates`` rows so we still return *something* rather than
-    nothing.
+    Pulls up to ``max_candidates`` rows (filtered by wing/room when
+    provided), then re-ranks with Okapi-BM25 so the result shape
+    matches the vector path.  Used by ``candidate_strategy="union"``
+    to widen the rerank pool and by the ``vector_disabled`` fallback
+    path (kept for API parity — LanceDB has no HNSW divergence mode,
+    but callers may still pass ``vector_disabled=True`` during testing).
     """
-    db_path = os.path.join(palace_path, "chroma.sqlite3")
-    if not os.path.isfile(db_path):
+    from .backends.lancedb_backend import LanceDBBackend
+
+    db_dir = os.path.join(palace_path, "lancedb")
+    if not os.path.isdir(db_dir):
         return {
             "error": "No palace found",
             "hint": "Run: mempalace init <dir> && mempalace mine <dir>",
         }
 
     try:
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except sqlite3.Error as e:
-        return {"error": f"sqlite open failed: {e}"}
-
-    try:
-        # FTS5 MATCH expects whitespace-separated tokens. Drop tokens
-        # shorter than 3 chars (trigram tokenizer can't match them).
-        tokens = [t for t in _tokenize(query) if len(t) >= 3]
-        candidate_ids: list[int] = []
-        if tokens:
-            fts_query = " OR ".join(tokens)
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT rowid
-                    FROM embedding_fulltext_search
-                    WHERE embedding_fulltext_search MATCH ?
-                    LIMIT ?
-                    """,
-                    (fts_query, max_candidates),
-                ).fetchall()
-                candidate_ids = [r[0] for r in rows]
-            except sqlite3.Error:
-                # FTS5 tokenizer mismatch or syntax error — fall through
-                # to the recency-window selector below.
-                logger.debug("FTS5 MATCH failed; using recency fallback", exc_info=True)
-
-        if not candidate_ids:
-            # No FTS hits (or no usable tokens) — pull the most recent
-            # rows for the drawers segment so we can BM25-rank something
-            # rather than return empty-handed. Wrapped in try/except
-            # because the schema may differ on legacy palaces (older
-            # chromadb without ``created_at``, missing ``segments``
-            # rows after partial restore, etc.); on schema mismatch we
-            # fall back to ordering by primary-key id and finally to an
-            # empty result rather than letting search raise.
-            try:
-                rows = conn.execute(
-                    """
-                    SELECT e.id
-                    FROM embeddings e
-                    JOIN segments s ON e.segment_id = s.id
-                    JOIN collections c ON s.collection = c.id
-                    WHERE c.name = 'castle_drawers'
-                    ORDER BY e.created_at DESC
-                    LIMIT ?
-                    """,
-                    (max_candidates,),
-                ).fetchall()
-                candidate_ids = [r[0] for r in rows]
-            except sqlite3.Error:
-                logger.debug(
-                    "recency-window query failed; trying id-ordered fallback",
-                    exc_info=True,
-                )
-                try:
-                    rows = conn.execute(
-                        """
-                        SELECT e.id
-                        FROM embeddings e
-                        JOIN segments s ON e.segment_id = s.id
-                        JOIN collections c ON s.collection = c.id
-                        WHERE c.name = 'castle_drawers'
-                        ORDER BY e.id DESC
-                        LIMIT ?
-                        """,
-                        (max_candidates,),
-                    ).fetchall()
-                    candidate_ids = [r[0] for r in rows]
-                except sqlite3.Error:
-                    logger.debug("id-ordered fallback also failed", exc_info=True)
-                    candidate_ids = []
-
-        if not candidate_ids:
+        import lancedb as _lancedb
+        db = _lancedb.connect(db_dir)
+        if "castle_drawers" not in db.table_names():
             return {
                 "query": query,
                 "filters": {"wing": wing, "room": room},
                 "total_before_filter": 0,
                 "results": [],
-                "fallback": "bm25_only_via_sqlite",
+                "fallback": "bm25_only_via_lancedb",
             }
+        tbl = db.open_table("castle_drawers")
+    except Exception as e:
+        return {"error": f"LanceDB open failed: {e}"}
 
-        placeholders = ",".join(["?"] * len(candidate_ids))
-        meta_rows = conn.execute(
-            f"""
-            SELECT id, key, string_value, int_value
-            FROM embedding_metadata
-            WHERE id IN ({placeholders})
-            """,
-            candidate_ids,
-        ).fetchall()
-    finally:
-        conn.close()
+    try:
+        conditions = []
+        if wing:
+            escaped = wing.replace("'", "''")
+            conditions.append(f"wing = '{escaped}'")
+        if room:
+            escaped = room.replace("'", "''")
+            conditions.append(f"room = '{escaped}'")
+        where_sql = " AND ".join(conditions) if conditions else None
 
-    # Group metadata rows into per-drawer dicts.
-    drawers: dict[int, dict] = {}
-    for emb_id, key, sval, ival in meta_rows:
-        d = drawers.setdefault(emb_id, {"_id": emb_id, "metadata": {}, "text": ""})
-        if key == "chroma:document":
-            d["text"] = sval or ""
-        else:
-            d["metadata"][key] = sval if sval is not None else ival
+        q = tbl.search(None)
+        if where_sql:
+            q = q.where(where_sql)
+        rows = q.limit(max_candidates).to_list()
+    except Exception as e:
+        logger.debug("LanceDB candidate fetch failed: %s", e, exc_info=True)
+        rows = []
 
-    # Apply wing/room filters in Python (FTS5 candidates may include
-    # entries from other wings).
     candidates = []
-    for d in drawers.values():
-        meta = d["metadata"]
-        if wing and meta.get("wing") != wing:
-            continue
-        if room and meta.get("room") != room:
-            continue
-        full_source = meta.get("source_file", "") or ""
+    for row in rows:
+        full_source = row.get("source_file", "") or ""
+        meta_raw = row.get("metadata_json", "{}")
+        try:
+            meta = json.loads(meta_raw) if meta_raw else {}
+        except (json.JSONDecodeError, TypeError):
+            meta = {}
+        # Merge hoisted columns back into meta so decay_score is present.
+        if row.get("decay_score") is not None:
+            meta.setdefault("decay_score", row["decay_score"])
+
         candidates.append(
             {
-                "text": d["text"],
-                "wing": meta.get("wing", "unknown"),
-                "room": meta.get("room", "unknown"),
+                "text": row.get("text", "") or "",
+                "wing": row.get("wing", "") or "unknown",
+                "room": row.get("room", "") or "unknown",
                 "source_file": Path(full_source).name if full_source else "?",
                 "created_at": meta.get("filed_at", "unknown"),
-                # No vector distance available in BM25-only mode.
                 "similarity": None,
                 "distance": None,
-                "matched_via": "bm25_sqlite",
-                # Full metadata — used by _hybrid_rank (decay_score) and SOAR.
+                "matched_via": "bm25_lancedb",
                 "metadata": meta,
-                # Internal: full path + chunk_index let callers (notably
-                # candidate_strategy="union") dedupe at chunk granularity
-                # rather than basename — two files in different directories
-                # may share a basename, and one source_file is split across
-                # multiple chunks. Stripped before this helper returns.
                 "_source_file_full": full_source,
-                "_chunk_index": meta.get("chunk_index"),
+                "_chunk_index": row.get("chunk_index"),
             }
         )
 
-    # Local BM25 over the candidate set.
+    if not candidates:
+        return {
+            "query": query,
+            "filters": {"wing": wing, "room": room},
+            "total_before_filter": 0,
+            "results": [],
+            "fallback": "bm25_only_via_lancedb",
+        }
+
     docs = [c["text"] for c in candidates]
     bm25_raw = _bm25_scores(query, docs)
     max_bm25 = max(bm25_raw) if bm25_raw else 0.0
@@ -557,9 +484,6 @@ def _bm25_only_via_sqlite(
     hits = candidates[:n_results]
     for h in hits:
         h.pop("_score", None)
-        # Strip internal fields by default so the public BM25-only fallback
-        # response stays clean. Callers that need chunk-precise dedup
-        # (notably the union-merge path) opt in via _include_internal.
         if not _include_internal:
             h.pop("_source_file_full", None)
             h.pop("_chunk_index", None)
@@ -569,9 +493,14 @@ def _bm25_only_via_sqlite(
         "filters": {"wing": wing, "room": room},
         "total_before_filter": len(candidates),
         "results": hits,
-        "fallback": "bm25_only_via_sqlite",
+        "fallback": "bm25_only_via_lancedb",
         "fallback_reason": "vector_search_disabled",
     }
+
+
+# Keep old name as alias so any external callers or tests that import
+# _bm25_only_via_sqlite directly continue to work.
+_bm25_only_via_sqlite = _bm25_only_via_lancedb
 
 
 def _merge_bm25_union_candidates(
@@ -709,10 +638,9 @@ def search_memories(
             cosine distance (hnsw:space=cosine) — 0 = identical, 2 = opposite.
             Results with distance > this value are filtered out. A value of
             0.0 disables filtering. Typical useful range: 0.3–1.0.
-        vector_disabled: When True, route to the sqlite-only BM25 fallback
-            (#1222). Set by the MCP server when the HNSW capacity probe
-            detects a divergence that would segfault chromadb on segment
-            load.
+        vector_disabled: When True, route to the BM25-only LanceDB fallback.
+            LanceDB has no HNSW divergence mode so this is only used in
+            tests or forced via the reconnect tool.
         candidate_strategy: How candidates for the hybrid re-rank are gathered.
 
             * ``"vector"`` (default) — preserves historical behavior: top
@@ -720,13 +648,11 @@ def search_memories(
               Cheap; works well when query and target docs agree in the
               embedding space.
             * ``"union"`` — also pull top ``n_results * 3`` BM25 candidates
-              from the sqlite FTS5 index and merge them into the rerank pool
+              from LanceDB and merge them into the rerank pool
               (deduped by source_file). Catches docs with strong BM25 signal
               that are vector-distant from the query (e.g. terminology guides
               looked up by narrative-shaped queries; policy clauses surfaced
-              by scenario descriptions). Adds one sqlite open + FTS5 MATCH
-              per query; perf cost is small but unmeasured at corpus scale.
-              Opt in until the cost is characterized.
+              by scenario descriptions).
 
               When ``max_distance > 0.0`` is also set, BM25-only candidates
               are skipped — they have no vector distance and would silently

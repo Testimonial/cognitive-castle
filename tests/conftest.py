@@ -27,7 +27,6 @@ os.environ["HOMEDRIVE"] = os.path.splitdrive(_session_tmp)[0] or "C:"
 os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 
 # Now it is safe to import mempalace modules that trigger initialisation.
-import chromadb  # noqa: E402
 import pytest  # noqa: E402
 
 from cognitive_castle.config import MempalaceConfig  # noqa: E402
@@ -36,22 +35,15 @@ from cognitive_castle.knowledge_graph import KnowledgeGraph  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _reset_mcp_cache():
-    """Reset the MCP server's cached ChromaDB client/collection between tests."""
+    """Reset the MCP server's cached collection between tests."""
 
     def _clear_cache():
         try:
-            from mempalace import mcp_server
+            from cognitive_castle import mcp_server
 
-            mcp_server._client_cache = None
             mcp_server._collection_cache = None
-        except (ImportError, AttributeError):
-            pass
-        try:
-            # Reset the per-process quarantine gate so tests don't leak
-            # state through ChromaBackend._quarantined_paths.
-            from cognitive_cognitive_castle.backends.chroma import ChromaBackend
-
-            ChromaBackend._quarantined_paths.clear()
+            mcp_server._metadata_cache = None
+            mcp_server._metadata_cache_time = 0
         except (ImportError, AttributeError):
             pass
 
@@ -107,12 +99,11 @@ def config(tmp_dir, palace_path):
 
 @pytest.fixture
 def collection(palace_path):
-    """A ChromaDB collection pre-seeded in the temp palace."""
-    client = chromadb.PersistentClient(path=palace_path)
-    col = client.get_or_create_collection("castle_drawers", metadata={"hnsw:space": "cosine"})
+    """A LanceDB collection pre-seeded in the temp palace."""
+    from cognitive_castle.palace import get_collection
+
+    col = get_collection(palace_path, collection_name="castle_drawers", create=True)
     yield col
-    client.delete_collection("castle_drawers")
-    del client
 
 
 @pytest.fixture
@@ -133,7 +124,7 @@ def seeded_collection(collection):
             "The React frontend uses TanStack Query for server state management. "
             "All API calls go through a centralized fetch wrapper.",
             "Sprint planning: migrate auth to passkeys by Q3. "
-            "Evaluate ChromaDB alternatives for vector search.",
+            "Evaluate LanceDB for vector search.",
         ],
         metadatas=[
             {

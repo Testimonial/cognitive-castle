@@ -15,27 +15,26 @@ import pytest
 
 def _patch_mcp_server(monkeypatch, config, kg):
     """Patch the mcp_server module globals to use test fixtures."""
-    from mempalace import mcp_server
+    from cognitive_castle import mcp_server
 
     monkeypatch.setattr(mcp_server, "_config", config)
     monkeypatch.setattr(mcp_server, "_kg", kg)
+    # Reset cached collection so it's re-opened against the patched config.
+    monkeypatch.setattr(mcp_server, "_collection_cache", None)
+    monkeypatch.setattr(mcp_server, "_metadata_cache", None)
+    monkeypatch.setattr(mcp_server, "_metadata_cache_time", 0)
 
 
 def _get_collection(palace_path, create=False):
-    """Helper to get collection from test palace.
+    """Helper to get a LanceDB collection from the test palace.
 
-    Returns (client, collection) so callers can clean up the client
-    when they are done.
+    Returns (None, collection) — the None is a compat shim so callers
+    that do ``_client, _col = _get_collection(...)`` continue to compile.
     """
-    import chromadb
+    from cognitive_castle.palace import get_collection
 
-    client = chromadb.PersistentClient(path=palace_path)
-    if create:
-        return (
-            client,
-            client.get_or_create_collection("castle_drawers", metadata={"hnsw:space": "cosine"}),
-        )
-    return client, client.get_collection("castle_drawers")
+    col = get_collection(palace_path, collection_name="castle_drawers", create=create)
+    return None, col
 
 
 # ── Protocol Layer ──────────────────────────────────────────────────────
@@ -213,18 +212,14 @@ class TestHandleRequest:
 
 class TestReadTools:
     def test_status_cold_start_no_collection(self, monkeypatch, config, palace_path, kg):
-        """Status on a valid palace with no ChromaDB collection yet (#830).
+        """Status on a valid palace directory with no drawers yet (#830).
 
-        After `mempalace init`, chroma.sqlite3 exists but the castle_drawers
-        collection has not been created (no mine or add_drawer yet).  Status
-        should return total_drawers: 0, not 'No palace found'.
+        After `mempalace init`, the palace directory exists but no mine has run.
+        Status should return total_drawers: 0, not 'No palace found'.
         """
-        import chromadb
-
         _patch_mcp_server(monkeypatch, config, kg)
-        # Create the DB file (init does this) but NOT the collection
-        client = chromadb.PersistentClient(path=palace_path)
-        del client
+        # palace_path already exists as a directory (from the fixture) — no
+        # further setup needed. LanceDB creates the table on first access.
         from cognitive_castle.mcp_server import tool_status
 
         result = tool_status()
@@ -316,11 +311,28 @@ class TestReadTools:
         assert result["taxonomy"]["project"]["frontend"] == 1
         assert result["taxonomy"]["notes"]["planning"] == 1
 
-    def test_no_palace_returns_error(self, monkeypatch, config, kg):
-        _patch_mcp_server(monkeypatch, config, kg)
-        from cognitive_castle.mcp_server import tool_status
+    def test_no_palace_returns_error(self, monkeypatch, config, kg, tmp_dir):
+        """Status should return error when the palace directory doesn't exist."""
+        import os as _os
+        from cognitive_castle.config import MempalaceConfig
+        import json
 
-        result = tool_status()
+        # Point config at a palace path that does not exist.
+        nonexistent_palace = _os.path.join(tmp_dir, "does_not_exist")
+        cfg_dir = _os.path.join(tmp_dir, "cfg_nopalace")
+        _os.makedirs(cfg_dir)
+        with open(_os.path.join(cfg_dir, "config.json"), "w") as f:
+            json.dump({"palace_path": nonexistent_palace}, f)
+        no_palace_config = MempalaceConfig(config_dir=cfg_dir)
+
+        from cognitive_castle import mcp_server as _mcp
+        monkeypatch.setattr(_mcp, "_config", no_palace_config)
+        monkeypatch.setattr(_mcp, "_kg", kg)
+        monkeypatch.setattr(_mcp, "_collection_cache", None)
+        monkeypatch.setattr(_mcp, "_metadata_cache", None)
+        monkeypatch.setattr(_mcp, "_metadata_cache_time", 0)
+
+        result = _mcp.tool_status()
         assert "error" in result
 
 
@@ -945,10 +957,15 @@ class TestDiaryTools:
 
 # ── Cache Invalidation (inode/mtime) ──────────────────────────────────
 
+_CHROMA_CACHE_SKIP = pytest.mark.skip(
+    reason="Chroma-specific inode/mtime/client-cache tests; LanceDB uses a simpler collection cache"
+)
+
 
 class TestCacheInvalidation:
-    """Tests for _get_collection inode/mtime cache invalidation logic."""
+    """Tests for _get_collection cache invalidation logic."""
 
+    @_CHROMA_CACHE_SKIP
     def test_mtime_change_invalidates_cache(self, monkeypatch, config, palace_path, kg):
         """When mtime changes, the cached collection should be replaced."""
         _patch_mcp_server(monkeypatch, config, kg)
@@ -970,6 +987,7 @@ class TestCacheInvalidation:
         col2 = mcp_server._get_collection()
         assert col2 is not None
 
+    @_CHROMA_CACHE_SKIP
     def test_inode_change_invalidates_cache(self, monkeypatch, config, palace_path, kg):
         """When inode changes (file replaced), the cached collection should be replaced."""
         _patch_mcp_server(monkeypatch, config, kg)
@@ -988,10 +1006,7 @@ class TestCacheInvalidation:
         col2 = mcp_server._get_collection()
         assert col2 is not None
 
-    @pytest.mark.skipif(
-        sys.platform == "win32",
-        reason="Windows holds chroma.sqlite3 open while the client is cached, blocking os.remove",
-    )
+    @_CHROMA_CACHE_SKIP
     def test_missing_db_invalidates_cache(self, monkeypatch, config, palace_path, kg):
         """When chroma.sqlite3 disappears, a cached collection should be invalidated."""
         _patch_mcp_server(monkeypatch, config, kg)
@@ -1036,13 +1051,14 @@ class TestCacheInvalidation:
         _patch_mcp_server(monkeypatch, config, kg)
         _client, _col = _get_collection(palace_path, create=True)
         del _client
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         result = mcp_server.tool_reconnect()
         assert result["success"] is True
         assert "Reconnected" in result["message"]
         assert isinstance(result["drawers"], int)
 
+    @_CHROMA_CACHE_SKIP
     def test_get_collection_create_true_avoids_get_or_create_on_reopen(
         self, monkeypatch, config, palace_path, kg
     ):
@@ -1088,6 +1104,7 @@ class TestCacheInvalidation:
         assert col2 is not None
         assert calls == [], f"get_or_create_collection was called: {calls}"
 
+    @_CHROMA_CACHE_SKIP
     def test_get_collection_passes_embedding_function(self, monkeypatch, config, palace_path, kg):
         """Regression for #1299.
 

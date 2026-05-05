@@ -476,7 +476,7 @@ class LanceDBBackend(BaseBackend):
         return db
 
     def get_collection(self, *args, **kwargs) -> LanceCollection:
-        from .chroma import _normalize_get_collection_args
+        from ._utils import _normalize_get_collection_args
 
         palace_ref, collection_name, create, _options = _normalize_get_collection_args(
             args, kwargs

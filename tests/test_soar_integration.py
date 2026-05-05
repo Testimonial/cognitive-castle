@@ -264,7 +264,7 @@ class TestToolSearchSoarIntegration:
         monkeypatch.setattr(mcp_server, "_config", cfg)
         monkeypatch.setattr(mcp_server, "_kg", kg)
         monkeypatch.setenv("CASTLE_PROJECT", "test-project")
-        monkeypatch.setattr(mcp_server, "_vector_disabled", False)
+        # _vector_disabled removed — LanceDB has no HNSW divergence mode
 
         # Seed using LanceDB directly (palace._DEFAULT_BACKEND is still Chroma).
         from cognitive_castle.backends.lancedb_backend import LanceDBBackend
@@ -296,7 +296,7 @@ class TestToolSearchSoarIntegration:
         yield
 
         kg.close()
-        mcp_server._client_cache    = None
+        # _client_cache removed — LanceDB backend has no separate client cache
         mcp_server._collection_cache = None
 
     def test_soar_boost_field_present(self):
@@ -369,7 +369,7 @@ class TestSoarDegradation:
         monkeypatch.setattr(mcp_server, "_config", cfg)
         monkeypatch.setattr(mcp_server, "_kg", kg)
         monkeypatch.setenv("CASTLE_PROJECT", "test-project")
-        monkeypatch.setattr(mcp_server, "_vector_disabled", False)
+        # _vector_disabled removed — LanceDB has no HNSW divergence mode
 
         from cognitive_castle.backends.lancedb_backend import LanceDBBackend
         import cognitive_castle.palace as _palace
@@ -402,5 +402,5 @@ class TestSoarDegradation:
         finally:
             _sb._load_sml = original
             kg.close()
-            mcp_server._client_cache     = None
+            # _client_cache removed — LanceDB backend has no separate client cache
             mcp_server._collection_cache = None
