@@ -4,7 +4,7 @@ llm_client.py — Minimal provider abstraction for LLM-assisted entity refinemen
 Three providers cover the useful space:
 
 - ``ollama`` (default): local models via http://localhost:11434. Works fully
-  offline. Honors MemPalace's "zero-API required" principle.
+  offline. Honors Cognitive Castle's "zero-API required" principle.
 - ``openai-compat``: any OpenAI-compatible ``/v1/chat/completions`` endpoint.
   Covers OpenRouter, LM Studio, llama.cpp server, vLLM, Groq, Fireworks,
   Together, and most self-hosted setups.
@@ -152,7 +152,7 @@ class LLMProvider:
         """Return True if this provider's endpoint will send user content
         off the local machine/network.
 
-        Used by ``mempalace init`` to decide whether to print a privacy
+        Used by ``castle init`` to decide whether to print a privacy
         warning before first use (issue #24). URL-based heuristic only —
         the endpoint determines, regardless of which provider class.
         Subclasses that resolve their endpoint dynamically should override

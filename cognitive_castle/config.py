@@ -1,5 +1,5 @@
 """
-MemPalace configuration system.
+Cognitive Castle configuration system.
 
 Priority: env vars > config file (~/.castle/config.json) > defaults
 """
@@ -147,7 +147,7 @@ DEFAULT_HALL_KEYWORDS = {
 
 
 class MempalaceConfig:
-    """Configuration manager for MemPalace.
+    """Configuration manager for Cognitive Castle.
 
     Load order: env vars > config file > defaults.
     """

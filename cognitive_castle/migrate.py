@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-mempalace migrate — Recover a palace created with a different ChromaDB version.
+castle migrate — Recover a palace created with a different ChromaDB version.
 
 Reads documents and metadata directly from the palace's SQLite database
 (bypassing ChromaDB's API, which fails on version-mismatched palaces),
 then re-imports everything into a fresh palace using the currently installed
 ChromaDB version.
 
-Since mempalace 3.2.0 (chromadb>=1.5.4), chromadb automatically migrates
+Since Cognitive Castle 3.2.0 (chromadb>=1.5.4), chromadb automatically migrates
 0.4.1+ databases on first open — no manual migration needed for upgrades.
 Use this command only when downgrading chromadb (e.g. rolling back to an
-older mempalace release) or if automatic migration fails.
+older Cognitive Castle release) or if automatic migration fails.
 
 Usage:
-    mempalace migrate                          # migrate default palace
-    mempalace migrate --palace /path/to/palace  # migrate specific palace
-    mempalace migrate --dry-run                # show what would be migrated
+    castle migrate                          # migrate default palace
+    castle migrate --palace /path/to/palace  # migrate specific palace
+    castle migrate --dry-run                # show what would be migrated
 """
 
 import errno
@@ -130,7 +130,7 @@ def detect_chromadb_version(db_path: str) -> str:
 
 
 def contains_palace_database(path: str) -> bool:
-    """Return True when path looks like a MemPalace ChromaDB directory."""
+    """Return True when path looks like a Cognitive Castle ChromaDB directory."""
     return os.path.isfile(os.path.join(path, "chroma.sqlite3"))
 
 
@@ -167,7 +167,7 @@ def migrate(palace_path: str, dry_run: bool = False, confirm: bool = False):
         return False
 
     print(f"\n{'=' * 60}")
-    print("  MemPalace Migrate")
+    print("  Cognitive Castle Migrate")
     print(f"{'=' * 60}\n")
     print(f"  Palace:    {palace_path}")
     print(f"  Database:  {db_path}")

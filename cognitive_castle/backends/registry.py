@@ -3,11 +3,11 @@
 Third-party backends ship as installable packages that declare a
 ``cognitive_castle.backends`` entry point::
 
-    # pyproject.toml of mempalace-postgres
+    # pyproject.toml of cognitive-castle-postgres
     [project.entry-points."cognitive_castle.backends"]
     postgres = "castle_postgres:PostgresBackend"
 
-MemPalace discovers them at process start. In-tree tests and local development
+Cognitive Castle discovers them at process start. In-tree tests and local development
 can register manually via :func:`register`. Explicit registration wins on
 name conflict (matches RFC 001 §3.2).
 """

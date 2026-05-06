@@ -1,13 +1,13 @@
-"""Source adapter contract for MemPalace (RFC 002).
+"""Source adapter contract for Cognitive Castle (RFC 002).
 
-Mirrors what ``mempalace/backends/base.py`` does for the write side: it defines
+Mirrors what ``cognitive_castle/backends/base.py`` does for the write side: it defines
 the read-side surface every source adapter must implement. A source adapter
 extracts content from a specific origin (filesystem, git, Slack, Cursor …) and
 yields typed records (``SourceItemMetadata`` / ``DrawerRecord``) that core
 routes into the palace.
 
-This module is spec scaffolding. The first-party miners (``mempalace/miner.py``
-and ``mempalace/convo_miner.py``) are migrated onto it in a follow-up PR;
+This module is spec scaffolding. The first-party miners (``cognitive_castle/miner.py``
+and ``cognitive_castle/convo_miner.py``) are migrated onto it in a follow-up PR;
 in this PR we publish the contract so third-party adapters can begin building
 against a stable surface.
 

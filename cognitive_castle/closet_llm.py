@@ -27,7 +27,7 @@ Set:
 
 Or pass flags on the CLI (flags win over env):
 
-    python -m mempalace.closet_llm \\
+    python -m cognitive_castle.closet_llm \\
         --palace ~/.castle/palace \\
         --endpoint http://localhost:11434/v1 \\
         --model llama3:8b

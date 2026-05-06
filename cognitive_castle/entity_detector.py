@@ -9,13 +9,13 @@ Two-pass approach:
   Pass 1: scan files, extract entity candidates with signal counts
   Pass 2: score and classify each candidate as person, project, or uncertain
 
-Used by mempalace init before mining begins.
+Used by castle init before mining begins.
 The confirmed entity map feeds the miner as the taxonomy.
 
 Multi-language support:
     All lexical patterns (person verbs, pronouns, dialogue markers, project
     verbs, stopwords, and the candidate-extraction character class) live in
-    the ``entity`` section of ``mempalace/i18n/<lang>.json``. Every public
+    the ``entity`` section of ``cognitive_castle/i18n/<lang>.json``. Every public
     function accepts a ``languages`` tuple and applies the union of the
     requested locales' patterns. The default is ``("en",)`` — existing
     English-only callers behave exactly as before.
@@ -64,7 +64,7 @@ def _get_stopwords(languages: tuple) -> frozenset:
 #
 # These mirror the old module-level constants so existing imports keep working.
 # They reflect the English defaults and are populated at import time from
-# ``mempalace/i18n/en.json``. Callers that need multi-language behavior should
+# ``cognitive_castle/i18n/en.json``. Callers that need multi-language behavior should
 # pass the ``languages`` parameter to the public functions below.
 
 _EN = get_entity_patterns(("en",))
@@ -416,8 +416,8 @@ def detect_entities(
         languages: Tuple of language codes whose entity patterns should be
             applied (union). Defaults to ``("en",)``.
         corpus_origin: Optional corpus-origin context (the dict produced
-            by ``mempalace.corpus_origin`` and persisted to
-            ``<palace>/.castle/origin.json`` by ``mempalace init``).
+            by ``cognitive_castle.corpus_origin`` and persisted to
+            ``<palace>/.castle/origin.json`` by ``castle init``).
             When supplied and the corpus is identified as AI-dialogue with
             known agent persona names, candidates whose name matches an
             agent persona are moved out of ``people``/``uncertain`` and
@@ -587,7 +587,7 @@ def confirm_entities(detected: dict, yes: bool = False) -> dict:
     Pass yes=True to auto-accept all detected entities without prompting.
     """
     print(f"\n{'=' * 58}")
-    print("  MemPalace — Entity Detection")
+    print("  Cognitive Castle — Entity Detection")
     print(f"{'=' * 58}")
     print("\n  Scanned your files. Here's what we found:\n")
 

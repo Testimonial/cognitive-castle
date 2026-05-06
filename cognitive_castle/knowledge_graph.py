@@ -1,5 +1,5 @@
 """
-knowledge_graph.py — Temporal Entity-Relationship Graph for MemPalace
+knowledge_graph.py — Temporal Entity-Relationship Graph for Cognitive Castle
 =====================================================================
 
 Real knowledge graph with:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-normalize.py — Convert any chat export format to MemPalace transcript format.
+normalize.py — Convert any chat export format to Cognitive Castle transcript format.
 
 Supported:
     - Plain text with > markers (pass through)
@@ -72,7 +72,7 @@ _NOISE_LINE_PREFIXES = (
     "Checking emotional weights...",
     "Auto-save reminder...",
     "Checking pipeline...",
-    "MemPalace auto-save checkpoint.",
+    "Cognitive Castle auto-save checkpoint.",
 )
 
 _NOISE_LINE_PATTERNS = [

@@ -15,7 +15,7 @@ Two-tier detection:
            markers. Always runs. Outputs a hypothesis.
 
   Tier 2 — detect_origin_llm(samples, provider)
-           Uses an LLMProvider (typically Haiku via mempalace.llm_client)
+           Uses an LLMProvider (typically Haiku via cognitive_castle.llm_client)
            with the model's pre-trained knowledge of Claude/ChatGPT/Gemini
            etc. Confirms platform, extracts agent persona-names the user
            has assigned. One call, ~$0.01 cost.
@@ -373,7 +373,7 @@ def _extract_json(text: str) -> Optional[dict]:
 
 def detect_origin_llm(samples: list[str], provider) -> CorpusOriginResult:
     """LLM-assisted detection. Takes samples (list of drawer-text excerpts)
-    and an LLMProvider (mempalace.llm_client.LLMProvider). Returns the
+    and an LLMProvider (cognitive_castle.llm_client.LLMProvider). Returns the
     same CorpusOriginResult shape as the heuristic.
 
     Falls back conservatively (default-stance ai=True, low confidence)

@@ -18,15 +18,15 @@ The rebuild backs up ONLY chroma.sqlite3 (the source of truth), not the
 full palace directory — so it works even when link_lists.bin is bloated.
 
 Usage (standalone):
-    python -m mempalace.repair status
-    python -m mempalace.repair scan [--wing X]
-    python -m mempalace.repair prune --confirm
-    python -m mempalace.repair rebuild
+    python -m cognitive_castle.repair status
+    python -m cognitive_castle.repair scan [--wing X]
+    python -m cognitive_castle.repair prune --confirm
+    python -m cognitive_castle.repair rebuild
 
 Usage (from CLI):
-    mempalace repair
-    mempalace repair-scan [--wing X]
-    mempalace repair-prune --confirm
+    castle repair
+    castle repair-scan [--wing X]
+    castle repair-prune --confirm
 """
 
 import argparse
@@ -351,7 +351,7 @@ def rebuild_index(palace_path=None, confirm_truncation_ok: bool = False):
         return
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair — Index Rebuild")
+    print("  Cognitive Castle Repair — Index Rebuild")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
@@ -442,7 +442,7 @@ def status(palace_path=None) -> dict:
     Catches the #1222 failure mode where chromadb's HNSW segment freezes
     at a stale ``max_elements`` while sqlite keeps accumulating rows.
     Once the divergence is large enough, every tool call segfaults when
-    chromadb tries to load the undersized HNSW. Running ``mempalace
+    chromadb tries to load the undersized HNSW. Running ``castle
     repair-status`` *before* opening the segment lets the operator
     discover the problem without crashing the MCP server.
 
@@ -455,7 +455,7 @@ def status(palace_path=None) -> dict:
     """
     palace_path = palace_path or _get_palace_path()
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair — Status")
+    print("  Cognitive Castle Repair — Status")
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
@@ -484,7 +484,7 @@ def status(palace_path=None) -> dict:
             print(f"    note:           {info['message']}")
 
     if drawers["diverged"] or closets["diverged"]:
-        print("\n  Recommended: run `mempalace repair` to rebuild the index.")
+        print("\n  Recommended: run `castle repair` to rebuild the index.")
     print()
     return {"drawers": drawers, "closets": closets}
 
@@ -643,7 +643,7 @@ def repair_max_seq_id(
     }
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Repair — max_seq_id Un-poison")
+    print("  Cognitive Castle Repair — max_seq_id Un-poison")
     print(f"{'=' * 55}\n")
     print(f"  Palace:  {palace_path}")
     if segment:
@@ -746,7 +746,7 @@ def repair_max_seq_id(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="MemPalace repair tools")
+    p = argparse.ArgumentParser(description="Cognitive Castle repair tools")
     p.add_argument("command", choices=["status", "scan", "prune", "rebuild"])
     p.add_argument("--palace", default=None, help="Palace directory path")
     p.add_argument("--wing", default=None, help="Scan only this wing")

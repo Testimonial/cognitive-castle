@@ -1,20 +1,20 @@
 """Source adapter registry + entry-point discovery (RFC 002 §3).
 
 Third-party adapters ship as installable packages that declare a
-``mempalace.sources`` entry point::
+``cognitive_castle.sources`` entry point::
 
-    # pyproject.toml of mempalace-source-cursor
-    [project.entry-points."mempalace.sources"]
+    # pyproject.toml of cognitive-castle-source-cursor
+    [project.entry-points."cognitive_castle.sources"]
     cursor = "castle_source_cursor:CursorAdapter"
 
-MemPalace discovers them at process start. In-tree tests and local
+Cognitive Castle discovers them at process start. In-tree tests and local
 development can register manually via :func:`register`. Explicit
 registration wins on name conflict (RFC 002 §3.2).
 
 Unlike storage backends (RFC 001 §3.3), source adapters are never auto-
 detected — the user selects the adapter explicitly via ``--source NAME``
 or config (§3.3). The default when no adapter is named is ``filesystem``
-(to preserve current ``mempalace mine <path>`` behavior).
+(to preserve current ``castle mine <path>`` behavior).
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from .base import BaseSourceAdapter
 
 logger = logging.getLogger(__name__)
 
-_ENTRY_POINT_GROUP = "mempalace.sources"
+_ENTRY_POINT_GROUP = "cognitive_castle.sources"
 _DEFAULT_ADAPTER = "filesystem"
 
 _registry: dict[str, Type[BaseSourceAdapter]] = {}

@@ -1,4 +1,4 @@
-"""MemPalace — Give your AI a memory. No API key required."""
+"""Cognitive Castle — Give your AI a memory. No API key required."""
 
 import logging
 

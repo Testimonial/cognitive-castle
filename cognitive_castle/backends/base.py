@@ -1,4 +1,4 @@
-"""Storage backend contract for MemPalace (RFC 001).
+"""Storage backend contract for Cognitive Castle (RFC 001).
 
 This module defines the surface every storage backend must implement:
 

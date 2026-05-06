@@ -10,16 +10,16 @@ version, and deletes the rest.
 No API calls — uses ChromaDB's built-in embedding similarity.
 
 Usage (standalone):
-    python -m mempalace.dedup                          # dedup all
-    python -m mempalace.dedup --dry-run                # preview only
-    python -m mempalace.dedup --threshold 0.10         # stricter (near-identical only)
-    python -m mempalace.dedup --threshold 0.35         # looser (catches paraphrased content)
-    python -m mempalace.dedup --wing my_project        # scope to one wing
-    python -m mempalace.dedup --stats                  # stats only
-    python -m mempalace.dedup --source "my_project"    # filter by source
+    python -m cognitive_castle.dedup                          # dedup all
+    python -m cognitive_castle.dedup --dry-run                # preview only
+    python -m cognitive_castle.dedup --threshold 0.10         # stricter (near-identical only)
+    python -m cognitive_castle.dedup --threshold 0.35         # looser (catches paraphrased content)
+    python -m cognitive_castle.dedup --wing my_project        # scope to one wing
+    python -m cognitive_castle.dedup --stats                  # stats only
+    python -m cognitive_castle.dedup --source "my_project"    # filter by source
 
 Usage (from CLI):
-    mempalace dedup [--dry-run] [--threshold 0.15] [--stats]
+    castle dedup [--dry-run] [--threshold 0.15] [--stats]
 """
 
 import argparse
@@ -159,7 +159,7 @@ def dedup_palace(
     palace_path = palace_path or _get_palace_path()
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Deduplicator")
+    print("  Cognitive Castle Deduplicator")
     print(f"{'=' * 55}")
 
     col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)

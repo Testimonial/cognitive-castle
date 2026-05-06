@@ -1,4 +1,4 @@
-"""Storage backend implementations for MemPalace (RFC 001).
+"""Storage backend implementations for Cognitive Castle (RFC 001).
 
 Public surface:
 

@@ -21,7 +21,7 @@ Usage:
     issues = check_text("Bob is Alice's brother", palace_path)
 
     # CLI
-    python -m mempalace.fact_checker "Bob is Alice's brother" \\
+    python -m cognitive_castle.fact_checker "Bob is Alice's brother" \\
         --palace ~/.castle/palace
 """
 
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     import sys
 
     parser = argparse.ArgumentParser(
-        description="Check text against known facts in the MemPalace palace.",
+        description="Check text against known facts in the Cognitive Castle palace.",
         epilog="Exits 0 when no issues found, 1 when one or more issues detected.",
     )
     parser.add_argument("text", nargs="?", help="Text to check (or use --stdin).")

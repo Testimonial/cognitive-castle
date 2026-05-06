@@ -1,4 +1,4 @@
-"""LanceDB storage backend for MemPalace (replaces ChromaDB).
+"""LanceDB storage backend for Cognitive Castle (replaces ChromaDB).
 
 Storage layout per palace directory:
   <palace_path>/lancedb/                  — LanceDB database root
@@ -226,7 +226,7 @@ def _row_to_metadata(row: dict) -> dict:
 
 
 class LanceCollection(BaseCollection):
-    """LanceDB-backed MemPalace collection."""
+    """LanceDB-backed Cognitive Castle collection."""
 
     def __init__(self, table):
         self._table = table
@@ -434,7 +434,7 @@ class LanceCollection(BaseCollection):
 
 
 class LanceDBBackend(BaseBackend):
-    """LanceDB-backed MemPalace storage backend.
+    """LanceDB-backed Cognitive Castle storage backend.
 
     Stores each palace under ``<palace_path>/lancedb/``. One LanceDB
     database per palace, one table per collection name.

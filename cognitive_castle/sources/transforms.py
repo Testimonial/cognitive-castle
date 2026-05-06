@@ -17,7 +17,7 @@ end-to-end (modulo the initial UTF-8 decode itself, which is captured by
 Adapters MAY add custom transformations beyond the reserved set; third-party
 names SHOULD be prefixed with the adapter name (``cursor.composer_ordering``).
 Custom transformations MUST expose a reference implementation under
-``mempalace.sources.transforms.<adapter_name>_<transform_name>`` so the
+``cognitive_castle.sources.transforms.<adapter_name>_<transform_name>`` so the
 conformance suite can locate and apply them.
 """
 
@@ -106,7 +106,7 @@ def blank_line_drop(text: str) -> str:
 # adapter-specific implementation is available. Adapters that declare these
 # MUST either override with a concrete implementation or provide a namespaced
 # reference under
-# ``mempalace.sources.transforms.<adapter_name>_<transform_name>`` (per the
+# ``cognitive_castle.sources.transforms.<adapter_name>_<transform_name>`` (per the
 # module docstring). The conformance suite looks up the adapter-specific
 # implementation first, falling back to these identity shims only when none
 # exists.
@@ -119,7 +119,7 @@ def strip_tool_chrome(text: str) -> str:
     because the noise patterns differ per transcript format (Claude Code,
     Codex, ChatGPT, Slack). The conversations adapter, when migrated, will
     register a concrete reference implementation under
-    ``mempalace.sources.transforms.conversations_strip_tool_chrome``.
+    ``cognitive_castle.sources.transforms.conversations_strip_tool_chrome``.
     """
     return text
 

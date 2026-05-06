@@ -26,7 +26,7 @@ class _CollectionLike(Protocol):
 
     Declared as a Protocol so tests and third-party adapters can substitute
     any object with compatible method signatures without importing the
-    concrete backend. See ``mempalace/backends/base.py`` for the full surface.
+    concrete backend. See ``cognitive_castle/backends/base.py`` for the full surface.
     """
 
     def add(self, **kwargs: Any) -> None: ...

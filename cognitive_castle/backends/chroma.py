@@ -1,4 +1,4 @@
-"""ChromaDB-backed MemPalace storage backend (RFC 001 reference implementation)."""
+"""ChromaDB-backed Cognitive Castle storage backend (RFC 001 reference implementation)."""
 
 import datetime as _dt
 import logging
@@ -153,7 +153,7 @@ def quarantine_stale_hnsw(palace_path: str, stale_seconds: float = 300.0) -> lis
        palace with vector_ranked=0 until rebuild. Renaming a healthy
        segment based on mtime alone destroys a valid index — chromadb
        creates an empty replacement, orphaning every drawer in sqlite
-       from vector recall until the operator runs ``mempalace repair
+       from vector recall until the operator runs ``castle repair
        --mode rebuild`` (15+ min on a 151K palace).
 
     Only segments that pass stage 1 (suspiciously stale) AND fail stage
@@ -408,7 +408,7 @@ def _read_sync_threshold(palace_path: str, collection_name: str) -> int:
     not mistaken for corruption.
 
     Falls back to 1000 (chromadb's own default) if the collection has no
-    explicit setting — matches what older mempalace palaces were created
+    explicit setting — matches what older Cognitive Castle palaces were created
     with before PR #1191.
     """
     db_path = os.path.join(palace_path, "chroma.sqlite3")
@@ -501,7 +501,7 @@ def hnsw_capacity_status(palace_path: str, collection_name: str = "castle_drawer
                 out["message"] = (
                     f"sqlite holds {sqlite_count:,} embeddings but the HNSW segment "
                     "has never flushed metadata — vector search will return nothing "
-                    "until the segment is rebuilt. Run `mempalace repair`."
+                    "until the segment is rebuilt. Run `castle repair`."
                 )
             else:
                 out["message"] = "HNSW segment metadata not yet flushed; skipping"
@@ -517,7 +517,7 @@ def hnsw_capacity_status(palace_path: str, collection_name: str = "castle_drawer
             out["message"] = (
                 f"HNSW index holds {hnsw_count:,} elements but sqlite has "
                 f"{sqlite_count:,} embeddings — {divergence:,} drawers ({pct:.0f}%) "
-                "are invisible to vector search. Run `mempalace repair` to rebuild."
+                "are invisible to vector search. Run `castle repair` to rebuild."
             )
         else:
             out["status"] = "ok"
@@ -533,7 +533,7 @@ def hnsw_capacity_status(palace_path: str, collection_name: str = "castle_drawer
 def _sqlite_embedding_count(palace_path: str, collection_name: str) -> Optional[int]:
     """Count rows in chroma.sqlite3.embeddings for ``collection_name``.
 
-    Mirrors :func:`mempalace.repair.sqlite_drawer_count` but kept in this
+    Mirrors :func:`cognitive_castle.repair.sqlite_drawer_count` but kept in this
     module so the backend probe doesn't pull in the repair CLI module.
     """
     db_path = os.path.join(palace_path, "chroma.sqlite3")
@@ -607,7 +607,7 @@ def _fix_blob_seq_ids(palace_path: str) -> None:
     segment (``embeddings_queue`` filters on ``seq_id > start``). chromadb
     owns the ``max_seq_id`` column — we leave it alone. Palaces already
     poisoned by the old behaviour can be repaired via
-    ``mempalace repair --mode max-seq-id``.
+    ``castle repair --mode max-seq-id``.
 
     Defense-in-depth: rows with the sysdb-10 ``b'\\x11\\x11'`` prefix in
     ``embeddings`` are skipped rather than converted. Real 0.6.x BLOBs are
@@ -887,7 +887,7 @@ class ChromaCollection(BaseCollection):
 
 
 class ChromaBackend(BaseBackend):
-    """MemPalace's default ChromaDB backend.
+    """Cognitive Castle's default ChromaDB backend.
 
     Maintains two caches:
 

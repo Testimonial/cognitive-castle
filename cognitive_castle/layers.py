@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-layers.py — 4-Layer Memory Stack for mempalace
+layers.py — 4-Layer Memory Stack for Cognitive Castle
 ===================================================
 
 Load only what you need, when you need it.
@@ -94,7 +94,7 @@ class Layer1:
         try:
             col = _get_collection(self.palace_path, create=False)
         except Exception:
-            return "## L1 — No palace found. Run: mempalace mine <dir>"
+            return "## L1 — No palace found. Run: castle mine <dir>"
 
         # Fetch all drawers in batches to avoid SQLite variable limit (~999)
         _BATCH = 500

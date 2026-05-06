@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-entity_registry.py — Persistent personal entity registry for MemPalace.
+entity_registry.py — Persistent personal entity registry for Cognitive Castle.
 
 Knows the difference between Riley (a person) and ever (an adverb).
 Built from three sources, in priority order:
@@ -187,7 +187,7 @@ def _wikipedia_lookup(word: str) -> dict:
     """
     try:
         url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{urllib.parse.quote(word)}"
-        req = urllib.request.Request(url, headers={"User-Agent": "MemPalace/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "CognitiveCastle/1.0"})
         with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read())
 
@@ -287,7 +287,7 @@ class EntityRegistry:
           "confidence": 1.0
         }
       },
-      "projects": ["MemPalace", "Acme"],
+      "projects": ["Cognitive Castle", "Acme"],
       "ambiguous_flags": ["riley", "max"],
       "wiki_cache": {
         "Sam": {"inferred_type": "person", "confidence": 0.9, "confirmed": true, ...}
@@ -590,7 +590,7 @@ class EntityRegistry:
 
         ``languages`` is forwarded to entity detection — pass the user's
         configured ``MempalaceConfig().entity_languages`` to match the
-        locales used at ``mempalace init`` time.
+        locales used at ``castle init`` time.
         """
         from cognitive_castle.entity_detector import extract_candidates, score_entity, classify_entity
 

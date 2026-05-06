@@ -1,4 +1,4 @@
-"""i18n — Language dictionaries for MemPalace.
+"""i18n — Language dictionaries for Cognitive Castle.
 
 Usage:
     from cognitive_castle.i18n import load_lang, t
@@ -9,7 +9,7 @@ Usage:
     print(t("aaak.instruction"))  # AAAK compression instruction in French
 
 Each locale JSON may include an ``entity`` section with patterns used by
-``mempalace.entity_detector``. See ``get_entity_patterns`` for the merge rules
+``cognitive_castle.entity_detector``. See ``get_entity_patterns`` for the merge rules
 and the README section "Adding a new language" for the schema.
 """
 
@@ -199,7 +199,7 @@ def get_entity_patterns(languages=("en",)) -> dict:
 
     Entity detection patterns live under each locale's ``entity`` section.
     This function merges them into a single dict for consumption by
-    ``mempalace.entity_detector``.
+    ``cognitive_castle.entity_detector``.
 
     Merge rules:
       - List fields (person_verb_patterns, pronoun_patterns, dialogue_patterns,
