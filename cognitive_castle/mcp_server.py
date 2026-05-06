@@ -1789,10 +1789,6 @@ def _restore_stdout():
 def main():
     _restore_stdout()
     logger.info("Cognitive Castle MCP Server starting...")
-    # Pre-flight: probe HNSW capacity before any tool call so the warning
-    # is visible at startup rather than on first use (#1222). Pure
-    # filesystem read; never opens a chromadb client.
-    _refresh_vector_disabled_flag()
     while True:
         try:
             line = sys.stdin.readline()
