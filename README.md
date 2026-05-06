@@ -1,23 +1,12 @@
-> [!CAUTION]
-> **Scam alert.** The only official sources for MemPalace are this
-> [GitHub repository](https://github.com/MemPalace/mempalace), the
-> [PyPI package](https://pypi.org/project/mempalace/), and the docs site at
-> **[mempalaceofficial.com](https://mempalaceofficial.com)**. Any other
-> domain — including `mempalace.tech` — is an impostor and may distribute
-> malware. Details and timeline: [docs/HISTORY.md](docs/HISTORY.md).
-
 <div align="center">
 
-<img src="assets/mempalace_logo.png" alt="MemPalace" width="240">
+# Cognitive Castle
 
-# MemPalace
-
-Local-first AI memory. Verbatim storage, pluggable backend, 96.6% R@5 raw on LongMemEval — zero API calls.
+**Local-first persistent memory for AI agents.** Verbatim storage, pluggable vector backend, 96.6% R@5 raw on LongMemEval — zero API calls.
 
 [![][version-shield]][release-link]
 [![][python-shield]][python-link]
 [![][license-shield]][license-link]
-[![][discord-shield]][discord-link]
 
 </div>
 
@@ -25,76 +14,117 @@ Local-first AI memory. Verbatim storage, pluggable backend, 96.6% R@5 raw on Lon
 
 ## What it is
 
-MemPalace stores your conversation history as verbatim text and retrieves
-it with semantic search. It does not summarize, extract, or paraphrase.
-The index is structured — people and projects become *wings*, topics
-become *rooms*, and original content lives in *drawers* — so searches
-can be scoped rather than run against a flat corpus.
+Cognitive Castle stores conversation history and project context as
+verbatim text and retrieves it with semantic search. It does not
+summarise, extract, or paraphrase. The index is structured — people and
+projects become *wings*, topics become *rooms*, and original content
+lives in *drawers* — so searches can be scoped instead of running
+against a flat corpus.
 
-The retrieval layer is pluggable. The current default is ChromaDB; the
-interface is defined in [`mempalace/backends/base.py`](mempalace/backends/base.py)
+The retrieval layer is pluggable. The default is **LanceDB**; the
+backend interface is in
+[`cognitive_castle/backends/base.py`](cognitive_castle/backends/base.py)
 and alternative backends can be dropped in without touching the rest of
 the system.
 
 Nothing leaves your machine unless you opt in.
-
-Architecture, concepts, and mining flows:
-[mempalaceofficial.com/concepts/the-palace](https://mempalaceofficial.com/concepts/the-palace.html).
 
 ---
 
 ## Install
 
 ```bash
-pip install mempalace
-mempalace init ~/projects/myapp
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
+pip install -e .
+```
+
+Verify:
+
+```bash
+castle --version
+# Cognitive Castle 3.3.3
 ```
 
 ## Quickstart
 
 ```bash
-# Mine content into the palace
-mempalace mine ~/projects/myapp                    # project files
-mempalace mine ~/.claude/projects/ --mode convos   # Claude Code sessions (scope with --wing per project)
+# 1. Detect rooms from your folder structure (and mine if you pass --yes)
+castle init ~/projects/myapp --yes
 
-# Search
-mempalace search "why did we switch to GraphQL"
+# 2. Mine more content into the palace later
+castle mine ~/projects/myapp                      # project files
+castle mine ~/.claude/projects/ --mode convos     # Claude Code sessions
 
-# Load context for a new session
-mempalace wake-up
+# 3. Search
+castle search "why did we switch to GraphQL"
+castle search "auth flow" --wing myapp --room backend
+
+# 4. Load wake-up context for a fresh AI session
+castle wake-up
+castle wake-up --wing myapp                       # project-scoped
+
+# 5. Inspect the palace
+castle status
 ```
 
-For Claude Code, Gemini CLI, MCP-compatible tools, and local models, see
-[mempalaceofficial.com/guide/getting-started](https://mempalaceofficial.com/guide/getting-started.html).
+## Connect to Claude Code (or any MCP client)
+
+Cognitive Castle ships an MCP server with **29 tools** for palace
+reads/writes, knowledge-graph queries, cross-wing navigation, drawer
+management, and agent diaries.
+
+```bash
+claude mcp add castle -- castle-mcp
+```
+
+Restart your AI client and the `castle_*` tools become available
+mid-conversation.
+
+---
+
+## CLI overview
+
+| Command | Purpose |
+|---|---|
+| `castle init <dir>` | Detect rooms from folder structure; with `--yes`, also mines |
+| `castle mine <dir>` | Mine project files (default mode) |
+| `castle mine <dir> --mode convos` | Mine conversation exports (Claude Code, Claude.ai, ChatGPT, Slack) |
+| `castle search "query"` | Semantic search; filter with `--wing`, `--room` |
+| `castle wake-up` | L0 + L1 wake-up context (~600–900 tokens) |
+| `castle status` | Drawer counts per wing/room |
+| `castle mcp` | Print the MCP setup command |
+| `castle repair --clean-locks` | Remove stale lock files (>24 h) |
+| `castle repair-status` | Read-only health check |
+
+Full help: `castle --help`, `castle <command> --help`.
 
 ---
 
 ## Benchmarks
 
-All numbers below are reproducible from this repository with the commands
-in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md). Full
-per-question result files are committed under `benchmarks/results_*`.
+Numbers are reproducible from this repository with the commands in
+[`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md). Per-question
+result files are committed under `benchmarks/results_*`.
 
 **LongMemEval — retrieval recall (R@5, 500 questions):**
 
 | Mode | R@5 | LLM required |
 |---|---|---|
 | Raw (semantic search, no heuristics, no LLM) | **96.6%** | None |
-| Hybrid v4, held-out 450q (tuned on 50 dev, not seen during training) | **98.4%** | None |
+| Hybrid v4, held-out 450q (tuned on 50 dev) | **98.4%** | None |
 | Hybrid v4 + LLM rerank (full 500) | ≥99% | Any capable model |
 
-The raw 96.6% requires no API key, no cloud, and no LLM at any stage. The
-hybrid pipeline adds keyword boosting, temporal-proximity boosting, and
-preference-pattern extraction; the held-out 98.4% is the honest
+The raw 96.6% requires no API key, no cloud, and no LLM at any stage.
+The hybrid pipeline adds keyword boosting, temporal-proximity boosting,
+and preference-pattern extraction; the held-out 98.4% is the honest
 generalisable figure.
 
 The rerank pipeline promotes the best candidate out of the top-20
 retrieved sessions using an LLM reader. It works with any reasonably
-capable model — we have reproduced it with Claude Haiku, Claude Sonnet,
-and minimax-m2.7 via Ollama Cloud (no Anthropic dependency). The gap
-between raw and reranked is model-agnostic; we do not headline a "100%"
-number because the last 0.6% was reached by inspecting specific wrong
-answers, which `benchmarks/BENCHMARKS.md` flags as teaching to the test.
+capable model. We do not headline a "100%" number because the last 0.6%
+was reached by inspecting specific wrong answers, which
+`benchmarks/BENCHMARKS.md` flags as teaching to the test.
 
 **Other benchmarks (full results in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md)):**
 
@@ -105,17 +135,11 @@ answers, which `benchmarks/BENCHMARKS.md` flags as teaching to the test.
 | ConvoMem (all categories, 250 items) | Avg recall | 92.9% | 50 per category |
 | MemBench (ACL 2025, 8,500 items) | R@5 | 80.3% | All categories |
 
-We deliberately do not include a side-by-side comparison against Mem0,
-Mastra, Hindsight, Supermemory, or Zep. Those projects publish different
-metrics on different splits, and placing retrieval recall next to
-end-to-end QA accuracy is not an honest comparison. See each project's
-own research page for their published numbers.
-
 **Reproducing every result:**
 
 ```bash
-git clone https://github.com/MemPalace/mempalace.git
-cd mempalace
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
 pip install -e ".[dev]"
 # see benchmarks/README.md for dataset download commands
 python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json
@@ -123,69 +147,62 @@ python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json
 
 ---
 
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  CLI  /  MCP server  (castle, castle-mcp — 29 tools)        │
+├─────────────────────────────────────────────────────────────┤
+│  Miner   Searcher   Knowledge Graph   Diary   Hooks         │
+├─────────────────────────────────────────────────────────────┤
+│  Backend interface  (cognitive_castle/backends/base.py)     │
+├─────────────────────────────────────────────────────────────┤
+│  LanceDB (default)  │  ChromaDB (legacy)  │  Your backend   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+- **Wings** — top-level groupings (projects, agents, conversations)
+- **Rooms** — topical or structural subdivisions auto-detected from folder layout
+- **Drawers** — verbatim content chunks; each one is searchable independently
+- **Tunnels** — typed cross-references between drawers (graph edges)
+- **Diaries** — per-agent append-only logs
+
 ## Knowledge graph
 
-MemPalace includes a temporal entity-relationship graph with validity
-windows — add, query, invalidate, timeline — backed by local SQLite.
-Usage and tool reference:
-[mempalaceofficial.com/concepts/knowledge-graph](https://mempalaceofficial.com/concepts/knowledge-graph.html).
-
-## MCP server
-
-29 MCP tools cover palace reads/writes, knowledge-graph operations,
-cross-wing navigation, drawer management, and agent diaries. Installation
-and the full tool list:
-[mempalaceofficial.com/reference/mcp-tools](https://mempalaceofficial.com/reference/mcp-tools.html).
-
-## Agents
-
-Each specialist agent gets its own wing and diary in the palace.
-Discoverable at runtime via `mempalace_list_agents` — no bloat in your
-system prompt:
-[mempalaceofficial.com/concepts/agents](https://mempalaceofficial.com/concepts/agents.html).
+A temporal entity-relationship graph with validity windows: add, query,
+invalidate, timeline. Backed by local SQLite — no extra service to run.
 
 ## Auto-save hooks
 
-Two Claude Code hooks save periodically and before context compression:
-[mempalaceofficial.com/guide/hooks](https://mempalaceofficial.com/guide/hooks.html).
-
-For per-message recall on top of the file-level chunks the hooks produce,
-run `mempalace sweep <transcript-dir>` periodically — it stores one
-verbatim drawer per user/assistant message, idempotent and resume-safe.
+Two Claude Code hooks save context periodically and before compaction;
+`castle sweep <transcript-dir>` provides per-message recall on top of the
+file-level chunks the hooks produce — idempotent and resume-safe.
 
 ---
 
 ## Requirements
 
 - Python 3.9+
-- A vector-store backend (ChromaDB by default)
-- ~300 MB disk for the default embedding model
+- LanceDB (installed automatically)
+- ~300 MB disk for the default embedding model (`all-MiniLM-L6-v2`)
 
-No API key is required for the core benchmark path.
-
-## Docs
-
-- Getting started → [mempalaceofficial.com/guide/getting-started](https://mempalaceofficial.com/guide/getting-started.html)
-- CLI reference → [mempalaceofficial.com/reference/cli](https://mempalaceofficial.com/reference/cli.html)
-- Python API → [mempalaceofficial.com/reference/python-api](https://mempalaceofficial.com/reference/python-api.html)
-- Full benchmark methodology → [benchmarks/BENCHMARKS.md](benchmarks/BENCHMARKS.md)
-- Release notes → [CHANGELOG.md](CHANGELOG.md)
-- Corrections and public notices → [docs/HISTORY.md](docs/HISTORY.md)
-
-## Contributing
-
-PRs welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
+No API key is required for the core path.
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
 
+## Acknowledgements
+
+Cognitive Castle is a fork and continuation of the MemPalace project,
+re-architected around LanceDB and the SOAR cognitive-architecture
+heuristics. Original benchmark methodology and "wings/rooms/drawers"
+naming preserved with credit to the upstream authors.
+
 <!-- Link Definitions -->
 [version-shield]: https://img.shields.io/badge/version-3.3.3-4dc9f6?style=flat-square&labelColor=0a0e14
-[release-link]: https://github.com/MemPalace/mempalace/releases
+[release-link]: https://github.com/Testimonial/cognitive-castle/releases
 [python-shield]: https://img.shields.io/badge/python-3.9+-7dd8f8?style=flat-square&labelColor=0a0e14&logo=python&logoColor=7dd8f8
 [python-link]: https://www.python.org/
 [license-shield]: https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14
-[license-link]: https://github.com/MemPalace/mempalace/blob/main/LICENSE
-[discord-shield]: https://img.shields.io/badge/discord-join-5865F2?style=flat-square&labelColor=0a0e14&logo=discord&logoColor=5865F2
-[discord-link]: https://discord.com/invite/ycTQQCu6kn
+[license-link]: https://github.com/Testimonial/cognitive-castle/blob/main/LICENSE
