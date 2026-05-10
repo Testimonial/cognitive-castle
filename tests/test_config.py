@@ -212,3 +212,26 @@ def test_kg_value_rejects_null_bytes():
 def test_kg_value_rejects_over_length():
     with pytest.raises(ValueError):
         sanitize_kg_value("a" * 129)
+
+
+def test_config_has_retrieval_upgrade_keys():
+    cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+    # Embedder defaults preserve current behavior at this point.
+    assert cfg.embedder_model == "all-MiniLM-L6-v2"
+    assert cfg.embedder_dim == 384
+    # Reranker config exists with sane defaults.
+    assert cfg.reranker_model_gpu == "BAAI/bge-reranker-v2-m3"
+    assert cfg.reranker_model_cpu == "BAAI/bge-reranker-base"
+    assert cfg.reranker_k_interactive == 20
+    assert cfg.reranker_k_hook == 10
+    # Fusion + recency.
+    assert cfg.k_rrf == 60
+    assert cfg.weight_dense == 1.0
+    assert cfg.weight_sparse == 1.0
+    assert cfg.weight_kg == 0.5
+    assert cfg.recency_tau_days == 90.0
+    assert cfg.recency_max_boost == 1.5
+    # KG-hop.
+    assert cfg.kg_hop_top_n == 50
+    # New pipeline flag.
+    assert cfg.use_new_retrieval_pipeline is False

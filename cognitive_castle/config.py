@@ -299,6 +299,260 @@ class MempalaceConfig:
         """Whether the stop hook shows a desktop notification via notify-send."""
         return self._file_config.get("hooks", {}).get("desktop_toast", False)
 
+    # ── Retrieval upgrade config ──────────────────────────────────────────
+
+    @property
+    def embedder_model(self):
+        """Name of the embedder model to use.
+
+        Default: ``"all-MiniLM-L6-v2"`` (384-dimensional, fast, widely supported).
+        Reads from ``CASTLE_EMBEDDER_MODEL`` env var first, then config file,
+        then the default.
+        """
+        env_val = os.environ.get("CASTLE_EMBEDDER_MODEL")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("embedder_model", "all-MiniLM-L6-v2")).strip()
+
+    @property
+    def embedder_dim(self):
+        """Dimensionality of the embedder model's output vectors.
+
+        Default: ``384`` (for all-MiniLM-L6-v2). Reads from
+        ``CASTLE_EMBEDDER_DIM`` env var first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_EMBEDDER_DIM")
+        if env_val:
+            try:
+                return int(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("embedder_dim")
+        try:
+            return int(cfg_val) if cfg_val is not None else 384
+        except (TypeError, ValueError):
+            return 384
+
+    @property
+    def reranker_model_gpu(self):
+        """Cross-encoder reranker model for GPU environments.
+
+        Default: ``"BAAI/bge-reranker-v2-m3"``. Reads from
+        ``CASTLE_RERANKER_MODEL_GPU`` env var first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RERANKER_MODEL_GPU")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("reranker_model_gpu", "BAAI/bge-reranker-v2-m3")).strip()
+
+    @property
+    def reranker_model_cpu(self):
+        """Cross-encoder reranker model for CPU environments.
+
+        Default: ``"BAAI/bge-reranker-base"``. Reads from
+        ``CASTLE_RERANKER_MODEL_CPU`` env var first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RERANKER_MODEL_CPU")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("reranker_model_cpu", "BAAI/bge-reranker-base")).strip()
+
+    @property
+    def reranker_k_interactive(self):
+        """Number of results to rerank in interactive search mode.
+
+        Default: ``20``. Reads from ``CASTLE_RERANKER_K_INTERACTIVE`` env var
+        first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RERANKER_K_INTERACTIVE")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("reranker_k_interactive")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 20
+        except (TypeError, ValueError):
+            parsed = 20
+        return max(1, parsed)
+
+    @property
+    def reranker_k_hook(self):
+        """Number of results to rerank in background hook mode.
+
+        Default: ``10``. Reads from ``CASTLE_RERANKER_K_HOOK`` env var
+        first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RERANKER_K_HOOK")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("reranker_k_hook")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 10
+        except (TypeError, ValueError):
+            parsed = 10
+        return max(1, parsed)
+
+    @property
+    def k_rrf(self):
+        """Number of results to fuse in Reciprocal Rank Fusion.
+
+        Default: ``60``. Reads from ``CASTLE_K_RRF`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_K_RRF")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("k_rrf")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 60
+        except (TypeError, ValueError):
+            parsed = 60
+        return max(1, parsed)
+
+    @property
+    def weight_dense(self):
+        """Weight for dense (vector) search in fusion.
+
+        Default: ``1.0``. Reads from ``CASTLE_WEIGHT_DENSE`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_WEIGHT_DENSE")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("weight_dense")
+        try:
+            return float(cfg_val) if cfg_val is not None else 1.0
+        except (TypeError, ValueError):
+            return 1.0
+
+    @property
+    def weight_sparse(self):
+        """Weight for sparse (BM25) search in fusion.
+
+        Default: ``1.0``. Reads from ``CASTLE_WEIGHT_SPARSE`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_WEIGHT_SPARSE")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("weight_sparse")
+        try:
+            return float(cfg_val) if cfg_val is not None else 1.0
+        except (TypeError, ValueError):
+            return 1.0
+
+    @property
+    def weight_kg(self):
+        """Weight for knowledge-graph search in fusion.
+
+        Default: ``0.5``. Reads from ``CASTLE_WEIGHT_KG`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_WEIGHT_KG")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("weight_kg")
+        try:
+            return float(cfg_val) if cfg_val is not None else 0.5
+        except (TypeError, ValueError):
+            return 0.5
+
+    @property
+    def recency_tau_days(self):
+        """Time constant (in days) for recency boost decay.
+
+        Default: ``90.0``. Reads from ``CASTLE_RECENCY_TAU_DAYS`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RECENCY_TAU_DAYS")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("recency_tau_days")
+        try:
+            return float(cfg_val) if cfg_val is not None else 90.0
+        except (TypeError, ValueError):
+            return 90.0
+
+    @property
+    def recency_max_boost(self):
+        """Maximum multiplier for recency boost.
+
+        Default: ``1.5``. Reads from ``CASTLE_RECENCY_MAX_BOOST`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_RECENCY_MAX_BOOST")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("recency_max_boost")
+        try:
+            return float(cfg_val) if cfg_val is not None else 1.5
+        except (TypeError, ValueError):
+            return 1.5
+
+    @property
+    def kg_hop_top_n(self):
+        """Number of top results to expand via KG hops.
+
+        Default: ``50``. Reads from ``CASTLE_KG_HOP_TOP_N`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_KG_HOP_TOP_N")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("kg_hop_top_n")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 50
+        except (TypeError, ValueError):
+            parsed = 50
+        return max(1, parsed)
+
+    @property
+    def use_new_retrieval_pipeline(self):
+        """Whether to use the new 3-stage retrieval pipeline.
+
+        Default: ``False`` (preserves current behavior). Reads from
+        ``CASTLE_USE_NEW_RETRIEVAL_PIPELINE`` env var first, then config file,
+        then default.
+        """
+        env_val = os.environ.get("CASTLE_USE_NEW_RETRIEVAL_PIPELINE")
+        if env_val:
+            return env_val.strip().lower() in ("true", "1", "yes", "on")
+        return bool(self._file_config.get("use_new_retrieval_pipeline", False))
+
     def set_hook_setting(self, key: str, value: bool):
         """Update a hook setting and write config to disk."""
         if "hooks" not in self._file_config:
