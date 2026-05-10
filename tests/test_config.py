@@ -215,26 +215,24 @@ def test_kg_value_rejects_over_length():
 
 
 def test_config_has_retrieval_upgrade_keys():
-    cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
-    # Embedder defaults preserve current behavior at this point.
-    assert cfg.embedder_model == "all-MiniLM-L6-v2"
-    assert cfg.embedder_dim == 384
-    # Reranker config exists with sane defaults.
+    from cognitive_castle.config import MempalaceConfig
+    cfg = MempalaceConfig()
+    # Cutover: defaults are now the new stack.
+    assert cfg.embedder_model == "BAAI/bge-m3"
+    assert cfg.embedder_dim == 1024
+    assert cfg.use_new_retrieval_pipeline is True
+    # Reranker, fusion, recency, kg-hop unchanged.
     assert cfg.reranker_model_gpu == "BAAI/bge-reranker-v2-m3"
     assert cfg.reranker_model_cpu == "BAAI/bge-reranker-base"
     assert cfg.reranker_k_interactive == 20
     assert cfg.reranker_k_hook == 10
-    # Fusion + recency.
     assert cfg.k_rrf == 60
     assert cfg.weight_dense == 1.0
     assert cfg.weight_sparse == 1.0
     assert cfg.weight_kg == 0.5
     assert cfg.recency_tau_days == 90.0
     assert cfg.recency_max_boost == 1.5
-    # KG-hop.
     assert cfg.kg_hop_top_n == 50
-    # New pipeline flag.
-    assert cfg.use_new_retrieval_pipeline is False
 
 
 def test_use_new_retrieval_pipeline_handles_false_string_in_config_json(tmp_path):
@@ -252,4 +250,4 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
         json.dump({"embedder_dim": -1}, f)
 
     cfg = MempalaceConfig(config_dir=str(tmp_path))
-    assert cfg.embedder_dim == 384
+    assert cfg.embedder_dim == 1024

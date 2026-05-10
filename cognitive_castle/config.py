@@ -305,20 +305,20 @@ class MempalaceConfig:
     def embedder_model(self):
         """Name of the embedder model to use.
 
-        Default: ``"all-MiniLM-L6-v2"`` (384-dimensional, fast, widely supported).
+        Default: ``"BAAI/bge-m3"`` (1024-dimensional, multilingual, SOTA).
         Reads from ``CASTLE_EMBEDDER_MODEL`` env var first, then config file,
         then the default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_MODEL")
         if env_val:
             return env_val.strip()
-        return str(self._file_config.get("embedder_model", "all-MiniLM-L6-v2")).strip()
+        return str(self._file_config.get("embedder_model", "BAAI/bge-m3")).strip()
 
     @property
     def embedder_dim(self):
         """Dimensionality of the embedder model's output vectors.
 
-        Default: ``384`` (for all-MiniLM-L6-v2). Reads from
+        Default: ``1024`` (for BAAI/bge-m3). Reads from
         ``CASTLE_EMBEDDER_DIM`` env var first, then config file, then default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_DIM")
@@ -331,12 +331,29 @@ class MempalaceConfig:
                 pass
         cfg_val = self._file_config.get("embedder_dim")
         try:
-            parsed = int(cfg_val) if cfg_val is not None else 384
+            parsed = int(cfg_val) if cfg_val is not None else 1024
             if parsed >= 1:
                 return parsed
         except (TypeError, ValueError):
             pass
-        return 384
+        return 1024
+
+    @property
+    def embedder_identity(self):
+        """Stable identity string for the embedder stack (model + dim).
+
+        Used by ``EmbedderIdentityMismatchError`` to detect stale palaces built
+        with a different embedding configuration.  Changing this value will
+        cause any palace built under a prior identity to fail loudly on open,
+        prompting the user to run ``castle reindex``.
+
+        Default: ``"bge-m3-1024-v1"``. Reads from ``CASTLE_EMBEDDER_IDENTITY``
+        env var first, then config file, then the default.
+        """
+        env_val = os.environ.get("CASTLE_EMBEDDER_IDENTITY")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("embedder_identity", "bge-m3-1024-v1")).strip()
 
     @property
     def reranker_model_gpu(self):
@@ -549,14 +566,14 @@ class MempalaceConfig:
     def use_new_retrieval_pipeline(self):
         """Whether to use the new 3-stage retrieval pipeline.
 
-        Default: ``False`` (preserves current behavior). Reads from
+        Default: ``True`` (new SOTA pipeline enabled by default). Reads from
         ``CASTLE_USE_NEW_RETRIEVAL_PIPELINE`` env var first, then config file,
         then default.
         """
         env_val = os.environ.get("CASTLE_USE_NEW_RETRIEVAL_PIPELINE")
         if env_val:
             return env_val.strip().lower() in ("true", "1", "yes", "on")
-        cfg_val = self._file_config.get("use_new_retrieval_pipeline", False)
+        cfg_val = self._file_config.get("use_new_retrieval_pipeline", True)
         if isinstance(cfg_val, str):
             return cfg_val.strip().lower() in ("true", "1", "yes", "on")
         return bool(cfg_val)

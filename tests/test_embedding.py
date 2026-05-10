@@ -106,10 +106,10 @@ def test_embedding_uses_config_default_model_when_unspecified():
     """Without overrides, the embedder reads model name from config."""
     from cognitive_castle.embedding import _resolve_model_name
 
-    cfg = _make_default_cfg()  # see helper below
+    cfg = _make_default_cfg()
     assert _resolve_model_name(cfg) == cfg.embedder_model
-    # And the default is still all-MiniLM at this point in the rollout.
-    assert _resolve_model_name(cfg) == "all-MiniLM-L6-v2"
+    # Cutover: default is now bge-m3.
+    assert _resolve_model_name(cfg) == "BAAI/bge-m3"
 
 
 def test_embedding_respects_config_override():
