@@ -324,14 +324,19 @@ class MempalaceConfig:
         env_val = os.environ.get("CASTLE_EMBEDDER_DIM")
         if env_val:
             try:
-                return int(env_val)
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
             except ValueError:
                 pass
         cfg_val = self._file_config.get("embedder_dim")
         try:
-            return int(cfg_val) if cfg_val is not None else 384
+            parsed = int(cfg_val) if cfg_val is not None else 384
+            if parsed >= 1:
+                return parsed
         except (TypeError, ValueError):
-            return 384
+            pass
+        return 384
 
     @property
     def reranker_model_gpu(self):
@@ -551,7 +556,10 @@ class MempalaceConfig:
         env_val = os.environ.get("CASTLE_USE_NEW_RETRIEVAL_PIPELINE")
         if env_val:
             return env_val.strip().lower() in ("true", "1", "yes", "on")
-        return bool(self._file_config.get("use_new_retrieval_pipeline", False))
+        cfg_val = self._file_config.get("use_new_retrieval_pipeline", False)
+        if isinstance(cfg_val, str):
+            return cfg_val.strip().lower() in ("true", "1", "yes", "on")
+        return bool(cfg_val)
 
     def set_hook_setting(self, key: str, value: bool):
         """Update a hook setting and write config to disk."""

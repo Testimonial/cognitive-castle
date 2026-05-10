@@ -235,3 +235,21 @@ def test_config_has_retrieval_upgrade_keys():
     assert cfg.kg_hop_top_n == 50
     # New pipeline flag.
     assert cfg.use_new_retrieval_pipeline is False
+
+
+def test_use_new_retrieval_pipeline_handles_false_string_in_config_json(tmp_path):
+    """Test that string 'false' in config.json is correctly parsed as False."""
+    with open(tmp_path / "config.json", "w") as f:
+        json.dump({"use_new_retrieval_pipeline": "false"}, f)
+
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.use_new_retrieval_pipeline is False
+
+
+def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
+    """Test that negative embedder_dim in config.json falls back to default."""
+    with open(tmp_path / "config.json", "w") as f:
+        json.dump({"embedder_dim": -1}, f)
+
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.embedder_dim == 384
