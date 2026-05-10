@@ -395,8 +395,6 @@ def _bm25_only_via_lancedb(
     path (kept for API parity — LanceDB has no HNSW divergence mode,
     but callers may still pass ``vector_disabled=True`` during testing).
     """
-    from .backends.lancedb_backend import LanceDBBackend
-
     db_dir = os.path.join(palace_path, "lancedb")
     if not os.path.isdir(db_dir):
         return {
@@ -614,7 +612,21 @@ def _apply_candidate_strategy(
         merger(hits, query, palace_path, wing, room, n_results, max_distance=max_distance)
 
 
-def search_memories(
+def _maybe_new_pipeline(query, palace_path, wing, room, n_results, is_hook_call):
+    """Return new-pipeline results if the flag is on, else None.
+
+    Extracted from ``search_memories`` to keep cyclomatic complexity under the
+    project ceiling (C901 max-complexity=25).
+    """
+    from .config import MempalaceConfig as _MempalaceConfig
+
+    cfg = _MempalaceConfig()
+    if cfg.use_new_retrieval_pipeline:
+        return _new_pipeline_search(query, palace_path, wing, room, n_results, cfg, is_hook_call)
+    return None
+
+
+def search_memories(  # noqa: C901
     query: str,
     palace_path: str,
     wing: str = None,
@@ -623,8 +635,14 @@ def search_memories(
     max_distance: float = 0.0,
     vector_disabled: bool = False,
     candidate_strategy: str = "vector",
+    is_hook_call: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
+
+    When ``cfg.use_new_retrieval_pipeline`` is True the call is routed to
+    :func:`_new_pipeline_search` which returns a ``list[dict]`` instead of
+    the legacy ``dict`` shape.  Callers that depend on the legacy dict shape
+    should leave the flag at its default (False).
 
     Used by the MCP server and other callers that need data.
 
@@ -658,6 +676,13 @@ def search_memories(
               are skipped — they have no vector distance and would silently
               violate the requested distance threshold.
     """
+    # ── New pipeline dispatch ──────────────────────────────────────────────
+    # Gated by CASTLE_USE_NEW_RETRIEVAL_PIPELINE env var / config key.
+    # Default is False so existing callers are unaffected.
+    _new_result = _maybe_new_pipeline(query, palace_path, wing, room, n_results, is_hook_call)
+    if _new_result is not None:
+        return _new_result
+
     # Validate the strategy eagerly so invalid values fail the same way
     # regardless of whether the call routes through the vector path or
     # the BM25-only fallback below.
@@ -875,3 +900,193 @@ def search_memories(
         "total_before_filter": len(_first_or_empty(drawer_results, "documents")),
         "results": hits,
     }
+
+
+# ── New 3-stage retrieval pipeline ────────────────────────────────────────────
+
+
+def _extract_id(row) -> str:
+    """Extract drawer id from a LanceDB row dict."""
+    if isinstance(row, dict):
+        return row.get("id") or ""
+    return ""
+
+
+def _extract_text(row) -> str:
+    """Extract document text from a LanceDB row dict."""
+    if isinstance(row, dict):
+        return row.get("text") or row.get("document") or ""
+    return ""
+
+
+def _extract_ts(row) -> float:
+    """Extract unix timestamp from a LanceDB row dict."""
+    if isinstance(row, dict):
+        # Check hoisted ts column first, then metadata_json, then nested metadata dict.
+        ts = row.get("ts")
+        if ts is None:
+            import json as _json
+
+            raw = row.get("metadata_json")
+            if raw:
+                try:
+                    meta = _json.loads(raw)
+                    ts = meta.get("ts")
+                except (ValueError, TypeError):
+                    pass
+        if ts is None:
+            ts = (row.get("metadata") or {}).get("ts")
+        try:
+            return float(ts) if ts is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+    return 0.0
+
+
+def _build_where_sql(wing, room) -> str | None:
+    """Build a LanceDB SQL WHERE fragment for wing/room filtering."""
+    conditions = []
+    if wing:
+        escaped = str(wing).replace("'", "''")
+        conditions.append(f"wing = '{escaped}'")
+    if room:
+        escaped = str(room).replace("'", "''")
+        conditions.append(f"room = '{escaped}'")
+    return " AND ".join(conditions) if conditions else None
+
+
+def _new_pipeline_search(
+    query: str,
+    palace_path: str,
+    wing: str | None,
+    room: str | None,
+    n_results: int,
+    cfg,
+    is_hook_call: bool = False,
+) -> list:
+    """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
+
+    Stage 1: Recall
+        1a. Dense vector search via ``LanceCollection.vector_search`` → top-100.
+        1b. Tantivy FTS sparse search via ``LanceCollection.fts_search`` → top-100.
+        1c. KG-hop: query → ``EntityRegistry.lookup_in_text`` → entity IDs →
+            ``KnowledgeGraph.find_drawers_by_entities`` → top-N, then hydrate.
+
+    Stage 2: Fusion
+        Weighted RRF over the three recall lists, then recency boost.
+
+    Stage 3: Rerank
+        Top-K candidates fed through the cross-encoder; top-N returned.
+
+    Returns a list of result dicts.  Only runs when
+    ``cfg.use_new_retrieval_pipeline`` is True.
+    """
+    from datetime import datetime, timezone
+    from pathlib import Path as _Path
+
+    from .palace import get_collection as _get_collection
+    from .embedding import embed_texts
+    from .fusion import CandidateRef, weighted_rrf, apply_recency
+    from .reranker import rerank
+
+    # Resolve the LanceCollection from the default palace backend.
+    try:
+        col = _get_collection(palace_path, collection_name="castle_drawers", create=False)
+    except Exception:
+        # No palace found — degrade to empty results rather than crashing.
+        return []
+
+    where_sql = _build_where_sql(wing, room)
+
+    # ── Stage 1a: dense vector search ──────────────────────────────────────
+    try:
+        [query_vec] = embed_texts([query])
+        dense_rows = col.vector_search(query_vec, n_results=100, where=where_sql)
+    except Exception:
+        dense_rows = []
+
+    # ── Stage 1b: Tantivy FTS sparse search ────────────────────────────────
+    try:
+        sparse_rows = col.fts_search(query, n_results=100)
+    except Exception:
+        sparse_rows = []
+
+    # ── Stage 1c: KG-hop ───────────────────────────────────────────────────
+    kg_rows: list = []
+    palace_dir = _Path(palace_path)
+    entities_path = palace_dir / "entity_registry.json"
+    kg_path = palace_dir / "knowledge_graph.sqlite3"
+    if entities_path.exists() and kg_path.exists():
+        try:
+            from .entity_registry import EntityRegistry
+            from .knowledge_graph import KnowledgeGraph
+
+            # EntityRegistry.load expects a directory; pass the palace dir.
+            reg = EntityRegistry.load(config_dir=palace_dir)
+            matches = reg.lookup_in_text(query)
+            if matches:
+                kg = KnowledgeGraph(db_path=str(kg_path))
+                kg_drawer_ids = kg.find_drawers_by_entities(
+                    [m.entity_id for m in matches],
+                    limit=cfg.kg_hop_top_n,
+                )
+                if kg_drawer_ids:
+                    kg_rows = col.get_by_ids(kg_drawer_ids)
+        except Exception:
+            # KG-hop is best-effort; degrade to dense+sparse only.
+            kg_rows = []
+
+    # ── Stage 2: fusion + recency boost ────────────────────────────────────
+    def _to_refs(rows):
+        return [
+            CandidateRef(
+                drawer_id=_extract_id(r),
+                timestamp_unix=_extract_ts(r),
+            )
+            for r in rows
+            if _extract_id(r)
+        ]
+
+    rank_lists = {
+        "dense": _to_refs(dense_rows),
+        "sparse": _to_refs(sparse_rows),
+        "kg": _to_refs(kg_rows),
+    }
+    weights = {
+        "dense": cfg.weight_dense,
+        "sparse": cfg.weight_sparse,
+        "kg": cfg.weight_kg,
+    }
+
+    fused = weighted_rrf(rank_lists, weights, k_rrf=cfg.k_rrf)
+    fused = apply_recency(
+        fused,
+        now=datetime.now(timezone.utc),
+        tau_days=cfg.recency_tau_days,
+        max_boost=cfg.recency_max_boost,
+    )
+
+    # ── Stage 3: cross-encoder rerank ──────────────────────────────────────
+    k_cap = cfg.reranker_k_hook if is_hook_call else cfg.reranker_k_interactive
+    top_k_ids = [s.drawer_id for s in fused[:k_cap]]
+    if not top_k_ids:
+        return []
+
+    top_k_rows = col.get_by_ids(top_k_ids)
+    if not top_k_rows:
+        return []
+
+    docs = [_extract_text(r) for r in top_k_rows]
+    rerank_scores = rerank(query, docs, cfg=cfg)
+    reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
+
+    return [
+        {
+            "id": _extract_id(r),
+            "document": _extract_text(r),
+            "score": float(s),
+            "wing": r.get("wing", "") if isinstance(r, dict) else "",
+            "room": r.get("room", "") if isinstance(r, dict) else "",
+        }
+        for s, r in reranked[:n_results]
+    ]

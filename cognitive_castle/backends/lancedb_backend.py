@@ -301,6 +301,45 @@ class LanceCollection(BaseCollection):
             logger.debug("fts_search: FTS query failed (%s), returning []", exc)
             return []
 
+    # -- Vector search -------------------------------------------------------
+
+    def vector_search(
+        self,
+        vec: list[float],
+        n_results: int = 100,
+        where: Optional[str] = None,
+    ) -> list[dict]:
+        """Similarity search by query vector.
+
+        Returns rows ordered by ascending cosine distance.  ``where`` is an
+        optional SQL filter string applied as a pre-filter.
+        """
+        q = self._table.search(vec, vector_column_name="vector").metric("cosine").limit(n_results)
+        if where:
+            try:
+                q = q.where(where, prefilter=True)
+            except Exception as exc:
+                logger.debug("vector_search: where filter ignored (%s)", exc)
+        return q.to_list()
+
+    # -- ID fetch ------------------------------------------------------------
+
+    def get_by_ids(self, ids: list[str]) -> list[dict]:
+        """Return rows matching any of the supplied IDs (order not guaranteed)."""
+        if not ids:
+            return []
+        quoted = ", ".join(_quote_val(i) for i in ids)
+        try:
+            return (
+                self._table.search(None)
+                .where(f"id IN ({quoted})")
+                .limit(len(ids))
+                .to_list()
+            )
+        except Exception as exc:
+            logger.debug("get_by_ids: fetch failed (%s), returning []", exc)
+            return []
+
     # -- Writes --------------------------------------------------------------
 
     def _embed_if_needed(
