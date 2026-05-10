@@ -1,11 +1,6 @@
 """Unit tests for fusion: weighted RRF + recency."""
-from datetime import datetime, timedelta, timezone
-
-import pytest
-
 from cognitive_castle.fusion import (
     CandidateRef,
-    ScoredCandidate,
     weighted_rrf,
 )
 
