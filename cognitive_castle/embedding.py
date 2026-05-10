@@ -18,13 +18,23 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 EMBED_DIM = 384
-_MODEL_NAME = "all-MiniLM-L6-v2"
 
 _model_cache: dict = {}
 
 
-def _get_model(device: str = "auto"):
-    cache_key = device
+def _resolve_model_name(cfg=None) -> str:
+    """Return the embedder model name from config (with default fallback)."""
+    if cfg is None:
+        from .config import MempalaceConfig
+
+        cfg = MempalaceConfig()
+    return cfg.embedder_model
+
+
+def _get_model(device: str = "auto", cfg=None):
+    name = _resolve_model_name(cfg)
+    resolved = _resolve_device(device)
+    cache_key = f"{name}@{resolved}"
     if cache_key in _model_cache:
         return _model_cache[cache_key]
 
@@ -35,8 +45,7 @@ def _get_model(device: str = "auto"):
             "sentence-transformers is required: pip install sentence-transformers"
         )
 
-    resolved = _resolve_device(device)
-    model = SentenceTransformer(_MODEL_NAME, device=resolved)
+    model = SentenceTransformer(name, device=resolved)
     _model_cache[cache_key] = model
     logger.info("Embedding model loaded (device=%s → %s)", device, resolved)
     return model

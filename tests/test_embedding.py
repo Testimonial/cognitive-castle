@@ -5,8 +5,12 @@ import cognitive_castle.embedding as embedding
 
 @pytest.fixture(autouse=True)
 def isolate_embedding_state(monkeypatch):
-    monkeypatch.setattr(embedding, "_EF_CACHE", {})
-    monkeypatch.setattr(embedding, "_WARNED", set())
+    if hasattr(embedding, "_EF_CACHE"):
+        monkeypatch.setattr(embedding, "_EF_CACHE", {})
+    if hasattr(embedding, "_model_cache"):
+        monkeypatch.setattr(embedding, "_model_cache", {})
+    if hasattr(embedding, "_WARNED"):
+        monkeypatch.setattr(embedding, "_WARNED", set())
 
 
 def test_auto_picks_cuda(monkeypatch):
@@ -96,3 +100,34 @@ def test_describe_device_uses_resolved_effective_device(monkeypatch):
     )
 
     assert embedding.describe_device("auto") == "cuda"
+
+
+def test_embedding_uses_config_default_model_when_unspecified():
+    """Without overrides, the embedder reads model name from config."""
+    from cognitive_castle.embedding import _resolve_model_name
+
+    cfg = _make_default_cfg()  # see helper below
+    assert _resolve_model_name(cfg) == cfg.embedder_model
+    # And the default is still all-MiniLM at this point in the rollout.
+    assert _resolve_model_name(cfg) == "all-MiniLM-L6-v2"
+
+
+def test_embedding_respects_config_override():
+    from cognitive_castle.embedding import _resolve_model_name
+    from unittest.mock import MagicMock
+
+    cfg = MagicMock()
+    cfg.embedder_model = "BAAI/bge-m3"
+    assert _resolve_model_name(cfg) == "BAAI/bge-m3"
+
+
+def _make_default_cfg():
+    """Return an instance of the project's config class with all defaults."""
+    # The actual config class name may be MempalaceConfig (legacy) or CognitiveCastleConfig.
+    # Try CognitiveCastleConfig first, fall back to MempalaceConfig.
+    try:
+        from cognitive_castle.config import CognitiveCastleConfig
+        return CognitiveCastleConfig()
+    except ImportError:
+        from cognitive_castle.config import MempalaceConfig
+        return MempalaceConfig()
