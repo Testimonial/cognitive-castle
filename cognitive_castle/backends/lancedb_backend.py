@@ -48,7 +48,15 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-EMBED_DIM = 384
+
+def _legacy_embed_dim() -> int:
+    """Read default embedder_dim from config — for backward-compat constant only."""
+    from ..config import MempalaceConfig
+
+    return MempalaceConfig().embedder_dim
+
+
+EMBED_DIM = _legacy_embed_dim()  # backward-compat: prefer cfg.embedder_dim in new code
 
 # Columns extracted from metadata dict and stored as first-class filterable columns.
 _HOISTED = {"wing", "room", "source_file", "chunk_index", "decay_score"}
@@ -64,13 +72,20 @@ _SUPPORTED_OPS = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _make_schema() -> pa.Schema:
+def _build_schema(cfg) -> pa.Schema:
+    """Build the LanceDB Arrow schema using ``cfg.embedder_dim`` for the vector dimension.
+
+    This is the canonical schema factory.  Pass any object with an
+    ``embedder_dim`` attribute (e.g. ``MempalaceConfig`` or a ``MagicMock``
+    in tests).
+    """
+    dim = cfg.embedder_dim
     # All non-vector columns are non-nullable; missing strings use "" and
     # missing chunk_index uses -1 as sentinels so Arrow never sees None.
     return pa.schema(
         [
             pa.field("id", pa.utf8()),
-            pa.field("vector", pa.list_(pa.float32(), EMBED_DIM)),
+            pa.field("vector", pa.list_(pa.float32(), dim)),
             pa.field("text", pa.large_utf8()),
             pa.field("metadata_json", pa.large_utf8()),
             pa.field("wing", pa.utf8()),
@@ -80,6 +95,13 @@ def _make_schema() -> pa.Schema:
             pa.field("decay_score", pa.float64()),
         ]
     )
+
+
+def _make_schema() -> pa.Schema:
+    """Backward-compat shim — uses default config dim (384).  Prefer ``_build_schema(cfg)``."""
+    from ..config import MempalaceConfig
+
+    return _build_schema(MempalaceConfig())
 
 
 # ---------------------------------------------------------------------------
@@ -188,13 +210,14 @@ def _build_row(
     text: str,
     metadata: dict,
     embedding: Optional[list[float]],
+    dim: int = EMBED_DIM,
 ) -> dict:
     md = metadata or {}
     ci = md.get("chunk_index")
     ds = md.get("decay_score")
     return {
         "id": doc_id,
-        "vector": embedding if embedding is not None else [0.0] * EMBED_DIM,
+        "vector": embedding if embedding is not None else [0.0] * dim,
         "text": text or "",
         "metadata_json": json.dumps(md),
         # Hoisted columns — use sentinel values so Arrow schema never gets None
@@ -228,8 +251,13 @@ def _row_to_metadata(row: dict) -> dict:
 class LanceCollection(BaseCollection):
     """LanceDB-backed Cognitive Castle collection."""
 
-    def __init__(self, table):
+    def __init__(self, table, cfg=None):
         self._table = table
+        if cfg is None:
+            from ..config import MempalaceConfig
+
+            cfg = MempalaceConfig()
+        self._dim: int = cfg.embedder_dim
 
     # -- Writes --------------------------------------------------------------
 
@@ -246,7 +274,7 @@ class LanceCollection(BaseCollection):
         vecs = self._embed_if_needed(documents, embeddings)
         metas = metadatas or [{} for _ in documents]
         rows = [
-            _build_row(doc_id, doc, meta, vec)
+            _build_row(doc_id, doc, meta, vec, self._dim)
             for doc_id, doc, meta, vec in zip(ids, documents, metas, vecs)
         ]
         self._table.add(rows)
@@ -255,7 +283,7 @@ class LanceCollection(BaseCollection):
         vecs = self._embed_if_needed(documents, embeddings)
         metas = metadatas or [{} for _ in documents]
         rows = [
-            _build_row(doc_id, doc, meta, vec)
+            _build_row(doc_id, doc, meta, vec, self._dim)
             for doc_id, doc, meta, vec in zip(ids, documents, metas, vecs)
         ]
         (
@@ -450,7 +478,12 @@ class LanceDBBackend(BaseBackend):
         }
     )
 
-    def __init__(self):
+    def __init__(self, cfg=None):
+        if cfg is None:
+            from ..config import MempalaceConfig
+
+            cfg = MempalaceConfig()
+        self._cfg = cfg
         self._dbs: dict[str, Any] = {}
         self._tables: dict[tuple[str, str], Any] = {}
         self._lock = Lock()
@@ -496,13 +529,13 @@ class LanceDBBackend(BaseBackend):
         with self._lock:
             cached_table = self._tables.get(cache_key)
             if cached_table is not None:
-                return LanceCollection(cached_table)
+                return LanceCollection(cached_table, self._cfg)
 
             db = self._get_db(palace_path)
-            schema = _make_schema()
+            schema = _build_schema(self._cfg)
             table = db.create_table(collection_name, schema=schema, exist_ok=True)
             self._tables[cache_key] = table
-            return LanceCollection(table)
+            return LanceCollection(table, self._cfg)
 
     def close_palace(self, palace) -> None:
         path = palace.local_path if isinstance(palace, PalaceRef) else palace
