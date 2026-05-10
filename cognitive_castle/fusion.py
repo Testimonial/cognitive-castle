@@ -6,7 +6,9 @@ pipeline.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from datetime import datetime
 
 
 @dataclass(frozen=True)
@@ -79,4 +81,44 @@ def weighted_rrf(
     )
 
 
-# apply_recency added in next task.
+def apply_recency(
+    scored: list[ScoredCandidate],
+    now: datetime,
+    tau_days: float,
+    max_boost: float,
+) -> list[ScoredCandidate]:
+    """Multiply each candidate's score by a recency factor and re-sort.
+
+    factor(age) = 1 + (max_boost - 1) * exp(-age_days / tau_days)
+
+    A drawer at age=0 receives a multiplier of `max_boost`. Ancient drawers
+    asymptote to multiplier 1.0. Returned in descending score order; ties
+    broken by drawer_id for determinism.
+
+    Parameters
+    ----------
+    scored:
+        Candidates with fused scores from `weighted_rrf`.
+    now:
+        Reference time for age calculation. Tests pass a fixed value;
+        production passes `datetime.now(timezone.utc)`.
+    tau_days:
+        Decay timescale in days. Larger means recency boost decays slower.
+    max_boost:
+        Cap on the recency multiplier (max_boost == 1.0 disables the boost).
+    """
+    now_unix = now.timestamp()
+    delta_boost = max_boost - 1.0
+    boosted: list[ScoredCandidate] = []
+    for c in scored:
+        age_days = max(0.0, (now_unix - c.timestamp_unix) / 86400.0)
+        factor = 1.0 + delta_boost * math.exp(-age_days / tau_days)
+        boosted.append(
+            ScoredCandidate(
+                drawer_id=c.drawer_id,
+                timestamp_unix=c.timestamp_unix,
+                score=c.score * factor,
+            )
+        )
+    boosted.sort(key=lambda s: (-s.score, s.drawer_id))
+    return boosted

@@ -1,6 +1,12 @@
 """Unit tests for fusion: weighted RRF + recency."""
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
 from cognitive_castle.fusion import (
     CandidateRef,
+    ScoredCandidate,
+    apply_recency,
     weighted_rrf,
 )
 
@@ -75,3 +81,49 @@ class TestWeightedRRF:
         gap_small = small_k[0].score - small_k[1].score
         gap_large = large_k[0].score - large_k[1].score
         assert gap_large < gap_small
+
+
+class TestApplyRecency:
+    def _scored(self, did: str, age_days: float, base_score: float = 1.0) -> ScoredCandidate:
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        ts = (now - timedelta(days=age_days)).timestamp()
+        return ScoredCandidate(drawer_id=did, timestamp_unix=ts, score=base_score)
+
+    def test_zero_age_gets_max_boost(self):
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        scored = [self._scored("fresh", age_days=0.0, base_score=1.0)]
+        out = apply_recency(scored, now=now, tau_days=90.0, max_boost=1.5)
+        # factor = 1 + (1.5 - 1) * exp(-0/90) = 1 + 0.5 * 1.0 = 1.5
+        assert out[0].score == pytest.approx(1.5, rel=1e-6)
+
+    def test_old_age_approaches_unboosted(self):
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        scored = [self._scored("ancient", age_days=10000.0, base_score=1.0)]
+        out = apply_recency(scored, now=now, tau_days=90.0, max_boost=1.5)
+        # factor = 1 + 0.5 * exp(-10000/90) ≈ 1.0
+        assert out[0].score == pytest.approx(1.0, rel=1e-3)
+
+    def test_reorders_when_recency_dominates(self):
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        # 'old' has higher base score but is ancient.
+        # 'fresh' has lower base score but is brand new.
+        # With max_boost large, 'fresh' should win.
+        scored = [
+            self._scored("old", age_days=10000.0, base_score=1.0),
+            self._scored("fresh", age_days=0.0, base_score=0.8),
+        ]
+        out = apply_recency(scored, now=now, tau_days=90.0, max_boost=2.0)
+        # old: 1.0 * (1 + 1.0 * exp(-10000/90)) ≈ 1.0
+        # fresh: 0.8 * (1 + 1.0 * exp(0)) = 0.8 * 2.0 = 1.6
+        assert out[0].drawer_id == "fresh"
+
+    def test_max_boost_one_is_no_op(self):
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        scored = [self._scored("a", age_days=0.0, base_score=1.0)]
+        out = apply_recency(scored, now=now, tau_days=90.0, max_boost=1.0)
+        # factor = 1 + 0 * exp(0) = 1.0
+        assert out[0].score == pytest.approx(1.0)
+
+    def test_empty_input_returns_empty(self):
+        now = datetime(2026, 5, 10, tzinfo=timezone.utc)
+        assert apply_recency([], now=now, tau_days=90.0, max_boost=1.5) == []
