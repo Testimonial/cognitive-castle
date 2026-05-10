@@ -1041,3 +1041,52 @@ def test_cmd_repair_trailing_slash_does_not_recurse():
     palace_path = os.path.expanduser(args.palace).rstrip(os.sep)
     backup_path = palace_path + ".backup"
     assert not backup_path.startswith(palace_path + os.sep)
+
+
+def test_reindex_command_is_registered():
+    """`castle reindex` is a discoverable subcommand."""
+    import io
+    import sys
+    from contextlib import redirect_stdout
+
+    from cognitive_castle.cli import main
+
+    buf = io.StringIO()
+    sys_argv_save = sys.argv
+    sys.argv = ["castle", "--help"]
+    try:
+        with redirect_stdout(buf):
+            try:
+                main()
+            except SystemExit:
+                pass
+    finally:
+        sys.argv = sys_argv_save
+    assert "reindex" in buf.getvalue()
+
+
+def test_reindex_creates_new_palace_dir(tmp_path, monkeypatch):
+    """`castle reindex --palace <path> --sources <dir>` produces a <palace>.new/ directory.
+
+    More accurately: moves the existing palace to <palace>.legacy/ and creates a fresh
+    one at <palace>/.
+    """
+    from argparse import Namespace
+    from cognitive_castle.cli import cmd_reindex
+
+    palace = tmp_path / "palace"
+    palace.mkdir()
+    (palace / "marker").write_text("old palace marker")
+    sources = tmp_path / "sources"
+    sources.mkdir()
+    # Drop a source file so the mine has something to walk.
+    (sources / "note.md").write_text("Hello world.")
+
+    args = Namespace(palace=str(palace), sources=[str(sources)], yes=True)
+    cmd_reindex(args)
+
+    # After reindex, expect a backup of the old + a new primary.
+    assert (palace.parent / f"{palace.name}.legacy").exists()
+    assert palace.exists()
+    # The new palace should NOT have the old marker (it's a fresh build).
+    assert not (palace / "marker").exists()
