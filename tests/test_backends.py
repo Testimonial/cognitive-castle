@@ -891,3 +891,34 @@ def test_lancedb_schema_uses_config_dim(tmp_path):
     schema_1024 = _build_schema(cfg_1024)
     vector_field_1024 = next(f for f in schema_1024 if f.name == "vector")
     assert vector_field_1024.type.list_size == 1024
+
+
+def test_fts_index_is_created_alongside_vector(tmp_path):
+    """When a backend creates a new collection, an FTS index on the text column is built."""
+    from cognitive_castle.backends.lancedb_backend import LanceDBBackend, PalaceRef
+
+    backend = LanceDBBackend()
+    palace = PalaceRef(id="test", local_path=str(tmp_path / "palace"))
+    col = backend.get_collection(
+        palace=palace,
+        collection_name="drawers",
+        create=True,
+    )
+    # Add a row so we have something to search.
+    col.add(
+        documents=["the quick brown fox jumps over the lazy dog"],
+        ids=["d1"],
+        metadatas=[{"wing": "test", "room": "test", "ts": "2026-05-10"}],
+    )
+    # Refresh FTS index after adding data (create_fts_index with replace=True).
+    col._ensure_fts_index(replace=True)
+    # FTS should find the row by a keyword in the document.
+    results = col.fts_search("brown fox", n_results=5)
+    assert len(results) >= 1
+    # Result row format: at minimum should have an id and the query terms in the text.
+    first = results[0]
+    # Be liberal in what we accept — the row may have keys "id", "ids", or be a (id, doc) tuple.
+    if isinstance(first, dict):
+        assert any(v == "d1" for v in first.values())
+    else:
+        assert "d1" in str(first)

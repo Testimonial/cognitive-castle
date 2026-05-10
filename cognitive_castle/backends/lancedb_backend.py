@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
 
@@ -258,6 +257,49 @@ class LanceCollection(BaseCollection):
 
             cfg = MempalaceConfig()
         self._dim: int = cfg.embedder_dim
+        self._ensure_fts_index()
+
+    # -- FTS index -----------------------------------------------------------
+
+    def _ensure_fts_index(self, replace: bool = False) -> None:
+        """Create a Tantivy-backed FTS index on the ``text`` column if missing.
+
+        Idempotent: ``replace=False`` (default) is a no-op when the index
+        already exists.  Pass ``replace=True`` to rebuild after adding data.
+
+        Degrades gracefully: if LanceDB FTS is unavailable in this version the
+        exception is swallowed and ``fts_search`` will return ``[]``.
+        """
+        try:
+            self._table.create_fts_index("text", replace=replace)
+        except Exception as exc:
+            # Index already exists (replace=False), or FTS not supported in
+            # this LanceDB build.  Either way the pipeline degrades gracefully.
+            logger.debug("_ensure_fts_index: ignored exception: %s", exc)
+
+    # -- FTS search ----------------------------------------------------------
+
+    def fts_search(self, query: str, n_results: int = 100) -> list[dict]:
+        """Sparse keyword search via Tantivy FTS.
+
+        Returns rows ordered by relevance score.  Each row is a ``dict`` with
+        at minimum ``id`` and ``text`` keys; additional hoisted columns and an
+        optional ``_score`` column may be present depending on LanceDB version.
+
+        Returns ``[]`` for blank queries or when FTS is unavailable.
+        """
+        if not query.strip():
+            return []
+        try:
+            results = (
+                self._table.search(query, query_type="fts")
+                .limit(n_results)
+                .to_list()
+            )
+            return list(results)
+        except Exception as exc:
+            logger.debug("fts_search: FTS query failed (%s), returning []", exc)
+            return []
 
     # -- Writes --------------------------------------------------------------
 
@@ -341,7 +383,6 @@ class LanceCollection(BaseCollection):
         combined_filter = _combine_sql(where_sql, wdoc_sql)
 
         spec = _IncludeSpec.resolve(include, default_distances=True)
-        num_queries = len(vecs)
 
         all_ids: list[list[str]] = []
         all_docs: list[list[str]] = []
