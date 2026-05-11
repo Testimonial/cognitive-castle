@@ -226,17 +226,19 @@ def _output(data: dict):
 def _get_mine_targets() -> list[tuple[str, str]]:
     """Return the list of ``(dir, mode)`` targets for auto-ingest.
 
-    MEMPAL_DIR (when set and resolvable) contributes a ``"projects"``
-    target. Transcript ingestion is handled separately by
+    CASTLE_DIR (when set and resolvable) contributes a ``"projects"``
+    target. The legacy name MEMPAL_DIR is still read as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
+    Transcript ingestion is handled separately by
     ``_ingest_transcript`` — emitting it here too would double-mine the
     same JSONL into a different wing on every hook fire (#1231 review).
 
-    An empty list means no MEMPAL_DIR ingest should run.
+    An empty list means no CASTLE_DIR ingest should run.
     """
     targets: list[tuple[str, str]] = []
-    mempal_dir = os.environ.get("MEMPAL_DIR", "")
-    if mempal_dir:
-        resolved = Path(mempal_dir).expanduser().resolve()
+    castle_dir = _read_castle_env("CASTLE_DIR", "MEMPAL_DIR", default="")
+    if castle_dir:
+        resolved = Path(castle_dir).expanduser().resolve()
         if resolved.is_dir():
             targets.append((str(resolved), "projects"))
     return targets
@@ -297,8 +299,10 @@ def _spawn_mine(cmd: list) -> None:
 
 
 def _maybe_auto_ingest():
-    """Background-mine MEMPAL_DIR (project files) if set.
+    """Background-mine CASTLE_DIR (project files) if set.
 
+    The legacy env var MEMPAL_DIR is still accepted as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
     Transcript convos are ingested separately via ``_ingest_transcript``
     in the hook handlers — this function does not handle them, to avoid
     asymmetric interpreter handling and PID-file overwrite when both
@@ -318,8 +322,10 @@ def _maybe_auto_ingest():
 
 
 def _mine_sync():
-    """Synchronously mine MEMPAL_DIR (precompact path).
+    """Synchronously mine CASTLE_DIR (precompact path).
 
+    The legacy env var MEMPAL_DIR is still accepted as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
     Transcript convos are ingested separately via ``_ingest_transcript``
     in ``hook_precompact`` — keeping them out of this function avoids
     timeout stacking against the harness 30s ceiling (#1231 review).
@@ -709,7 +715,7 @@ def hook_precompact(data: dict, harness: str):
     if transcript_path:
         _ingest_transcript(transcript_path)
 
-    # Mine MEMPAL_DIR synchronously so project data lands before
+    # Mine CASTLE_DIR synchronously so project data lands before
     # compaction proceeds. Transcript convos were already kicked off
     # above via _ingest_transcript.
     _mine_sync()

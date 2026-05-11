@@ -54,3 +54,19 @@ def test_warning_fires_only_once_per_process(monkeypatch, capsys):
     _read_castle_env("CASTLE_DIR", "MEMPAL_DIR")
     captured = capsys.readouterr()
     assert captured.err.count("MEMPAL_DIR is deprecated") == 1
+
+
+def test_hooks_cli_uses_read_castle_env_for_dir(monkeypatch):
+    """The MEMPAL_DIR caller in hooks_cli should now flow through the shim."""
+    monkeypatch.delenv("CASTLE_DIR", raising=False)
+    monkeypatch.setenv("MEMPAL_DIR", "/legacy/projects")
+    _DEPRECATED_LEGACY_ENV_WARNED.clear()
+    from cognitive_castle import hooks_cli
+    assert hooks_cli._read_castle_env("CASTLE_DIR", "MEMPAL_DIR") == "/legacy/projects"
+
+
+def test_castle_dir_takes_precedence_over_mempal_dir(monkeypatch):
+    monkeypatch.setenv("CASTLE_DIR", "/new/projects")
+    monkeypatch.setenv("MEMPAL_DIR", "/legacy/projects")
+    from cognitive_castle import hooks_cli
+    assert hooks_cli._read_castle_env("CASTLE_DIR", "MEMPAL_DIR") == "/new/projects"
