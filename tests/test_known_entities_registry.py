@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from mempalace import miner
+from cognitive_castle import miner
 
 
 @pytest.fixture
