@@ -46,6 +46,25 @@ def _get_model(device: str = "auto", cfg=None):
         )
 
     model = SentenceTransformer(name, device=resolved)
+
+    # bge-m3 with CUDA triggers a >3-minute flash-attention CUDA kernel
+    # compilation on first use (PyTorch 2.x SDPA).  The compiled kernel is
+    # NOT cached between processes, so every cold start hangs.  Disabling
+    # flash SDP and memory-efficient SDP forces PyTorch to use the math
+    # backend, which requires no JIT compilation and adds <1ms overhead for
+    # the short sequences Castle embeds.  This is a process-level flag so it
+    # applies to all subsequent CUDA ops, but Castle only uses CUDA for this
+    # model — no impact on other code paths.
+    if resolved == "cuda":
+        try:
+            import torch
+
+            torch.backends.cuda.enable_flash_sdp(False)
+            torch.backends.cuda.enable_mem_efficient_sdp(False)
+            logger.debug("Flash/MemEff SDP disabled to avoid first-run CUDA JIT hang")
+        except Exception:
+            pass  # non-fatal — worst case is a slow first encode
+
     _model_cache[cache_key] = model
     logger.info("Embedding model loaded (device=%s → %s)", device, resolved)
     return model

@@ -108,8 +108,8 @@ def test_embedding_uses_config_default_model_when_unspecified():
 
     cfg = _make_default_cfg()
     assert _resolve_model_name(cfg) == cfg.embedder_model
-    # Cutover: default is now bge-m3.
-    assert _resolve_model_name(cfg) == "BAAI/bge-m3"
+    # Cutover: default is now paraphrase-multilingual-MiniLM-L12-v2.
+    assert _resolve_model_name(cfg) == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 def test_embedding_respects_config_override():

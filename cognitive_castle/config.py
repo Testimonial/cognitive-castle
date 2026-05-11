@@ -305,20 +305,26 @@ class MempalaceConfig:
     def embedder_model(self):
         """Name of the embedder model to use.
 
-        Default: ``"BAAI/bge-m3"`` (1024-dimensional, multilingual, SOTA).
+        Default: ``"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"``
+        (384-dimensional, 50+ languages, verified ~0.1s on CUDA).
         Reads from ``CASTLE_EMBEDDER_MODEL`` env var first, then config file,
         then the default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_MODEL")
         if env_val:
             return env_val.strip()
-        return str(self._file_config.get("embedder_model", "BAAI/bge-m3")).strip()
+        return str(
+            self._file_config.get(
+                "embedder_model",
+                "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+            )
+        ).strip()
 
     @property
     def embedder_dim(self):
         """Dimensionality of the embedder model's output vectors.
 
-        Default: ``1024`` (for BAAI/bge-m3). Reads from
+        Default: ``384`` (for paraphrase-multilingual-MiniLM-L12-v2). Reads from
         ``CASTLE_EMBEDDER_DIM`` env var first, then config file, then default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_DIM")
@@ -331,12 +337,12 @@ class MempalaceConfig:
                 pass
         cfg_val = self._file_config.get("embedder_dim")
         try:
-            parsed = int(cfg_val) if cfg_val is not None else 1024
+            parsed = int(cfg_val) if cfg_val is not None else 384
             if parsed >= 1:
                 return parsed
         except (TypeError, ValueError):
             pass
-        return 1024
+        return 384
 
     @property
     def embedder_identity(self):
@@ -347,13 +353,15 @@ class MempalaceConfig:
         cause any palace built under a prior identity to fail loudly on open,
         prompting the user to run ``castle reindex``.
 
-        Default: ``"bge-m3-1024-v1"``. Reads from ``CASTLE_EMBEDDER_IDENTITY``
+        Default: ``"paraphrase-ml-MiniLM-L12-v2"``. Reads from ``CASTLE_EMBEDDER_IDENTITY``
         env var first, then config file, then the default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_IDENTITY")
         if env_val:
             return env_val.strip()
-        return str(self._file_config.get("embedder_identity", "bge-m3-1024-v1")).strip()
+        return str(
+            self._file_config.get("embedder_identity", "paraphrase-ml-MiniLM-L12-v2")
+        ).strip()
 
     @property
     def reranker_model_gpu(self):

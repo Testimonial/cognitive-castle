@@ -218,8 +218,8 @@ def test_config_has_retrieval_upgrade_keys():
     from cognitive_castle.config import MempalaceConfig
     cfg = MempalaceConfig()
     # Cutover: defaults are now the new stack.
-    assert cfg.embedder_model == "BAAI/bge-m3"
-    assert cfg.embedder_dim == 1024
+    assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    assert cfg.embedder_dim == 384
     assert cfg.use_new_retrieval_pipeline is True
     # Reranker, fusion, recency, kg-hop unchanged.
     assert cfg.reranker_model_gpu == "BAAI/bge-reranker-v2-m3"
@@ -250,4 +250,4 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
         json.dump({"embedder_dim": -1}, f)
 
     cfg = MempalaceConfig(config_dir=str(tmp_path))
-    assert cfg.embedder_dim == 1024
+    assert cfg.embedder_dim == 384
