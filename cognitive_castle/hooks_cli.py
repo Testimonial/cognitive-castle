@@ -40,8 +40,36 @@ def _read_castle_env(new_name: str, old_name: str, default: str = "") -> str:
     return default
 
 
+def _state_dir() -> Path:
+    """Return the hook state directory, preferring ~/.castle/ and falling back to ~/.mempalace/.
+
+    Behavior:
+    - If ~/.castle/hook_state/ exists, return it.
+    - Else if ~/.mempalace/hook_state/ exists (legacy from MemPalace days),
+      return it and log a one-time migration note to stderr.
+    - Otherwise create ~/.castle/hook_state/ and return it.
+
+    The legacy-path log uses the same one-time-warning mechanism as
+    `_read_castle_env`, sharing `_DEPRECATED_LEGACY_ENV_WARNED`.
+    """
+    new = Path.home() / ".castle" / "hook_state"
+    old = Path.home() / ".mempalace" / "hook_state"
+    if new.exists():
+        return new
+    if old.exists():
+        if "state_dir_migration" not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add("state_dir_migration")
+            sys.stderr.write(
+                f"[castle] NOTE: reading legacy state dir {old}; "
+                f"new writes will go to {new}.\n"
+            )
+        return old
+    new.mkdir(parents=True, exist_ok=True)
+    return new
+
+
 SAVE_INTERVAL = 15
-STATE_DIR = Path.home() / ".castle" / "hook_state"
+STATE_DIR = _state_dir()  # module-level constant, computed once at import
 
 
 def _castle_python() -> str:
