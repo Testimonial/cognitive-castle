@@ -65,7 +65,7 @@ def _get_system_words() -> set:
 # Matches any token with a digit anywhere in it: 3am, bge-large-v1.5, top-10
 _HAS_DIGIT = re.compile(r"\d")
 
-# CamelCase: ChromaDB, CognitiveCastle, LongMemEval
+# CamelCase: LanceDB, CognitiveCastle, LongMemEval
 _IS_CAMEL = re.compile(r"[A-Z][a-z]+[A-Z]")
 
 # ALL_CAPS or all-caps with underscores: NDCG, R@5, MAX_RESULTS
@@ -253,7 +253,7 @@ if __name__ == "__main__":
         "it's realy hard for me to writte coherently at 3am",
         "Cognitive Castle cant be fine-tunned if you alredy kno the question",
         # Should NOT change these:
-        "ChromaDB bge-large-en-v1.5 NDCG@10 R@5",
+        "LanceDB bge-large-en-v1.5 NDCG@10 R@5",
         "Riley picked up Sam from school",
         "hybrid_v4 top-k=50 longmemeval_bench.py",
     ]

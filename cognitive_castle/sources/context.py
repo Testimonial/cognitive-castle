@@ -129,7 +129,7 @@ def _build_drawer_id(record: DrawerRecord) -> str:
     """Deterministic drawer id: ``<sha256(source_file)[:24]>_<chunk_index>``.
 
     Matches the shape existing miners rely on (``source_file`` + chunk index
-    pair) while keeping the id chroma-safe (no separators that collide with
+    pair) while keeping the id safe (no separators that collide with
     existing metadata values). 96-bit SHA-256 prefix keeps collision risk
     negligible across corpora the size of a palace (sha1@64 bits was too
     close to the birthday bound for large ingests). Adapters that need a

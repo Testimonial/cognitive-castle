@@ -412,7 +412,7 @@ def chunk_text(content: str, source_file: str) -> list:
 
 
 # =============================================================================
-# PALACE — ChromaDB operations
+# PALACE — storage operations
 # =============================================================================
 
 
@@ -695,7 +695,7 @@ def _extract_entities_for_metadata(content: str) -> str:
     chars. Filters out the closet stoplist (``When``, ``After``, ``The``, …)
     so sentence-starters don't masquerade as proper nouns.
 
-    Returns semicolon-separated string suitable for ChromaDB metadata
+    Returns semicolon-separated string suitable for metadata
     filtering. The list is truncated to ``_ENTITY_METADATA_LIMIT`` entries
     *before* joining so a name is never cut in half.
     """
@@ -836,10 +836,8 @@ def process_file(
             return 0, room
 
         # Purge stale drawers for this file before re-inserting the fresh chunks.
-        # Converts modified-file re-mines from upsert-over-existing-IDs (which hits
-        # hnswlib's thread-unsafe updatePoint path and can segfault on macOS ARM
-        # with chromadb 0.6.3) into a clean delete+insert, bypassing the update
-        # path entirely.
+        # Converts modified-file re-mines from upsert-over-existing-IDs into a
+        # clean delete+insert, bypassing any stale-index issues entirely.
         try:
             collection.delete(where={"source_file": source_file})
         except Exception:

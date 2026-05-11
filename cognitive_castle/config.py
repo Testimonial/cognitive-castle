@@ -13,7 +13,7 @@ from pathlib import Path
 # ── Input validation ──────────────────────────────────────────────────────────
 # Shared sanitizers for wing/room/entity names. Prevents path traversal,
 # excessively long strings, and special characters that could cause issues
-# in file paths, SQLite, or ChromaDB metadata.
+# in file paths, SQLite, or LanceDB metadata.
 
 MAX_NAME_LENGTH = 128
 _SAFE_NAME_RE = re.compile(r"^(?:[^\W_]|[^\W_][\w .'-]{0,126}[^\W_])$")
@@ -186,7 +186,7 @@ class CognitiveCastleConfig:
 
     @property
     def collection_name(self):
-        """ChromaDB collection name."""
+        """LanceDB collection (table) name."""
         return self._file_config.get("collection_name", DEFAULT_COLLECTION_NAME)
 
     @property

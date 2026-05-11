@@ -201,10 +201,10 @@ def prune_corrupt(palace_path=None, confirm=False):
 def rebuild_index(palace_path=None, confirm_truncation_ok: bool = False):
     """Rebuild the HNSW index from scratch.
 
-    1. Extract all drawers via ChromaDB get()
+    1. Extract all drawers via the backend get()
     2. Cross-check against the SQLite ground truth (#1208 guard)
-    3. Back up ONLY chroma.sqlite3 (not the bloated HNSW files)
-    4. Delete and recreate the collection with hnsw:space=cosine
+    3. Back up the palace data directory
+    4. Delete and recreate the collection
     5. Upsert all drawers back
 
     ``confirm_truncation_ok`` overrides the safety guard from step 2.

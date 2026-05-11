@@ -26,7 +26,7 @@ import sys
 # --- MCP stdio protection (issue #225) -----------------------------------
 # The MCP protocol multiplexes JSON-RPC over stdio: stdout MUST carry only
 # valid JSON-RPC messages, stderr is for human-readable logs. Some
-# transitive dependencies (chromadb → onnxruntime, posthog telemetry) print
+# transitive dependencies (sentence-transformers, torch, lancedb) may print
 # banners and error messages directly to stdout — sometimes at C level —
 # which breaks Claude Desktop's JSON parser. Redirect stdout → stderr at
 # both the Python and file-descriptor level before heavy imports, then
@@ -293,7 +293,7 @@ FORMAT:
   IMPORTANCE: ★ to ★★★★★ (1-5 scale).
   HALLS: hall_facts, hall_events, hall_discoveries, hall_preferences, hall_advice.
   WINGS: wing_user, wing_agent, wing_team, wing_code, wing_myproject, wing_hardware, wing_ue5, wing_ai_research.
-  ROOMS: Hyphenated slugs representing named ideas (e.g., chromadb-setup, gpu-pricing).
+  ROOMS: Hyphenated slugs representing named ideas (e.g., lancedb-setup, gpu-pricing).
 
 EXAMPLE:
   FAM: ALC→♡JOR | 2D(kids): RIL(18,sports) MAX(11,chess+swimming) | BEN(contributor)
@@ -1345,13 +1345,13 @@ TOOLS = {
         "handler": tool_kg_stats,
     },
     "castle_traverse": {
-        "description": "Walk the palace graph from a room. Shows connected ideas across wings — the tunnels. Like following a thread through the palace: start at 'chromadb-setup' in wing_code, discover it connects to wing_myproject (planning) and wing_user (feelings about it).",
+        "description": "Walk the palace graph from a room. Shows connected ideas across wings — the tunnels. Like following a thread through the palace: start at 'lancedb-setup' in wing_code, discover it connects to wing_myproject (planning) and wing_user (feelings about it).",
         "input_schema": {
             "type": "object",
             "properties": {
                 "start_room": {
                     "type": "string",
-                    "description": "Room to start from (e.g. 'chromadb-setup', 'riley-school')",
+                    "description": "Room to start from (e.g. 'lancedb-setup', 'riley-school')",
                 },
                 "max_hops": {
                     "type": "integer",
@@ -1732,7 +1732,7 @@ def handle_request(request):
             tool_args = {k: v for k, v in tool_args.items() if k in schema_props}
         # Coerce argument types based on input_schema.
         # MCP JSON transport may deliver integers as floats or strings;
-        # ChromaDB and Python slicing require native int.
+        # MCP JSON transport and Python slicing require native int.
         for key, value in list(tool_args.items()):
             prop_schema = schema_props.get(key, {})
             declared_type = prop_schema.get("type")
