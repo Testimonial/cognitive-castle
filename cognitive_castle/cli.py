@@ -709,7 +709,6 @@ def cmd_repair(args):
         return
 
     import shutil
-    from .backends.chroma import ChromaBackend
     from .migrate import confirm_destructive_action, contains_palace_database
     from .repair import TruncationDetected, check_extraction_safety
 
@@ -744,6 +743,7 @@ def cmd_repair(args):
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
+    from .backends.chroma import ChromaBackend  # type: ignore[import]
     backend = ChromaBackend()
 
     # Try to read existing drawers

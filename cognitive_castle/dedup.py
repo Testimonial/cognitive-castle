@@ -27,7 +27,12 @@ import os
 import time
 from collections import defaultdict
 
-from .backends.chroma import ChromaBackend
+# ChromaBackend import is deferred to function bodies below.  chroma.py is
+# removed in Phase 3 of the ChromaDB-removal plan; the functions that still
+# reference ChromaBackend will be deleted in Phase 4 (Task 8).
+def _get_chroma_backend():  # noqa: ANN201
+    from .backends.chroma import ChromaBackend  # type: ignore[import]
+    return ChromaBackend
 
 
 COLLECTION_NAME = "castle_drawers"
@@ -130,7 +135,7 @@ def dedup_source_group(col, drawer_ids, threshold=DEFAULT_THRESHOLD, dry_run=Tru
 def show_stats(palace_path=None):
     """Show duplication statistics without making changes."""
     palace_path = palace_path or _get_palace_path()
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = _get_chroma_backend()().get_collection(palace_path, COLLECTION_NAME)
 
     groups = get_source_groups(col)
 
@@ -162,7 +167,7 @@ def dedup_palace(
     print("  Cognitive Castle Deduplicator")
     print(f"{'=' * 55}")
 
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = _get_chroma_backend()().get_collection(palace_path, COLLECTION_NAME)
 
     print(f"  Palace: {palace_path}")
     print(f"  Drawers: {col.count():,}")

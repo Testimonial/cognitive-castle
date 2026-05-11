@@ -37,8 +37,20 @@ import time
 from datetime import datetime
 from typing import Optional
 
-from .backends.chroma import ChromaBackend, hnsw_capacity_status
 from .config import CognitiveCastleConfig
+
+# ChromaBackend / hnsw_capacity_status imports are deferred to function bodies
+# below.  chroma.py is removed in Phase 3 of the ChromaDB-removal plan; the
+# functions that still reference ChromaBackend will be deleted in Phase 4
+# (Task 8: delete migrate.py + castle repair --mode max-seq-id).
+def _get_chroma_backend():  # noqa: ANN201
+    from .backends.chroma import ChromaBackend  # type: ignore[import]
+    return ChromaBackend
+
+
+def _hnsw_capacity_status(palace_path: str, collection: str):  # noqa: ANN201
+    from .backends.chroma import hnsw_capacity_status  # type: ignore[import]
+    return hnsw_capacity_status(palace_path, collection)
 
 # Backward-compat alias for legacy `@patch("cognitive_castle.repair.MempalaceConfig")`
 # usage in tests. Production code uses CognitiveCastleConfig directly.
@@ -98,7 +110,7 @@ def scan_palace(palace_path=None, only_wing=None):
     print(f"\n  Palace: {palace_path}")
     print("  Loading...")
 
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = _get_chroma_backend()().get_collection(palace_path, COLLECTION_NAME)
 
     where = {"wing": only_wing} if only_wing else None
     total = col.count()
@@ -181,7 +193,7 @@ def prune_corrupt(palace_path=None, confirm=False):
         print("  Re-run with --confirm to actually delete.")
         return
 
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = _get_chroma_backend()().get_collection(palace_path, COLLECTION_NAME)
     before = col.count()
     print(f"  Collection size before: {before:,}")
 
@@ -358,7 +370,7 @@ def rebuild_index(palace_path=None, confirm_truncation_ok: bool = False):
     print(f"{'=' * 55}\n")
     print(f"  Palace: {palace_path}")
 
-    backend = ChromaBackend()
+    backend = _get_chroma_backend()()
     try:
         col = backend.get_collection(palace_path, COLLECTION_NAME)
         total = col.count()
@@ -466,8 +478,8 @@ def status(palace_path=None) -> dict:
         print("  No palace found.\n")
         return {"status": "unknown", "message": "no palace at path"}
 
-    drawers = hnsw_capacity_status(palace_path, "castle_drawers")
-    closets = hnsw_capacity_status(palace_path, "castle_closets")
+    drawers = _hnsw_capacity_status(palace_path, "castle_drawers")
+    closets = _hnsw_capacity_status(palace_path, "castle_closets")
 
     for label, info in (("drawers", drawers), ("closets", closets)):
         print(f"\n  [{label}]")
@@ -502,11 +514,11 @@ def _close_chroma_handles(palace_path: str) -> None:
     import gc
 
     try:
-        ChromaBackend().close_palace(palace_path)
+        _get_chroma_backend()().close_palace(palace_path)
     except Exception:
         pass
     try:
-        from chromadb.api.client import SharedSystemClient
+        from chromadb.api.client import SharedSystemClient  # type: ignore[import]
 
         SharedSystemClient.clear_system_cache()
     except Exception:
