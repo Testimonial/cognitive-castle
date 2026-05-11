@@ -212,3 +212,42 @@ def test_kg_value_rejects_null_bytes():
 def test_kg_value_rejects_over_length():
     with pytest.raises(ValueError):
         sanitize_kg_value("a" * 129)
+
+
+def test_config_has_retrieval_upgrade_keys():
+    from cognitive_castle.config import MempalaceConfig
+    cfg = MempalaceConfig()
+    # Cutover: defaults are now the new stack.
+    assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    assert cfg.embedder_dim == 384
+    assert cfg.use_new_retrieval_pipeline is True
+    # Reranker, fusion, recency, kg-hop unchanged.
+    assert cfg.reranker_model_gpu == "BAAI/bge-reranker-v2-m3"
+    assert cfg.reranker_model_cpu == "BAAI/bge-reranker-base"
+    assert cfg.reranker_k_interactive == 20
+    assert cfg.reranker_k_hook == 10
+    assert cfg.k_rrf == 60
+    assert cfg.weight_dense == 1.0
+    assert cfg.weight_sparse == 1.0
+    assert cfg.weight_kg == 0.5
+    assert cfg.recency_tau_days == 90.0
+    assert cfg.recency_max_boost == 1.5
+    assert cfg.kg_hop_top_n == 50
+
+
+def test_use_new_retrieval_pipeline_handles_false_string_in_config_json(tmp_path):
+    """Test that string 'false' in config.json is correctly parsed as False."""
+    with open(tmp_path / "config.json", "w") as f:
+        json.dump({"use_new_retrieval_pipeline": "false"}, f)
+
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.use_new_retrieval_pipeline is False
+
+
+def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
+    """Test that negative embedder_dim in config.json falls back to default."""
+    with open(tmp_path / "config.json", "w") as f:
+        json.dump({"embedder_dim": -1}, f)
+
+    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    assert cfg.embedder_dim == 384

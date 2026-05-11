@@ -18,13 +18,23 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 EMBED_DIM = 384
-_MODEL_NAME = "all-MiniLM-L6-v2"
 
 _model_cache: dict = {}
 
 
-def _get_model(device: str = "auto"):
-    cache_key = device
+def _resolve_model_name(cfg=None) -> str:
+    """Return the embedder model name from config (with default fallback)."""
+    if cfg is None:
+        from .config import MempalaceConfig
+
+        cfg = MempalaceConfig()
+    return cfg.embedder_model
+
+
+def _get_model(device: str = "auto", cfg=None):
+    name = _resolve_model_name(cfg)
+    resolved = _resolve_device(device)
+    cache_key = f"{name}@{resolved}"
     if cache_key in _model_cache:
         return _model_cache[cache_key]
 
@@ -35,8 +45,26 @@ def _get_model(device: str = "auto"):
             "sentence-transformers is required: pip install sentence-transformers"
         )
 
-    resolved = _resolve_device(device)
-    model = SentenceTransformer(_MODEL_NAME, device=resolved)
+    model = SentenceTransformer(name, device=resolved)
+
+    # bge-m3 with CUDA triggers a >3-minute flash-attention CUDA kernel
+    # compilation on first use (PyTorch 2.x SDPA).  The compiled kernel is
+    # NOT cached between processes, so every cold start hangs.  Disabling
+    # flash SDP and memory-efficient SDP forces PyTorch to use the math
+    # backend, which requires no JIT compilation and adds <1ms overhead for
+    # the short sequences Castle embeds.  This is a process-level flag so it
+    # applies to all subsequent CUDA ops, but Castle only uses CUDA for this
+    # model — no impact on other code paths.
+    if resolved == "cuda":
+        try:
+            import torch
+
+            torch.backends.cuda.enable_flash_sdp(False)
+            torch.backends.cuda.enable_mem_efficient_sdp(False)
+            logger.debug("Flash/MemEff SDP disabled to avoid first-run CUDA JIT hang")
+        except Exception:
+            pass  # non-fatal — worst case is a slow first encode
+
     _model_cache[cache_key] = model
     logger.info("Embedding model loaded (device=%s → %s)", device, resolved)
     return model

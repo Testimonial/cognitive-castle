@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
 
@@ -48,7 +47,15 @@ from .base import (
 
 logger = logging.getLogger(__name__)
 
-EMBED_DIM = 384
+
+def _legacy_embed_dim() -> int:
+    """Read default embedder_dim from config — for backward-compat constant only."""
+    from ..config import MempalaceConfig
+
+    return MempalaceConfig().embedder_dim
+
+
+EMBED_DIM = _legacy_embed_dim()  # backward-compat: prefer cfg.embedder_dim in new code
 
 # Columns extracted from metadata dict and stored as first-class filterable columns.
 _HOISTED = {"wing", "room", "source_file", "chunk_index", "decay_score"}
@@ -64,13 +71,20 @@ _SUPPORTED_OPS = frozenset(
 # ---------------------------------------------------------------------------
 
 
-def _make_schema() -> pa.Schema:
+def _build_schema(cfg) -> pa.Schema:
+    """Build the LanceDB Arrow schema using ``cfg.embedder_dim`` for the vector dimension.
+
+    This is the canonical schema factory.  Pass any object with an
+    ``embedder_dim`` attribute (e.g. ``MempalaceConfig`` or a ``MagicMock``
+    in tests).
+    """
+    dim = cfg.embedder_dim
     # All non-vector columns are non-nullable; missing strings use "" and
     # missing chunk_index uses -1 as sentinels so Arrow never sees None.
     return pa.schema(
         [
             pa.field("id", pa.utf8()),
-            pa.field("vector", pa.list_(pa.float32(), EMBED_DIM)),
+            pa.field("vector", pa.list_(pa.float32(), dim)),
             pa.field("text", pa.large_utf8()),
             pa.field("metadata_json", pa.large_utf8()),
             pa.field("wing", pa.utf8()),
@@ -80,6 +94,13 @@ def _make_schema() -> pa.Schema:
             pa.field("decay_score", pa.float64()),
         ]
     )
+
+
+def _make_schema() -> pa.Schema:
+    """Backward-compat shim — uses default config dim (384).  Prefer ``_build_schema(cfg)``."""
+    from ..config import MempalaceConfig
+
+    return _build_schema(MempalaceConfig())
 
 
 # ---------------------------------------------------------------------------
@@ -188,13 +209,14 @@ def _build_row(
     text: str,
     metadata: dict,
     embedding: Optional[list[float]],
+    dim: int = EMBED_DIM,
 ) -> dict:
     md = metadata or {}
     ci = md.get("chunk_index")
     ds = md.get("decay_score")
     return {
         "id": doc_id,
-        "vector": embedding if embedding is not None else [0.0] * EMBED_DIM,
+        "vector": embedding if embedding is not None else [0.0] * dim,
         "text": text or "",
         "metadata_json": json.dumps(md),
         # Hoisted columns — use sentinel values so Arrow schema never gets None
@@ -228,8 +250,95 @@ def _row_to_metadata(row: dict) -> dict:
 class LanceCollection(BaseCollection):
     """LanceDB-backed Cognitive Castle collection."""
 
-    def __init__(self, table):
+    def __init__(self, table, cfg=None):
         self._table = table
+        if cfg is None:
+            from ..config import MempalaceConfig
+
+            cfg = MempalaceConfig()
+        self._dim: int = cfg.embedder_dim
+        self._ensure_fts_index()
+
+    # -- FTS index -----------------------------------------------------------
+
+    def _ensure_fts_index(self, replace: bool = False) -> None:
+        """Create a Tantivy-backed FTS index on the ``text`` column if missing.
+
+        Idempotent: ``replace=False`` (default) is a no-op when the index
+        already exists.  Pass ``replace=True`` to rebuild after adding data.
+
+        Degrades gracefully: if LanceDB FTS is unavailable in this version the
+        exception is swallowed and ``fts_search`` will return ``[]``.
+        """
+        try:
+            self._table.create_fts_index("text", replace=replace)
+        except Exception as exc:
+            # Index already exists (replace=False), or FTS not supported in
+            # this LanceDB build.  Either way the pipeline degrades gracefully.
+            logger.debug("_ensure_fts_index: ignored exception: %s", exc)
+
+    # -- FTS search ----------------------------------------------------------
+
+    def fts_search(self, query: str, n_results: int = 100) -> list[dict]:
+        """Sparse keyword search via Tantivy FTS.
+
+        Returns rows ordered by relevance score.  Each row is a ``dict`` with
+        at minimum ``id`` and ``text`` keys; additional hoisted columns and an
+        optional ``_score`` column may be present depending on LanceDB version.
+
+        Returns ``[]`` for blank queries or when FTS is unavailable.
+        """
+        if not query.strip():
+            return []
+        try:
+            results = (
+                self._table.search(query, query_type="fts")
+                .limit(n_results)
+                .to_list()
+            )
+            return list(results)
+        except Exception as exc:
+            logger.debug("fts_search: FTS query failed (%s), returning []", exc)
+            return []
+
+    # -- Vector search -------------------------------------------------------
+
+    def vector_search(
+        self,
+        vec: list[float],
+        n_results: int = 100,
+        where: Optional[str] = None,
+    ) -> list[dict]:
+        """Similarity search by query vector.
+
+        Returns rows ordered by ascending cosine distance.  ``where`` is an
+        optional SQL filter string applied as a pre-filter.
+        """
+        q = self._table.search(vec, vector_column_name="vector").metric("cosine").limit(n_results)
+        if where:
+            try:
+                q = q.where(where, prefilter=True)
+            except Exception as exc:
+                logger.debug("vector_search: where filter ignored (%s)", exc)
+        return q.to_list()
+
+    # -- ID fetch ------------------------------------------------------------
+
+    def get_by_ids(self, ids: list[str]) -> list[dict]:
+        """Return rows matching any of the supplied IDs (order not guaranteed)."""
+        if not ids:
+            return []
+        quoted = ", ".join(_quote_val(i) for i in ids)
+        try:
+            return (
+                self._table.search(None)
+                .where(f"id IN ({quoted})")
+                .limit(len(ids))
+                .to_list()
+            )
+        except Exception as exc:
+            logger.debug("get_by_ids: fetch failed (%s), returning []", exc)
+            return []
 
     # -- Writes --------------------------------------------------------------
 
@@ -246,7 +355,7 @@ class LanceCollection(BaseCollection):
         vecs = self._embed_if_needed(documents, embeddings)
         metas = metadatas or [{} for _ in documents]
         rows = [
-            _build_row(doc_id, doc, meta, vec)
+            _build_row(doc_id, doc, meta, vec, self._dim)
             for doc_id, doc, meta, vec in zip(ids, documents, metas, vecs)
         ]
         self._table.add(rows)
@@ -255,7 +364,7 @@ class LanceCollection(BaseCollection):
         vecs = self._embed_if_needed(documents, embeddings)
         metas = metadatas or [{} for _ in documents]
         rows = [
-            _build_row(doc_id, doc, meta, vec)
+            _build_row(doc_id, doc, meta, vec, self._dim)
             for doc_id, doc, meta, vec in zip(ids, documents, metas, vecs)
         ]
         (
@@ -313,7 +422,6 @@ class LanceCollection(BaseCollection):
         combined_filter = _combine_sql(where_sql, wdoc_sql)
 
         spec = _IncludeSpec.resolve(include, default_distances=True)
-        num_queries = len(vecs)
 
         all_ids: list[list[str]] = []
         all_docs: list[list[str]] = []
@@ -450,7 +558,12 @@ class LanceDBBackend(BaseBackend):
         }
     )
 
-    def __init__(self):
+    def __init__(self, cfg=None):
+        if cfg is None:
+            from ..config import MempalaceConfig
+
+            cfg = MempalaceConfig()
+        self._cfg = cfg
         self._dbs: dict[str, Any] = {}
         self._tables: dict[tuple[str, str], Any] = {}
         self._lock = Lock()
@@ -496,13 +609,13 @@ class LanceDBBackend(BaseBackend):
         with self._lock:
             cached_table = self._tables.get(cache_key)
             if cached_table is not None:
-                return LanceCollection(cached_table)
+                return LanceCollection(cached_table, self._cfg)
 
             db = self._get_db(palace_path)
-            schema = _make_schema()
+            schema = _build_schema(self._cfg)
             table = db.create_table(collection_name, schema=schema, exist_ok=True)
             self._tables[cache_key] = table
-            return LanceCollection(table)
+            return LanceCollection(table, self._cfg)
 
     def close_palace(self, palace) -> None:
         path = palace.local_path if isinstance(palace, PalaceRef) else palace

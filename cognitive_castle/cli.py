@@ -634,6 +634,52 @@ def cmd_migrate(args):
     )
 
 
+def cmd_reindex(args) -> None:
+    """Rebuild the palace from sources at the current embedder identity.
+
+    Strategy:
+    1. Move existing palace to <palace>.legacy/.
+    2. Create a fresh palace at <palace>/.
+    3. Walk every directory in args.sources and run the existing mine pipeline
+       to populate the new palace.
+    4. Leave <palace>.legacy/ in place for user verification.
+    """
+    import shutil
+    from pathlib import Path
+
+    palace = Path(args.palace).expanduser().resolve()
+    legacy = palace.with_name(palace.name + ".legacy")
+
+    if legacy.exists():
+        if not args.yes:
+            print(
+                f"Refusing to overwrite existing legacy backup at {legacy}. "
+                f"Either delete it or pass --yes."
+            )
+            return
+        shutil.rmtree(legacy)
+
+    if palace.exists():
+        shutil.move(str(palace), str(legacy))
+        print(f"Moved existing palace to {legacy}")
+
+    palace.mkdir(parents=True, exist_ok=True)
+
+    from .miner import mine
+
+    for source_dir in args.sources or []:
+        print(f"Mining {source_dir} into fresh palace at {palace} ...")
+        mine(
+            project_dir=source_dir,
+            palace_path=str(palace),
+        )
+
+    print(
+        f"Reindex complete. Verify the new palace, then delete {legacy} when satisfied:\n"
+        f"    rm -rf {legacy}"
+    )
+
+
 def cmd_status(args):
     from .miner import status
 
@@ -1266,6 +1312,23 @@ def main():
         "--yes", action="store_true", help="Skip confirmation for destructive changes"
     )
 
+    p_reindex = sub.add_parser(
+        "reindex",
+        help="Rebuild the palace from sources (e.g. after an embedder upgrade)",
+    )
+    p_reindex.add_argument("--palace", required=True, help="Path to the palace directory.")
+    p_reindex.add_argument(
+        "--sources",
+        nargs="+",
+        required=True,
+        help="One or more source directories to mine into the new palace.",
+    )
+    p_reindex.add_argument(
+        "--yes",
+        action="store_true",
+        help="Overwrite an existing <palace>.legacy backup without prompting.",
+    )
+
     sub.add_parser("status", help="Show what's been filed")
 
     args = parser.parse_args()
@@ -1303,6 +1366,7 @@ def main():
         "repair": cmd_repair,
         "repair-status": cmd_repair_status,
         "migrate": cmd_migrate,
+        "reindex": cmd_reindex,
         "status": cmd_status,
     }
     dispatch[args.command](args)

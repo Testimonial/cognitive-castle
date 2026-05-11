@@ -53,10 +53,8 @@ from cognitive_castle.palace_graph import (
     list_tunnels,
 )
 from cognitive_castle.searcher import (
-    _bm25_scores,
     _expand_with_neighbors,
     _extract_drawer_ids_from_closet,
-    _hybrid_rank,
     search_memories,
 )
 
@@ -511,66 +509,6 @@ class TestEntityMetadata:
         assert "Link" in names
 
 
-# ── BM25 hybrid search (real IDF over candidate corpus) ──────────────
-
-
-class TestBM25:
-    def test_scores_positive_for_matching_doc(self):
-        scores = _bm25_scores(
-            "database migration",
-            ["We migrated the database to Postgres.", "unrelated cookery tips"],
-        )
-        assert scores[0] > 0
-        assert scores[1] == 0.0
-
-    def test_scores_zero_when_no_overlap(self):
-        scores = _bm25_scores("quantum physics", ["We built a web app in React"])
-        assert scores == [0.0]
-
-    def test_idf_downweights_terms_present_in_every_doc(self):
-        # "database" appears in every candidate → low IDF → low contribution.
-        # "vacuum" is unique to one → high IDF → that doc dominates.
-        scores = _bm25_scores(
-            "database vacuum",
-            [
-                "database backup nightly schedule",
-                "database vacuum scheduled weekly",
-                "database failover plan",
-            ],
-        )
-        assert scores[1] == max(scores), "doc with the rare query term should win on IDF"
-
-    def test_empty_inputs_return_zeros(self):
-        assert _bm25_scores("", ["hello world"]) == [0.0]
-        assert _bm25_scores("query here", []) == []
-        assert _bm25_scores("query", [""]) == [0.0]
-
-    def test_hybrid_rank_promotes_keyword_match(self):
-        results = [
-            {"text": "database schema design for Postgres", "distance": 0.5},
-            {"text": "unrelated topic about cooking", "distance": 0.3},
-        ]
-        ranked = _hybrid_rank(results, "database Postgres schema")
-        # The keyword-rich result outranks the closer-vector but irrelevant one.
-        assert "database" in ranked[0]["text"]
-        # bm25_score field is exposed for debugging.
-        assert "bm25_score" in ranked[0]
-        # No internal scoring leak.
-        assert "_hybrid_score" not in ranked[0]
-
-    def test_hybrid_rank_absolute_normalization(self):
-        # Adding a much-worse result to the candidate set must NOT reshuffle
-        # the top two — proves we're using absolute (1 - dist) and not
-        # dist / max_dist normalization.
-        base = [
-            {"text": "alpha alpha alpha", "distance": 0.1},
-            {"text": "beta beta beta", "distance": 0.4},
-        ]
-        ranked_short = _hybrid_rank([dict(r) for r in base], "alpha")
-        with_outlier = base + [{"text": "gamma gamma gamma", "distance": 1.9}]
-        ranked_long = _hybrid_rank([dict(r) for r in with_outlier], "alpha")
-        assert ranked_short[0]["text"] == ranked_long[0]["text"]
-        assert ranked_short[1]["text"] == ranked_long[1]["text"]
 
 
 # ── diary ingest ─────────────────────────────────────────────────────

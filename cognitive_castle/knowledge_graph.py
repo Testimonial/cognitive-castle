@@ -390,6 +390,47 @@ class KnowledgeGraph:
             "relationship_types": predicates,
         }
 
+    # ── KG-hop drawer lookup ──────────────────────────────────────────────
+
+    def find_drawers_by_entities(
+        self,
+        entity_names: list,
+        limit: int = 50,
+    ) -> list:
+        """Return drawer IDs tagged with any of the supplied entities.
+
+        Drawers are ranked by the count of distinct queried entities they touch
+        (descending), then by recency of triple insertion (descending via
+        MAX(extracted_at)), then by drawer_id ascending for determinism.
+
+        Parameters
+        ----------
+        entity_names:
+            Canonical entity names. Internally resolved to entity IDs via
+            ``_entity_id``.
+        limit:
+            Maximum number of drawer IDs to return.
+        """
+        if not entity_names:
+            return []
+        entity_ids = [self._entity_id(name) for name in entity_names]
+        placeholders = ",".join("?" * len(entity_ids))
+        sql = f"""
+            SELECT t.source_drawer_id,
+                   COUNT(DISTINCT t.subject) AS match_count,
+                   MAX(t.extracted_at) AS latest_extracted_at
+            FROM triples t
+            WHERE (t.subject IN ({placeholders}) OR t.object IN ({placeholders}))
+              AND t.source_drawer_id IS NOT NULL
+            GROUP BY t.source_drawer_id
+            ORDER BY match_count DESC, latest_extracted_at DESC, t.source_drawer_id ASC
+            LIMIT ?
+        """
+        with self._lock:
+            conn = self._conn()
+            rows = conn.execute(sql, entity_ids + entity_ids + [limit]).fetchall()
+        return [r[0] for r in rows]
+
     # ── Seed from known facts ─────────────────────────────────────────────
 
     def seed_from_entity_facts(self, entity_facts: dict):

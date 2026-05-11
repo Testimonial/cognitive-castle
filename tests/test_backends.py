@@ -5,7 +5,7 @@ from pathlib import Path
 import chromadb
 import pytest
 
-from cognitive_cognitive_castle.backends import (
+from cognitive_castle.backends import (
     GetResult,
     PalaceRef,
     QueryResult,
@@ -13,7 +13,7 @@ from cognitive_cognitive_castle.backends import (
     available_backends,
     get_backend,
 )
-from cognitive_cognitive_castle.backends.chroma import (
+from cognitive_castle.backends.chroma import (
     ChromaBackend,
     ChromaCollection,
     _fix_blob_seq_ids,
@@ -154,7 +154,7 @@ def test_registry_unknown_backend_raises():
 
 
 def test_resolve_backend_priority_order(tmp_path):
-    from cognitive_cognitive_castle.backends import resolve_backend_for_palace
+    from cognitive_castle.backends import resolve_backend_for_palace
 
     # explicit kwarg wins over everything
     assert resolve_backend_for_palace(explicit="pg", config_value="lance") == "pg"
@@ -270,7 +270,7 @@ def test_chroma_cache_picks_up_db_created_after_first_open(tmp_path):
 
 def test_base_collection_update_default_rejects_mismatched_lengths():
     """The ABC default update() raises ValueError rather than silently misaligning."""
-    from cognitive_cognitive_castle.backends.base import BaseCollection
+    from cognitive_castle.backends.base import BaseCollection
 
     collection = ChromaCollection(_FakeCollection())
 
@@ -506,7 +506,7 @@ def test_fix_blob_seq_ids_still_converts_legacy_blobs_in_embeddings(tmp_path):
 
 def test_fix_blob_seq_ids_writes_marker_after_blob_path(tmp_path):
     """The .blob_seq_ids_migrated marker is written after a successful BLOB → INTEGER conversion."""
-    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     db_path = tmp_path / "chroma.sqlite3"
     conn = sqlite3.connect(str(db_path))
@@ -531,7 +531,7 @@ def test_fix_blob_seq_ids_writes_marker_when_already_integer(tmp_path):
     marker on first run too — next ``_fix_blob_seq_ids`` call short-circuits
     before touching the sqlite3 file.
     """
-    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     db_path = tmp_path / "chroma.sqlite3"
     conn = sqlite3.connect(str(db_path))
@@ -557,14 +557,14 @@ def test_fix_blob_seq_ids_skips_sqlite_when_marker_present(tmp_path):
     never want to open it again, even read-only.
     """
     from unittest.mock import patch
-    from cognitive_cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
+    from cognitive_castle.backends.chroma import _BLOB_FIX_MARKER
 
     # Pre-create the marker so the function should short-circuit.
     db_path = tmp_path / "chroma.sqlite3"
     db_path.write_bytes(b"sentinel")  # presence required for the function to proceed
     (tmp_path / _BLOB_FIX_MARKER).touch()
 
-    with patch("cognitive_cognitive_castle.backends.chroma.sqlite3.connect") as mock_connect:
+    with patch("cognitive_castle.backends.chroma.sqlite3.connect") as mock_connect:
         _fix_blob_seq_ids(str(tmp_path))
 
     mock_connect.assert_not_called()
@@ -709,7 +709,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
     skipped on subsequent calls — prevents runtime thrash where a daemon's
     own steady writes bump ``chroma.sqlite3`` faster than HNSW flushes,
     making the mtime heuristic falsely trigger every reconnect."""
-    from cognitive_cognitive_castle.backends.chroma import ChromaBackend
+    from cognitive_castle.backends.chroma import ChromaBackend
 
     palace_path = str(tmp_path / "palace")
     os.makedirs(palace_path, exist_ok=True)
@@ -724,7 +724,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
         calls.append(path)
         return []
 
-    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     ChromaBackend.make_client(palace_path)
     ChromaBackend.make_client(palace_path)
@@ -738,7 +738,7 @@ def test_make_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeyp
 def test_make_client_quarantines_each_palace_independently(tmp_path, monkeypatch):
     """Two distinct palaces each get one quarantine attempt — the gate is
     keyed by palace path, not global."""
-    from cognitive_cognitive_castle.backends.chroma import ChromaBackend
+    from cognitive_castle.backends.chroma import ChromaBackend
 
     palace_a = str(tmp_path / "palace_a")
     palace_b = str(tmp_path / "palace_b")
@@ -754,7 +754,7 @@ def test_make_client_quarantines_each_palace_independently(tmp_path, monkeypatch
         calls.append(path)
         return []
 
-    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     ChromaBackend.make_client(palace_a)
     ChromaBackend.make_client(palace_b)
@@ -810,7 +810,7 @@ def test_client_quarantines_only_on_first_call_per_palace(tmp_path, monkeypatch)
         calls.append(path)
         return []
 
-    monkeypatch.setattr("cognitive_cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
+    monkeypatch.setattr("cognitive_castle.backends.chroma.quarantine_stale_hnsw", _spy)
 
     backend = ChromaBackend()
     try:
@@ -872,3 +872,53 @@ def test_get_collection_applies_retrofit_on_existing_palace(tmp_path):
     )
 
     assert wrapper._collection.configuration_json["hnsw"]["num_threads"] == 1
+
+
+def test_lancedb_schema_uses_config_dim(tmp_path):
+    """Schema dim is sourced from config.embedder_dim, not a hardcoded constant."""
+    from unittest.mock import MagicMock
+    from cognitive_castle.backends.lancedb_backend import _build_schema
+
+    cfg_384 = MagicMock()
+    cfg_384.embedder_dim = 384
+    schema_384 = _build_schema(cfg_384)
+    vector_field_384 = next(f for f in schema_384 if f.name == "vector")
+    # pyarrow's list_ field has list_size accessible via .type.list_size
+    assert vector_field_384.type.list_size == 384
+
+    cfg_1024 = MagicMock()
+    cfg_1024.embedder_dim = 1024
+    schema_1024 = _build_schema(cfg_1024)
+    vector_field_1024 = next(f for f in schema_1024 if f.name == "vector")
+    assert vector_field_1024.type.list_size == 1024
+
+
+def test_fts_index_is_created_alongside_vector(tmp_path):
+    """When a backend creates a new collection, an FTS index on the text column is built."""
+    from cognitive_castle.backends.lancedb_backend import LanceDBBackend, PalaceRef
+
+    backend = LanceDBBackend()
+    palace = PalaceRef(id="test", local_path=str(tmp_path / "palace"))
+    col = backend.get_collection(
+        palace=palace,
+        collection_name="drawers",
+        create=True,
+    )
+    # Add a row so we have something to search.
+    col.add(
+        documents=["the quick brown fox jumps over the lazy dog"],
+        ids=["d1"],
+        metadatas=[{"wing": "test", "room": "test", "ts": "2026-05-10"}],
+    )
+    # Refresh FTS index after adding data (create_fts_index with replace=True).
+    col._ensure_fts_index(replace=True)
+    # FTS should find the row by a keyword in the document.
+    results = col.fts_search("brown fox", n_results=5)
+    assert len(results) >= 1
+    # Result row format: at minimum should have an id and the query terms in the text.
+    first = results[0]
+    # Be liberal in what we accept — the row may have keys "id", "ids", or be a (id, doc) tuple.
+    if isinstance(first, dict):
+        assert any(v == "d1" for v in first.values())
+    else:
+        assert "d1" in str(first)

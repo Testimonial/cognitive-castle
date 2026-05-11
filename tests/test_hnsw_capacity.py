@@ -19,7 +19,6 @@ from cognitive_cognitive_castle.backends.chroma import (
     _vector_segment_id,
     hnsw_capacity_status,
 )
-from cognitive_castle.searcher import _bm25_only_via_sqlite
 
 
 COLLECTION = "castle_drawers"
@@ -397,38 +396,24 @@ def palace_with_drawers(tmp_path):
     return tmp_path
 
 
+@pytest.mark.skip(reason="Legacy BM25 fallback removed in Task 14 (Tantivy FTS replaces it)")
 def test_bm25_fallback_returns_matches(palace_with_drawers):
-    out = _bm25_only_via_sqlite("segfault chromadb", str(palace_with_drawers), n_results=5)
-    assert out["fallback"] == "bm25_only_via_sqlite"
-    assert len(out["results"]) >= 1
-    top = out["results"][0]
-    # The incident drawer is the closest BM25 match for these terms.
-    assert "segfault" in top["text"].lower()
-    assert top["matched_via"] == "bm25_sqlite"
-    # Vector fields are intentionally absent in fallback mode.
-    assert top["similarity"] is None
-    assert top["distance"] is None
+    pass
 
 
+@pytest.mark.skip(reason="Legacy BM25 fallback removed in Task 14")
 def test_bm25_fallback_filters_by_wing(palace_with_drawers):
-    out = _bm25_only_via_sqlite(
-        "memory palace recall", str(palace_with_drawers), wing="design", n_results=5
-    )
-    assert all(r["wing"] == "design" for r in out["results"])
+    pass
 
 
+@pytest.mark.skip(reason="Legacy BM25 fallback removed in Task 14")
 def test_bm25_fallback_no_palace(tmp_path):
-    out = _bm25_only_via_sqlite("anything", str(tmp_path))
-    assert "error" in out
+    pass
 
 
+@pytest.mark.skip(reason="Legacy BM25 fallback removed in Task 14")
 def test_bm25_fallback_handles_short_query(palace_with_drawers):
-    """Single-character tokens are unmatchable in trigram FTS5 — must
-    not crash, must fall back to the recency window."""
-    out = _bm25_only_via_sqlite("a", str(palace_with_drawers), n_results=5)
-    # Falls back to recency window; returns whatever it can rank.
-    assert out["fallback"] == "bm25_only_via_sqlite"
-    assert isinstance(out["results"], list)
+    pass
 
 
 # ── repair.status CLI command ─────────────────────────────────────────

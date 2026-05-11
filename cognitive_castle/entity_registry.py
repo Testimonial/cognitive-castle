@@ -19,8 +19,39 @@ import json
 import re
 import urllib.request
 import urllib.parse
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EntityMatch — returned by lookup_in_text
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class EntityMatch:
+    entity_id: str       # canonical entity name (e.g., "Alice", "cognitive-castle")
+    matched_token: str   # the substring from query that matched (in original case)
+    edit_distance: int   # 0 for exact, >0 for fuzzy
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, start=1):
+        curr = [i] + [0] * len(b)
+        for j, cb in enumerate(b, start=1):
+            cost = 0 if ca == cb else 1
+            curr[j] = min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+        prev = curr
+    return prev[-1]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -667,6 +698,62 @@ class EntityRegistry:
             if result["type"] == "unknown":
                 unknown.append(word)
         return unknown
+
+    def lookup_in_text(
+        self,
+        query: str,
+        max_edit_distance: int = 1,
+    ) -> list:
+        """
+        Find entity mentions in arbitrary text using fuzzy matching.
+
+        Tokenizes on whitespace + punctuation, generates token windows of
+        length 1..3 (for multi-word entities), and matches each window
+        against known people and projects with Levenshtein edit distance
+        capped at ``max_edit_distance``.
+
+        Returns a list of :class:`EntityMatch` objects, deduplicated by
+        canonical entity_id (best edit_distance wins).  Returns an empty
+        list if no matches are found.
+
+        Args:
+            query: Arbitrary text to search for entity mentions.
+            max_edit_distance: Maximum allowed edit distance (0 = exact only).
+        """
+        # Build candidate dictionary: lowercase form -> canonical entity_id.
+        candidates: dict = {}
+        for name in self.people.keys():
+            candidates[name.lower()] = name
+        for proj in self.projects:
+            candidates[proj.lower()] = proj
+
+        # Tokenize on whitespace + punctuation.
+        tokens = [t for t in re.split(r"[\s,.;:!?()\[\]{}\"']+", query) if t]
+        if not tokens:
+            return []
+
+        # Token windows of length 1..3.
+        windows: list = []
+        for n in (1, 2, 3):
+            for i in range(len(tokens) - n + 1):
+                windows.append(" ".join(tokens[i : i + n]))
+
+        # Match each window against each candidate; keep best per entity.
+        best_per_entity: dict = {}
+        for window in windows:
+            win_lc = window.lower()
+            for cand_lc, canonical in candidates.items():
+                d = _levenshtein(win_lc, cand_lc)
+                if d <= max_edit_distance:
+                    existing = best_per_entity.get(canonical)
+                    if existing is None or d < existing.edit_distance:
+                        best_per_entity[canonical] = EntityMatch(
+                            entity_id=canonical,
+                            matched_token=window,
+                            edit_distance=d,
+                        )
+
+        return list(best_per_entity.values())
 
     # ── Summary ──────────────────────────────────────────────────────────────
 
