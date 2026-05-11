@@ -46,9 +46,9 @@ COLLECTION_NAME = "castle_drawers"
 def _get_palace_path():
     """Resolve palace path from config."""
     try:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
-        return MempalaceConfig().palace_path
+        return CognitiveCastleConfig().palace_path
     except Exception:
         default = os.path.join(os.path.expanduser("~"), ".castle", "palace")
         return default

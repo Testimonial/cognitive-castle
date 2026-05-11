@@ -58,8 +58,8 @@ def rerank(
     if not candidates:
         return []
     if cfg is None:
-        from .config import MempalaceConfig
-        cfg = MempalaceConfig()
+        from .config import CognitiveCastleConfig
+        cfg = CognitiveCastleConfig()
     resolved_device = _resolve_device(device)
     model_name = _pick_model_for_device(resolved_device, cfg)
     model = _get_reranker(model_name, resolved_device)

@@ -33,9 +33,9 @@ def _detect_hall_cached(content: str) -> str:
     """Route content to a hall using cached keywords. Same logic as miner.detect_hall."""
     global _HALL_KEYWORDS_CACHE
     if _HALL_KEYWORDS_CACHE is None:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
-        _HALL_KEYWORDS_CACHE = MempalaceConfig().hall_keywords
+        _HALL_KEYWORDS_CACHE = CognitiveCastleConfig().hall_keywords
     content_lower = content[:3000].lower()
     scores = {}
     for hall, keywords in _HALL_KEYWORDS_CACHE.items():
@@ -512,6 +512,6 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python convo_miner.py <convo_dir> [--palace PATH] [--limit N] [--dry-run]")
         sys.exit(1)
-    from .config import MempalaceConfig
+    from .config import CognitiveCastleConfig
 
-    mine_convos(sys.argv[1], palace_path=MempalaceConfig().palace_path)
+    mine_convos(sys.argv[1], palace_path=CognitiveCastleConfig().palace_path)

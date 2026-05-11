@@ -25,9 +25,9 @@ _model_cache: dict = {}
 def _resolve_model_name(cfg=None) -> str:
     """Return the embedder model name from config (with default fallback)."""
     if cfg is None:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
-        cfg = MempalaceConfig()
+        cfg = CognitiveCastleConfig()
     return cfg.embedder_model
 
 
@@ -113,9 +113,9 @@ def get_embedding_function(device: Optional[str] = None):
     """Return a callable embedding function compatible with the ChromaDB EF contract."""
     if device is None:
         try:
-            from .config import MempalaceConfig
+            from .config import CognitiveCastleConfig
 
-            device = MempalaceConfig().embedding_device
+            device = CognitiveCastleConfig().embedding_device
         except Exception:
             device = "auto"
     return _SentenceTransformerEF(device or "auto")
@@ -124,9 +124,9 @@ def get_embedding_function(device: Optional[str] = None):
 def describe_device(device: Optional[str] = None) -> str:
     if device is None:
         try:
-            from .config import MempalaceConfig
+            from .config import CognitiveCastleConfig
 
-            device = MempalaceConfig().embedding_device
+            device = CognitiveCastleConfig().embedding_device
         except Exception:
             device = "auto"
     return _resolve_device(device or "auto")

@@ -529,10 +529,10 @@ def _ingest_transcript(transcript_path: str):
     if not path.is_file() or path.stat().st_size < 100:
         return
 
-    from .config import MempalaceConfig
+    from .config import CognitiveCastleConfig
 
     try:
-        MempalaceConfig()  # validate config loads
+        CognitiveCastleConfig()  # validate config loads
     except Exception:
         return
 
@@ -625,14 +625,14 @@ def hook_stop(data: dict, harness: str):
         # (v3.3.0+), so if we can't read config, behave as if it's still on.
         silent_guard = True
         try:
-            from .config import MempalaceConfig
+            from .config import CognitiveCastleConfig
         except ImportError as exc:
             _log(
-                f"WARNING: could not import MempalaceConfig for stop guard: {exc}; defaulting to silent mode"
+                f"WARNING: could not import CognitiveCastleConfig for stop guard: {exc}; defaulting to silent mode"
             )
         else:
             try:
-                silent_guard = MempalaceConfig().hook_silent_save
+                silent_guard = CognitiveCastleConfig().hook_silent_save
             except AttributeError as exc:
                 _log(f"WARNING: could not read hook_silent_save: {exc}; defaulting to silent mode")
         if not silent_guard:
@@ -660,10 +660,10 @@ def hook_stop(data: dict, harness: str):
         _log(f"TRIGGERING SAVE at exchange {exchange_count}")
 
         # Read hook settings from config
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
         try:
-            config = MempalaceConfig()
+            config = CognitiveCastleConfig()
             silent = config.hook_silent_save
             toast = config.hook_desktop_toast
         except Exception:

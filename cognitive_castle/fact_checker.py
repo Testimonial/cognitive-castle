@@ -57,9 +57,9 @@ def check_text(text: str, palace_path: str = None, config=None) -> list:
     every issue is anchored to a specific KG fact or registry entry.
     """
     if config is None:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
-        config = MempalaceConfig()
+        config = CognitiveCastleConfig()
     if palace_path is None:
         palace_path = config.palace_path
 

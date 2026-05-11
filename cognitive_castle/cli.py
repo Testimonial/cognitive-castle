@@ -33,7 +33,7 @@ import shlex
 import argparse
 from pathlib import Path
 
-from .config import MempalaceConfig
+from .config import CognitiveCastleConfig
 from .corpus_origin import detect_origin_heuristic, detect_origin_llm
 from .llm_client import LLMError, get_provider
 from .version import __version__
@@ -239,7 +239,7 @@ def cmd_init(args):
     if getattr(args, "palace", None):
         os.environ["CASTLE_PALACE_PATH"] = os.path.abspath(os.path.expanduser(args.palace))
 
-    cfg = MempalaceConfig()
+    cfg = CognitiveCastleConfig()
 
     # Resolve entity-detection languages: --lang overrides config.
     lang_arg = getattr(args, "lang", None)
@@ -485,7 +485,7 @@ def _maybe_run_mine_after_init(args, cfg) -> None:
 
 
 def cmd_mine(args):
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     include_ignored = []
     for raw in args.include_ignored or []:
         include_ignored.extend(part.strip() for part in raw.split(",") if part.strip())
@@ -539,7 +539,7 @@ def cmd_sweep(args):
     """
     from .sweeper import sweep, sweep_directory
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     target = os.path.expanduser(args.target)
 
     if os.path.isfile(target):
@@ -572,7 +572,7 @@ def cmd_sweep(args):
 def cmd_search(args):
     from .searcher import search, SearchError
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     try:
         search(
             query=args.query,
@@ -589,7 +589,7 @@ def cmd_wakeup(args):
     """Show L0 (identity) + L1 (essential story) — the wake-up context."""
     from .layers import MemoryStack
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     stack = MemoryStack(palace_path=palace_path)
 
     text = stack.wake_up(wing=args.wing)
@@ -626,7 +626,7 @@ def cmd_migrate(args):
     """Migrate palace from a different ChromaDB version."""
     from .migrate import migrate
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     migrate(
         palace_path=palace_path,
         dry_run=args.dry_run,
@@ -683,7 +683,7 @@ def cmd_reindex(args) -> None:
 def cmd_status(args):
     from .miner import status
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     status(palace_path=palace_path)
 
 
@@ -691,7 +691,7 @@ def cmd_repair_status(args):
     """Read-only HNSW capacity health check (#1222)."""
     from .repair import status as repair_status
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     repair_status(palace_path=palace_path)
 
 
@@ -710,7 +710,7 @@ def cmd_repair(args):
     from .repair import TruncationDetected, check_extraction_safety
 
     palace_path = os.path.abspath(
-        os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
     )
 
     if getattr(args, "mode", "legacy") == "max-seq-id":
@@ -867,7 +867,7 @@ def cmd_compress(args):
     from .backends.chroma import ChromaBackend
     from .dialect import Dialect
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else MempalaceConfig().palace_path
+    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
 
     # Load dialect (with optional entity config)
     config_path = args.config

@@ -50,9 +50,9 @@ logger = logging.getLogger(__name__)
 
 def _legacy_embed_dim() -> int:
     """Read default embedder_dim from config — for backward-compat constant only."""
-    from ..config import MempalaceConfig
+    from ..config import CognitiveCastleConfig
 
-    return MempalaceConfig().embedder_dim
+    return CognitiveCastleConfig().embedder_dim
 
 
 EMBED_DIM = _legacy_embed_dim()  # backward-compat: prefer cfg.embedder_dim in new code
@@ -75,7 +75,7 @@ def _build_schema(cfg) -> pa.Schema:
     """Build the LanceDB Arrow schema using ``cfg.embedder_dim`` for the vector dimension.
 
     This is the canonical schema factory.  Pass any object with an
-    ``embedder_dim`` attribute (e.g. ``MempalaceConfig`` or a ``MagicMock``
+    ``embedder_dim`` attribute (e.g. ``CognitiveCastleConfig`` or a ``MagicMock``
     in tests).
     """
     dim = cfg.embedder_dim
@@ -98,9 +98,9 @@ def _build_schema(cfg) -> pa.Schema:
 
 def _make_schema() -> pa.Schema:
     """Backward-compat shim — uses default config dim (384).  Prefer ``_build_schema(cfg)``."""
-    from ..config import MempalaceConfig
+    from ..config import CognitiveCastleConfig
 
-    return _build_schema(MempalaceConfig())
+    return _build_schema(CognitiveCastleConfig())
 
 
 # ---------------------------------------------------------------------------
@@ -253,9 +253,9 @@ class LanceCollection(BaseCollection):
     def __init__(self, table, cfg=None):
         self._table = table
         if cfg is None:
-            from ..config import MempalaceConfig
+            from ..config import CognitiveCastleConfig
 
-            cfg = MempalaceConfig()
+            cfg = CognitiveCastleConfig()
         self._dim: int = cfg.embedder_dim
         self._ensure_fts_index()
 
@@ -560,9 +560,9 @@ class LanceDBBackend(BaseBackend):
 
     def __init__(self, cfg=None):
         if cfg is None:
-            from ..config import MempalaceConfig
+            from ..config import CognitiveCastleConfig
 
-            cfg = MempalaceConfig()
+            cfg = CognitiveCastleConfig()
         self._cfg = cfg
         self._dbs: dict[str, Any] = {}
         self._tables: dict[tuple[str, str], Any] = {}
