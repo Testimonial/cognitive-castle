@@ -20,7 +20,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MEMPALACE_PKG = REPO_ROOT / "cognitive-castle"
+MEMPALACE_PKG = REPO_ROOT / "cognitive_castle"
 README_PATH = REPO_ROOT / "README.md"
 MCP_TOOLS_DOC_PATH = REPO_ROOT / "website" / "reference" / "mcp-tools.md"
 MODULES_DOC_PATH = REPO_ROOT / "website" / "reference" / "modules.md"
