@@ -26,6 +26,14 @@ os.environ["USERPROFILE"] = _session_tmp
 os.environ["HOMEDRIVE"] = os.path.splitdrive(_session_tmp)[0] or "C:"
 os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 
+# Preserve access to the user's HuggingFace model cache so tests reuse downloaded
+# weights (bge-m3 is ~570 MB; re-downloading per session is prohibitive). HOME
+# isolation above still protects everything else.
+_original_env["HF_HOME"] = os.environ.get("HF_HOME")
+_real_home = _original_env.get("HOME")
+if _real_home:
+    os.environ["HF_HOME"] = os.environ.get("HF_HOME") or os.path.join(_real_home, ".cache/huggingface")
+
 # Now it is safe to import mempalace modules that trigger initialisation.
 import pytest  # noqa: E402
 
