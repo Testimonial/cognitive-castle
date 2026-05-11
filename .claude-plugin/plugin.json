@@ -1,25 +1,13 @@
 {
-  "name": "mempalace",
+  "name": "castle",
   "version": "3.3.3",
-  "description": "Give your AI a memory — mine projects and conversations into a searchable palace. 19 MCP tools, auto-save hooks, and guided setup.",
-  "author": {
-    "name": "milla-jovovich"
-  },
+  "description": "Cognitive Castle — persistent verbatim memory for Claude Code agents. LanceDB-backed local search, MCP tools, auto-save hooks. Local-first, no API keys required.",
+  "author": { "name": "Ladislav Bihari" },
   "license": "MIT",
   "commands": [],
   "mcpServers": {
-    "mempalace": {
-      "command": "mempalace-mcp"
-    }
+    "castle": { "command": "castle-mcp" }
   },
-  "keywords": [
-    "memory",
-    "ai",
-    "rag",
-    "mcp",
-    "chromadb",
-    "palace",
-    "search"
-  ],
-  "repository": "https://github.com/MemPalace/mempalace"
+  "keywords": ["memory", "ai", "mcp", "lancedb", "palace", "search", "verbatim"],
+  "repository": "https://github.com/Testimonial/cognitive-castle"
 }

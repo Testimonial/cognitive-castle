@@ -1,18 +1,16 @@
 {
-  "name": "mempalace",
+  "name": "cognitive-castle",
   "owner": {
-    "name": "milla-jovovich",
-    "url": "https://github.com/MemPalace"
+    "name": "Ladislav Bihari",
+    "url": "https://github.com/Testimonial"
   },
   "plugins": [
     {
-      "name": "mempalace",
+      "name": "castle",
       "source": "./.claude-plugin",
-      "description": "AI memory system — mine projects and conversations into a searchable palace. 19 MCP tools, auto-save hooks, guided setup.",
+      "description": "Persistent verbatim memory for Claude Code agents — LanceDB-backed, local-first.",
       "version": "3.3.3",
-      "author": {
-        "name": "milla-jovovich"
-      }
+      "author": { "name": "Ladislav Bihari" }
     }
   ]
 }
