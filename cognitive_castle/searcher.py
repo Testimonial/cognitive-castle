@@ -143,42 +143,6 @@ def _expand_with_neighbors(drawers_col, matched_doc: str, matched_meta: dict, ra
     }
 
 
-def _warn_if_legacy_metric(col) -> None:
-    """Print a one-line notice if the palace was created without
-    ``hnsw:space=cosine``.
-
-    ChromaDB's default is L2 (Euclidean), under which cosine-based
-    similarity interpretation falls apart — distances routinely exceed
-    1.0 and the display ``max(0, 1 - dist)`` floors every result to 0.
-    Legacy palaces (mined before this metadata was consistently set)
-    need ``castle repair`` to rebuild with the correct metric.
-
-    The warning fires only for palaces that clearly have the wrong
-    metric; palaces with no metadata table at all (empty dict) also
-    fall under this check since that is the signal of a pre-metadata
-    palace.
-    """
-    try:
-        meta = getattr(col, "metadata", None)
-    except Exception:
-        return
-    if not isinstance(meta, dict):
-        return
-    space = meta.get("hnsw:space")
-    if space == "cosine":
-        return
-    # Either missing or set to something else — both are suspect.
-    import sys as _sys
-
-    detail = f"hnsw:space={space!r}" if space else "no hnsw:space metadata"
-    print(
-        f"\n  NOTICE: this palace was created without cosine distance ({detail}).\n"
-        "          Semantic similarity scores will not be meaningful.\n"
-        "          Run `castle repair` to rebuild the index with the correct metric.",
-        file=_sys.stderr,
-    )
-
-
 def search(query: str, palace_path: str, wing: str = None, room: str = None, n_results: int = 5):
     """CLI entry point.
 
