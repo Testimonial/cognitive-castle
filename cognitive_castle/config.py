@@ -146,7 +146,7 @@ DEFAULT_HALL_KEYWORDS = {
 }
 
 
-class MempalaceConfig:
+class CognitiveCastleConfig:
     """Configuration manager for Cognitive Castle.
 
     Load order: env vars > config file > defaults.
@@ -635,3 +635,9 @@ class MempalaceConfig:
         except (OSError, NotImplementedError):
             pass
         return self._people_map_file
+
+
+# Backward-compat alias. Programmatic users still importing the old name keep
+# working. Kept indefinitely; remove only after a deliberate breaking-change
+# version bump.
+MempalaceConfig = CognitiveCastleConfig
