@@ -12,8 +12,6 @@ import logging
 import re
 from pathlib import Path
 
-from .palace import get_collection
-
 # Closet pointer line format: "topic|entities|→drawer_id_a,drawer_id_b"
 # Multiple lines may join with newlines inside one closet document.
 _CLOSET_DRAWER_REF_RE = re.compile(r"→([\w,]+)")
@@ -182,51 +180,30 @@ def _warn_if_legacy_metric(col) -> None:
 
 
 def search(query: str, palace_path: str, wing: str = None, room: str = None, n_results: int = 5):
-    """
-    Search the palace. Returns verbatim drawer content.
-    Optionally filter by wing (project) or room (aspect).
-    """
-    try:
-        col = get_collection(palace_path, create=False)
-    except Exception:
-        print(f"\n  No palace found at {palace_path}")
-        print("  Run: castle init <dir> then castle mine <dir>")
-        raise SearchError(f"No palace found at {palace_path}")
+    """CLI entry point.
 
-    # Alert the user if this palace predates hnsw:space=cosine being set on
-    # creation — their similarity scores will be junk until they run repair.
-    _warn_if_legacy_metric(col)
+    Routes through the 3-stage pipeline (dense + FTS + KG-hop → fuse → rerank),
+    same as `search_memories()`. Prints results to stdout in the legacy format
+    so existing scraping tests keep working. Score shown is the cross-encoder
+    reranker score, not cosine distance.
 
-    where = build_where_filter(wing, room)
+    Raises SearchError if the pipeline fails. Returns None either way (this is
+    a print-only function — programmatic callers should use `search_memories`).
+    """
+    from .config import CognitiveCastleConfig
+    cfg = CognitiveCastleConfig()
 
     try:
-        kwargs = {
-            "query_texts": [query],
-            "n_results": n_results,
-            "include": ["documents", "metadatas", "distances"],
-        }
-        if where:
-            kwargs["where"] = where
-
-        results = col.query(**kwargs)
-
+        hits = _new_pipeline_search(
+            query, palace_path, wing, room, n_results, cfg, is_hook_call=False
+        )
     except Exception as e:
         print(f"\n  Search error: {e}")
         raise SearchError(f"Search error: {e}") from e
 
-    docs = _first_or_empty(results, "documents")
-    metas = _first_or_empty(results, "metadatas")
-    dists = _first_or_empty(results, "distances")
-
-    if not docs:
+    if not hits:
         print(f'\n  No results found for: "{query}"')
         return
-
-    hits = [
-        {"text": doc, "distance": float(dist), "metadata": meta or {}}
-        for doc, meta, dist in zip(docs, metas, dists)
-    ]
-    hits.sort(key=lambda h: h["distance"])
 
     print(f"\n{'=' * 60}")
     print(f'  Results for: "{query}"')
@@ -237,23 +214,17 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
     print(f"{'=' * 60}\n")
 
     for i, hit in enumerate(hits, 1):
-        vec_sim = round(max(0.0, 1 - hit["distance"]), 3)
-        meta = hit["metadata"]
-        source = Path(meta.get("source_file", "?")).name
-        wing_name = meta.get("wing", "?")
-        room_name = meta.get("room", "?")
+        text = hit.get("text") or hit.get("document", "")
+        score = round(float(hit.get("score", 0.0)), 3)
+        wing_name = hit.get("wing", "?")
+        room_name = hit.get("room", "?")
+        source = Path(hit.get("source_file", "?")).name
 
         print(f"  [{i}] {wing_name} / {room_name}")
         print(f"      Source: {source}")
-        print(f"      Match:  cosine={vec_sim}")
-        print()
-        # Print the verbatim text, indented
-        for line in hit["text"].strip().split("\n"):
-            print(f"      {line}")
-        print()
+        print(f"      Match:  score={score}\n")
+        print(f"      {text}\n")
         print(f"  {'─' * 56}")
-
-    print()
 
 
 
