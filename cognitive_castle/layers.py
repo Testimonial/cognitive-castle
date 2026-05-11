@@ -25,6 +25,10 @@ from .config import CognitiveCastleConfig
 from .palace import get_collection as _get_collection
 from .searcher import _first_or_empty, build_where_filter
 
+# Backward-compat alias for legacy `@patch("cognitive_castle.layers.MempalaceConfig")`
+# usage in tests. Production code uses CognitiveCastleConfig directly.
+MempalaceConfig = CognitiveCastleConfig
+
 
 # ---------------------------------------------------------------------------
 # Layer 0 — Identity

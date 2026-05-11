@@ -38,6 +38,11 @@ from datetime import datetime
 from typing import Optional
 
 from .backends.chroma import ChromaBackend, hnsw_capacity_status
+from .config import CognitiveCastleConfig
+
+# Backward-compat alias for legacy `@patch("cognitive_castle.repair.MempalaceConfig")`
+# usage in tests. Production code uses CognitiveCastleConfig directly.
+MempalaceConfig = CognitiveCastleConfig
 
 
 COLLECTION_NAME = "castle_drawers"
@@ -46,8 +51,6 @@ COLLECTION_NAME = "castle_drawers"
 def _get_palace_path():
     """Resolve palace path from config."""
     try:
-        from .config import CognitiveCastleConfig
-
         return CognitiveCastleConfig().palace_path
     except Exception:
         default = os.path.join(os.path.expanduser("~"), ".castle", "palace")
