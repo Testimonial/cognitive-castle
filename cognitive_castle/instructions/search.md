@@ -1,6 +1,6 @@
-# MemPalace Search
+# Cognitive Castle Search
 
-When the user wants to search their MemPalace memories, follow these steps:
+When the user wants to search their Cognitive Castle memories, follow these steps:
 
 ## 1. Parse the Search Query
 
@@ -20,17 +20,17 @@ can discover the taxonomy first if needed.
 
 If MCP tools are available, use them in this priority order:
 
-- mempalace_search(query, wing, room) -- Primary search tool. Pass the semantic
+- castle_search(query, wing, room) -- Primary search tool. Pass the semantic
   query and any wing/room filters.
-- mempalace_list_wings -- Discover all available wings. Use when the user asks
+- castle_list_wings -- Discover all available wings. Use when the user asks
   what categories exist or you need to resolve a wing name.
-- mempalace_list_rooms(wing) -- List rooms within a specific wing. Use to help
+- castle_list_rooms(wing) -- List rooms within a specific wing. Use to help
   the user navigate or to resolve a room name.
-- mempalace_get_taxonomy -- Retrieve the full wing/room/drawer tree. Use when
+- castle_get_taxonomy -- Retrieve the full wing/room/drawer tree. Use when
   the user wants an overview of their entire memory structure.
-- mempalace_traverse(room) -- Walk the knowledge graph starting from a room.
+- castle_traverse(room) -- Walk the knowledge graph starting from a room.
   Use when the user wants to explore connections and related memories.
-- mempalace_find_tunnels(wing1, wing2) -- Find cross-wing connections (tunnels)
+- castle_find_tunnels(wing1, wing2) -- Find cross-wing connections (tunnels)
   between two wings. Use when the user asks about relationships between
   different knowledge domains.
 
@@ -38,7 +38,7 @@ If MCP tools are available, use them in this priority order:
 
 If MCP tools are not available, fall back to the CLI:
 
-    mempalace search "query" [--wing X] [--room Y]
+    castle search "query" [--wing X] [--room Y]
 
 ## 5. Present Results
 

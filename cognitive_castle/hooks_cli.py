@@ -1,5 +1,5 @@
 """
-Hook logic for MemPalace — Python implementation of session-start, stop, and precompact hooks.
+Hook logic for Cognitive Castle — Python implementation of session-start, stop, and precompact hooks.
 
 Reads JSON from stdin, outputs JSON to stdout.
 Supported hooks: session-start, stop, precompact
@@ -73,25 +73,25 @@ STATE_DIR = _state_dir()  # module-level constant, computed once at import
 
 
 def _castle_python() -> str:
-    """Return the python interpreter that has mempalace installed.
+    """Return the python interpreter that has cognitive_castle installed.
 
     When hooks are invoked by Claude Code, sys.executable may be the system
     python which lacks chromadb and other deps.  Resolution order:
     1. MEMPALACE_PYTHON env var (explicit override)
     2. Venv python from package install path
-    3. Editable install: venv/ sibling to mempalace/
+    3. Editable install: venv/ sibling to cognitive_castle/
     4. sys.executable fallback
     """
     # Honor explicit override (used by shell hook wrappers)
     env_python = os.environ.get("MEMPALACE_PYTHON", "")
     if env_python and os.path.isfile(env_python) and os.access(env_python, os.X_OK):
         return env_python
-    # This file lives at <venv>/lib/pythonX.Y/site-packages/mempalace/hooks_cli.py
-    # or <project>/mempalace/hooks_cli.py (editable install).
+    # This file lives at <venv>/lib/pythonX.Y/site-packages/cognitive_castle/hooks_cli.py
+    # or <project>/cognitive_castle/hooks_cli.py (editable install).
     venv_bin = Path(__file__).resolve().parents[3] / "bin" / "python"
     if venv_bin.is_file():
         return str(venv_bin)
-    # Editable install: assumes project root has a venv/ sibling to mempalace/
+    # Editable install: assumes project root has a venv/ sibling to cognitive_castle/
     project_venv = Path(__file__).resolve().parents[1] / "venv" / "bin" / "python"
     if project_venv.is_file():
         return str(project_venv)
@@ -101,25 +101,25 @@ def _castle_python() -> str:
 _RECENT_MSG_COUNT = 30  # how many recent user messages to summarize
 
 STOP_BLOCK_REASON = (
-    "AUTO-SAVE checkpoint (MemPalace). Save this session's key content:\n"
+    "AUTO-SAVE checkpoint (Cognitive Castle). Save this session's key content:\n"
     "1. castle_diary_write — session summary (what was discussed, "
     "key decisions, current state of work)\n"
     "2. castle_add_drawer — verbatim quotes, decisions, code snippets "
     "(place in appropriate wing and room)\n"
     "3. castle_kg_add — entity relationships (optional)\n"
-    "For THIS save, use MemPalace MCP tools only (not auto-memory .md files). "
+    "For THIS save, use Cognitive Castle MCP tools only (not auto-memory .md files). "
     "Use verbatim quotes where possible. Continue conversation after saving."
 )
 
 PRECOMPACT_BLOCK_REASON = (
-    "COMPACTION IMMINENT (MemPalace). Save ALL session content before context is lost:\n"
+    "COMPACTION IMMINENT (Cognitive Castle). Save ALL session content before context is lost:\n"
     "1. castle_diary_write — thorough session summary\n"
     "2. castle_add_drawer — ALL verbatim quotes, decisions, code, context "
     "(place each in appropriate wing and room)\n"
     "3. castle_kg_add — entity relationships (optional)\n"
-    "For THIS save, use MemPalace MCP tools only (not auto-memory .md files). "
+    "For THIS save, use Cognitive Castle MCP tools only (not auto-memory .md files). "
     "Be thorough — after compaction this is all that survives. "
-    "Save everything to MemPalace, then allow compaction to proceed."
+    "Save everything to Cognitive Castle, then allow compaction to proceed."
 )
 
 
@@ -384,11 +384,11 @@ def _mine_sync():
             pass
 
 
-def _desktop_toast(body: str, title: str = "MemPalace"):
+def _desktop_toast(body: str, title: str = "Cognitive Castle"):
     """Send a desktop notification via notify-send. Fails silently."""
     try:
         subprocess.Popen(
-            ["notify-send", "--app-name=MemPalace", "--icon=brain", title, body],
+            ["notify-send", "--app-name=Cognitive Castle", "--icon=brain", title, body],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )

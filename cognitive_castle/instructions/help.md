@@ -1,4 +1,4 @@
-# MemPalace
+# Cognitive Castle
 
 AI memory system. Store everything, find anything. Local, free, no API key.
 
@@ -8,61 +8,61 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 
 | Command              | Description                    |
 |----------------------|--------------------------------|
-| /mempalace:init      | Install and set up MemPalace   |
-| /mempalace:search    | Search your memories           |
-| /mempalace:mine      | Mine projects and conversations|
-| /mempalace:status    | Palace overview and stats      |
-| /mempalace:help      | This help message              |
+| /castle:init      | Install and set up Cognitive Castle   |
+| /castle:search    | Search your memories           |
+| /castle:mine      | Mine projects and conversations|
+| /castle:status    | Palace overview and stats      |
+| /castle:help      | This help message              |
 
 ---
 
 ## MCP Tools (19)
 
 ### Palace (read)
-- mempalace_status -- Palace status and stats
-- mempalace_list_wings -- List all wings
-- mempalace_list_rooms -- List rooms in a wing
-- mempalace_get_taxonomy -- Get the full taxonomy tree
-- mempalace_search -- Search memories by query
-- mempalace_check_duplicate -- Check if a memory already exists
-- mempalace_get_aaak_spec -- Get the AAAK specification
+- castle_status -- Palace status and stats
+- castle_list_wings -- List all wings
+- castle_list_rooms -- List rooms in a wing
+- castle_get_taxonomy -- Get the full taxonomy tree
+- castle_search -- Search memories by query
+- castle_check_duplicate -- Check if a memory already exists
+- castle_get_aaak_spec -- Get the AAAK specification
 
 ### Palace (write)
-- mempalace_add_drawer -- Add a new memory (drawer)
-- mempalace_delete_drawer -- Delete a memory (drawer)
+- castle_add_drawer -- Add a new memory (drawer)
+- castle_delete_drawer -- Delete a memory (drawer)
 
 ### Knowledge Graph
-- mempalace_kg_query -- Query the knowledge graph
-- mempalace_kg_add -- Add a knowledge graph entry
-- mempalace_kg_invalidate -- Invalidate a knowledge graph entry
-- mempalace_kg_timeline -- View knowledge graph timeline
-- mempalace_kg_stats -- Knowledge graph statistics
+- castle_kg_query -- Query the knowledge graph
+- castle_kg_add -- Add a knowledge graph entry
+- castle_kg_invalidate -- Invalidate a knowledge graph entry
+- castle_kg_timeline -- View knowledge graph timeline
+- castle_kg_stats -- Knowledge graph statistics
 
 ### Navigation
-- mempalace_traverse -- Traverse the palace structure
-- mempalace_find_tunnels -- Find cross-wing connections
-- mempalace_graph_stats -- Graph connectivity statistics
+- castle_traverse -- Traverse the palace structure
+- castle_find_tunnels -- Find cross-wing connections
+- castle_graph_stats -- Graph connectivity statistics
 
 ### Agent Diary
-- mempalace_diary_write -- Write a diary entry
-- mempalace_diary_read -- Read diary entries
+- castle_diary_write -- Write a diary entry
+- castle_diary_read -- Read diary entries
 
 ---
 
 ## CLI Commands
 
-    mempalace init <dir>                  Initialize a new palace
-    mempalace mine <dir>                  Mine a project (default mode)
-    mempalace mine <dir> --mode convos    Mine conversation exports
-    mempalace search "query"              Search your memories
-    mempalace split <dir>                 Split large transcript files
-    mempalace wake-up                     Load palace into context
-    mempalace compress                    Compress palace storage
-    mempalace status                      Show palace status
-    mempalace repair                      Rebuild vector index
-    mempalace mcp                         Show MCP setup command
-    mempalace hook run                    Run hook logic (for harness integration)
-    mempalace instructions <name>         Output skill instructions
+    castle init <dir>                  Initialize a new palace
+    castle mine <dir>                  Mine a project (default mode)
+    castle mine <dir> --mode convos    Mine conversation exports
+    castle search "query"              Search your memories
+    castle split <dir>                 Split large transcript files
+    castle wake-up                     Load palace into context
+    castle compress                    Compress palace storage
+    castle status                      Show palace status
+    castle repair                      Rebuild vector index
+    castle mcp                         Show MCP setup command
+    castle hook run                    Run hook logic (for harness integration)
+    castle instructions <name>         Output skill instructions
 
 ---
 
@@ -71,7 +71,7 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 - Stop hook -- Automatically saves memories every 15 messages. Counts human
   messages in the session transcript (skipping command-messages). When the
   threshold is reached, blocks the AI with a save instruction. Uses
-  ~/.mempalace/hook_state/ to track save points per session. If
+  ~/.castle/hook_state/ to track save points per session. If
   stop_hook_active is true, passes through to prevent infinite loops.
 
 - PreCompact hook -- Emergency save before context compaction. Always blocks
@@ -80,7 +80,7 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 
 Hooks read JSON from stdin and output JSON to stdout. They can be invoked via:
 
-    echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"..."}' | mempalace hook run --hook stop --harness claude-code
+    echo '{"session_id":"abc","stop_hook_active":false,"transcript_path":"..."}' | castle hook run --hook stop --harness claude-code
 
 ---
 
@@ -101,6 +101,6 @@ metadata. No cloud services or API keys required.
 
 ## Getting Started
 
-1. /mempalace:init -- Set up your palace
-2. /mempalace:mine -- Mine a project or conversation
-3. /mempalace:search -- Find what you stored
+1. /castle:init -- Set up your palace
+2. /castle:mine -- Mine a project or conversation
+3. /castle:search -- Find what you stored

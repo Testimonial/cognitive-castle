@@ -403,7 +403,7 @@ def mine_convos(
         files = files[:limit]
 
     print(f"\n{'=' * 55}")
-    print("  MemPalace Mine — Conversations")
+    print("  Cognitive Castle Mine — Conversations")
     print(f"{'=' * 55}")
     print(f"  Wing:    {wing}")
     print(f"  Source:  {convo_path}")
@@ -504,7 +504,7 @@ def mine_convos(
         print("\n  By room:")
         for room, count in sorted(room_counts.items(), key=lambda x: x[1], reverse=True):
             print(f"    {room:20} {count} files")
-    print('\n  Next: mempalace search "what you\'re looking for"')
+    print('\n  Next: castle search "what you\'re looking for"')
     print(f"{'=' * 55}\n")
 
 

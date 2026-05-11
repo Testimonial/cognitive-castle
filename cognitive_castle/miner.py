@@ -529,7 +529,7 @@ def _set_wing_topics(existing: dict, wing_key: str, topics_for_wing: list, coerc
 def add_to_known_entities(entities_by_category: dict, wing: str = None) -> str:
     """Union ``entities_by_category`` into ``~/.castle/known_entities.json``.
 
-    Accepts ``{category: [names]}`` shape as produced by ``mempalace init``
+    Accepts ``{category: [names]}`` shape as produced by ``castle init``
     and merges into the registry the miner reads at mine time. Existing
     categories are preserved untouched unless also present in the input;
     for categories present in both, entries are unioned case-insensitively

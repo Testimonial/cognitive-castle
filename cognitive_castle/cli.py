@@ -496,7 +496,7 @@ def cmd_mine(args):
 
     # --redetect-origin re-runs corpus_origin on the current corpus state
     # and overwrites <palace>/.castle/origin.json before mining proceeds.
-    # Heuristic-only by design — full LLM detection lives on `mempalace init`.
+    # Heuristic-only by design — full LLM detection lives on `castle init`.
     if getattr(args, "redetect_origin", False):
         _run_pass_zero(
             project_dir=args.dir,
