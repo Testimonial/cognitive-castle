@@ -14,6 +14,32 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Track which legacy env-var names have already produced a deprecation warning
+# in this process. Cleared by tests via direct manipulation.
+_DEPRECATED_LEGACY_ENV_WARNED: set[str] = set()
+
+
+def _read_castle_env(new_name: str, old_name: str, default: str = "") -> str:
+    """Read a CASTLE_* env var, falling back to legacy MEMPAL_* with a one-time deprecation log.
+
+    Precedence: CASTLE_* > MEMPAL_* > default. If only the legacy name is set,
+    a deprecation warning is written to stderr once per process. Subsequent
+    reads of the same legacy name are silent.
+    """
+    new_val = os.environ.get(new_name)
+    if new_val is not None:
+        return new_val
+    old_val = os.environ.get(old_name)
+    if old_val is not None:
+        if old_name not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add(old_name)
+            sys.stderr.write(
+                f"[castle] WARNING: {old_name} is deprecated; rename to {new_name}.\n"
+            )
+        return old_val
+    return default
+
+
 SAVE_INTERVAL = 15
 STATE_DIR = Path.home() / ".castle" / "hook_state"
 
