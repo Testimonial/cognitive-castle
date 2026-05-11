@@ -13,7 +13,6 @@ import random
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import chromadb
 import yaml
 
 
@@ -403,7 +402,7 @@ class PalaceDataGenerator:
 
     def populate_palace_directly(self, palace_path, n_drawers=None, include_needles=True):
         """
-        Insert drawers directly into ChromaDB, bypassing the mining pipeline.
+        Insert drawers directly into LanceDB, bypassing the mining pipeline.
 
         Much faster than mining for benchmarks that only care about
         search/MCP behavior on a pre-populated palace.
@@ -412,8 +411,10 @@ class PalaceDataGenerator:
         """
         n_drawers = n_drawers or self.cfg["drawers"]
         os.makedirs(palace_path, exist_ok=True)
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_or_create_collection("castle_drawers")
+        from cognitive_castle.palace import get_collection
+
+        col = get_collection(palace_path, collection_name="castle_drawers", create=True)
+        client = col  # kept for API compat — callers that do client, col, needles = ...
 
         batch_size = 500
         docs = []
@@ -477,7 +478,7 @@ class PalaceDataGenerator:
         if docs:
             col.add(documents=docs, ids=ids, metadatas=metas)
 
-        return client, col, needle_info
+        return client, col, needle_info  # client == col for LanceDB (kept for API compat)
 
     # ── KG triple generation ─────────────────────────────────────────────
 

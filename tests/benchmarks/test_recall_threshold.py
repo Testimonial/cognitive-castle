@@ -10,7 +10,6 @@ import hashlib
 import os
 from datetime import datetime
 
-import chromadb
 import pytest
 
 from tests.benchmarks.data_generator import PalaceDataGenerator
@@ -48,8 +47,10 @@ def _populate_single_room(palace_path, n_drawers, n_needles=10):
     """Pack all drawers into one wing+room, plant needles, return queries."""
     gen = PalaceDataGenerator(seed=42, scale="small")
     os.makedirs(palace_path, exist_ok=True)
-    client = chromadb.PersistentClient(path=palace_path)
-    col = client.get_or_create_collection("castle_drawers")
+    from cognitive_castle.palace import get_collection
+
+    col = get_collection(palace_path, collection_name="castle_drawers", create=True)
+    client = col  # kept for API compat
 
     batch_size = 500
     docs, ids, metas = [], [], []

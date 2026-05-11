@@ -490,6 +490,9 @@ def _new_pipeline_search(
     return [
         {
             "id": _extract_id(r),
+            # "text" is the legacy key expected by MCP callers, tests, and
+            # benchmarks; "document" is kept for forward-compat callers.
+            "text": _extract_text(r),
             "document": _extract_text(r),
             "score": float(s),
             "wing": r.get("wing", "") if isinstance(r, dict) else "",
