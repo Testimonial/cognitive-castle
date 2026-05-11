@@ -464,7 +464,7 @@ def test_maybe_auto_ingest_uses_castle_python(tmp_path):
         with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
             with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
                 with patch(
-                    "mempalace.hooks_cli._castle_python", return_value="/fake/venv/python"
+                    "cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"
                 ):
                     with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                         _maybe_auto_ingest()
@@ -773,7 +773,7 @@ def test_precompact_with_timeout(tmp_path):
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch(
-            "mempalace.hooks_cli.subprocess.run",
+            "cognitive_castle.hooks_cli.subprocess.run",
             side_effect=subprocess.TimeoutExpired(cmd="mine", timeout=60),
         ):
             result = _capture_hook_output(
@@ -945,7 +945,7 @@ def test_stop_hook_rejects_injected_stop_hook_active(tmp_path):
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
     with patch(
-        "mempalace.hooks_cli._save_diary_direct", return_value={"count": 1, "themes": []}
+        "cognitive_castle.hooks_cli._save_diary_direct", return_value={"count": 1, "themes": []}
     ) as mock_save:
         _capture_hook_output(
             hook_stop,
