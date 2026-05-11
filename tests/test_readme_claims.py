@@ -183,31 +183,20 @@ class TestClosetFirstSearch:
 
 
 # ---------------------------------------------------------------------------
-# 6. BM25 hybrid search functions exist
+# 6. Retrieval pipeline exists in searcher.py
 # ---------------------------------------------------------------------------
 
 
-class TestBM25HybridSearch:
-    """README claims 'BM25 hybrid search'. Verify the functions exist."""
+class TestRetrievalPipeline:
+    """searcher.py must ship the 3-stage retrieval pipeline."""
 
-    def test_bm25_in_searcher(self):
-        """Claim: BM25 hybrid search is shipped.
-        searcher.py must have BM25 scoring or hybrid ranking logic."""
+    def test_new_pipeline_in_searcher(self):
+        """The 3-stage pipeline function must exist in searcher.py."""
         src = _read(MEMPALACE_PKG / "searcher.py")
-        has_bm25 = any(
-            term in src.lower()
-            for term in [
-                "bm25",
-                "_bm25_score",
-                "_hybrid_rank",
-                "hybrid_search",
-                "bm25_score",
-                "rank_bm25",
-            ]
-        )
-        assert has_bm25, (
-            "searcher.py has no BM25 or hybrid search function. "
-            "README claims BM25 hybrid search but it's not in the code."
+        has_pipeline = "_new_pipeline_search" in src
+        assert has_pipeline, (
+            "searcher.py does not contain _new_pipeline_search. "
+            "The 3-stage retrieval pipeline is missing."
         )
 
 
