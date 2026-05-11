@@ -32,7 +32,7 @@ class TestSaveHookAutoMines:
         # using `dirname` to derive the parent dir, and tagging it with
         # `--mode convos` so the convo miner runs (not the projects miner).
         assert "TRANSCRIPT_PATH" in src, "hook must read transcript_path"
-        assert "mempalace mine" in src, "hook must invoke `mempalace mine`"
+        assert "castle mine" in src, "hook must invoke `castle mine`"
         assert (
             'dirname "$TRANSCRIPT_PATH"' in src
         ), "hook must mine the transcript's parent directory"
@@ -57,8 +57,8 @@ class TestSaveHookAutoMines:
         if has_empty_default:
             # There must be an alternative mining path that doesn't need MEMPAL_DIR
             has_alternative = (
-                src.count("mempalace mine") > 1
-                or "TRANSCRIPT_PATH" in src.split("mempalace mine")[0]
+                src.count("castle mine") > 1
+                or "TRANSCRIPT_PATH" in src.split("castle mine")[0]
             )
             assert has_alternative, (
                 'MEMPAL_DIR defaults to "" which silently disables mining. '
