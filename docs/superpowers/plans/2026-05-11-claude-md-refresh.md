@@ -1,3 +1,47 @@
+# CLAUDE.md Refresh Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Refresh the project's `CLAUDE.md` so every factual claim matches the current code state on `develop` (post-PRs #2 SOTA, #3 hook cleanup, #4 plugin revival, #5 CLI routing).
+
+**Architecture:** Single-file documentation edit. Replace the whole file with new content because the diff would otherwise be ~80% of the file — easier to verify against the spec by reading the new file end-to-end than by walking 20+ Edit calls. One commit for the edit, optional second commit for any fixup found during the verification grep pass.
+
+**Tech Stack:** None — pure markdown.
+
+---
+
+## File structure
+
+### Modified file
+
+| File | Change |
+|---|---|
+| `CLAUDE.md` | Full content rewrite per spec `bb008e71`. 134 lines → ~190 lines (added Plugin Scaffolding section + retrieval pipeline diagram + 16 new module entries + 4 new Key Files entries). |
+
+No other files touched. No tests required (documentation-only change; spec acceptance is the 9 verification greps).
+
+---
+
+## Task 1: Replace CLAUDE.md content end-to-end
+
+**Files:**
+- Modify: `CLAUDE.md` (full rewrite)
+
+This is one commit. The whole file is replaced because the diff would otherwise span ~25 separate Edit calls in tightly-coupled spots (renames in section headers, in tree branches, in inline code blocks, in tables). End-to-end replacement is reviewable as a unit; the spec's 9 verification greps catch correctness.
+
+- [ ] **Step 1: Read the existing CLAUDE.md once for context**
+
+```bash
+cat CLAUDE.md
+```
+
+Confirm the current shape matches what the spec described (Mission, Design Principles, Contributing, Setup, Commands, Project Structure with mempalace/ tree, Conventions with Windows-coverage parenthetical, Architecture diagram, Key Files for Common Tasks).
+
+- [ ] **Step 2: Write the new CLAUDE.md content**
+
+Use the `Write` tool to replace `CLAUDE.md` entirely with the content below. Preserve every fact verified in the spec's "Source of truth" section.
+
+```markdown
 # CLAUDE.md
 
 ## The Mission
@@ -195,3 +239,208 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
 - **Rebuilding palace after embedder change**: `castle reindex --palace <path> --sources <dirs>` (CLI). See `cognitive_castle/cli.py` `cmd_reindex`.
 - **Plugin install / packaging**: `.claude-plugin/README.md` + plugin manifest files
 - **Tests**: mirror source structure in `tests/test_<module>.py`
+```
+
+The above content is the complete new `CLAUDE.md`. Write it verbatim.
+
+- [ ] **Step 3: Run the spec's verification greps**
+
+Run each of the 9 acceptance criteria from the spec:
+
+```bash
+# AC1: no MemPalace / mempal references
+grep -in "mempal\|MemPalace" CLAUDE.md
+# Expected: zero matches
+
+# AC2: no legacy backend/hybrid claims
+grep -in "ChromaDB default\|hybrid BM25" CLAUDE.md
+# Expected: zero matches
+
+# AC3: cognitive_castle/ paths present
+grep -in "cognitive_castle/" CLAUDE.md | head -5
+# Expected: matches in Project Structure and Key Files sections (5+)
+
+# AC4: every cognitive_castle/*.py module present in the tree (except __init__/__main__)
+for f in $(ls cognitive_castle/*.py | sed 's|cognitive_castle/||' | grep -v "__init__\|__main__" | sort); do
+  base="${f%.py}"
+  grep -q "$base\.py" CLAUDE.md || echo "MISSING: $f"
+done
+# Expected: no "MISSING:" lines printed
+
+# AC5: new pipeline + reindex documented
+grep -in "castle reindex\|3-stage" CLAUDE.md | head -3
+# Expected: at least 2 matches (3-stage in two places, castle reindex in Key Files)
+
+# AC6: plugin scaffolding mentioned
+grep -in ".claude-plugin/\|/plugin marketplace add" CLAUDE.md | head -3
+# Expected: at least 2 matches
+
+# AC7: deleted hook filenames NOT referenced
+grep -in "mempal_save_hook\|mempal_precompact_hook" CLAUDE.md
+# Expected: zero matches
+
+# AC8: old embedder name gone
+grep -in "all-MiniLM-L6-v2" CLAUDE.md
+# Expected: zero matches
+
+# AC9: factual cross-check (manual)
+# Read CLAUDE.md end-to-end and compare against:
+#   - pyproject.toml:2 → name: "cognitive-castle"
+#   - pyproject.toml:33-35 → castle, castle-mcp entry points
+#   - pyproject.toml:84-85 → coverage source = ["cognitive_castle"]
+#   - cognitive_castle/backends/registry.py:145 → default: str = "lancedb"
+#   - cognitive_castle/config.py → embedder_model default is paraphrase-multilingual-MiniLM-L12-v2
+#   - ls cognitive_castle/*.py → every module present in the tree
+```
+
+If any grep fails, fix the issue in `CLAUDE.md` and re-run the failing grep before committing.
+
+- [ ] **Step 4: Quick markdown render check**
+
+Verify the markdown renders cleanly:
+
+```bash
+python3 -c "
+with open('CLAUDE.md') as f:
+    content = f.read()
+# Basic structural checks
+assert content.startswith('# CLAUDE.md')
+assert '## The Mission' in content
+assert '## Plugin Scaffolding' in content
+assert '## Architecture' in content
+assert '## Key Files for Common Tasks' in content
+# Code blocks should balance (count opening triple-backticks)
+import re
+fences = re.findall(r'^\`\`\`', content, re.MULTILINE)
+assert len(fences) % 2 == 0, f'Unbalanced code fences: {len(fences)}'
+print(f'OK — {len(content.splitlines())} lines, {len(fences)} code fences')
+"
+```
+
+Expected: `OK — <N> lines, <even N> code fences`.
+
+- [ ] **Step 5: Run focused regression check (sanity)**
+
+Since this is documentation-only, tests shouldn't be affected. Verify:
+
+```bash
+pytest tests/ --ignore=tests/benchmarks --ignore=tests/test_collection_metric_invariant.py --ignore=tests/test_hnsw_capacity.py -q 2>&1 | tail -3
+```
+
+Expected: 215 failed, 1276 passed (matching the current `develop` baseline). No change from a doc-only edit.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add CLAUDE.md
+git commit -m "docs(claude): refresh CLAUDE.md for current code reality (rebrand + SOTA + plugin)"
+```
+
+---
+
+## Task 2: Verify all spec acceptance criteria + handle edge cases
+
+**Files:** none (verification only; small fixups if needed)
+
+- [ ] **Step 1: Re-run the 8 grep-based acceptance criteria as a single command**
+
+```bash
+echo "=== AC1: no mempal references ==="
+grep -in "mempal\|MemPalace" CLAUDE.md && echo "FAIL" || echo "OK"
+echo "=== AC2: no legacy backend/hybrid claims ==="
+grep -in "ChromaDB default\|hybrid BM25" CLAUDE.md && echo "FAIL" || echo "OK"
+echo "=== AC3: cognitive_castle/ paths present ==="
+grep -c "cognitive_castle/" CLAUDE.md
+echo "=== AC4: all .py modules in the tree ==="
+missing=0
+for f in $(ls cognitive_castle/*.py | sed 's|cognitive_castle/||' | grep -v "__init__\|__main__"); do
+  grep -q "${f}" CLAUDE.md || { echo "MISSING: $f"; missing=$((missing+1)); }
+done
+echo "Total missing: $missing"
+echo "=== AC5: 3-stage + reindex mentioned ==="
+grep -c "castle reindex\|3-stage" CLAUDE.md
+echo "=== AC6: plugin scaffolding mentioned ==="
+grep -c ".claude-plugin/\|/plugin marketplace add" CLAUDE.md
+echo "=== AC7: deleted hook filenames absent ==="
+grep -in "mempal_save_hook\|mempal_precompact_hook" CLAUDE.md && echo "FAIL" || echo "OK"
+echo "=== AC8: old embedder name absent ==="
+grep -in "all-MiniLM-L6-v2" CLAUDE.md && echo "FAIL" || echo "OK"
+```
+
+Expected output:
+- AC1: OK
+- AC2: OK
+- AC3: 5+ (any positive number is fine)
+- AC4: Total missing: 0
+- AC5: 2+
+- AC6: 2+
+- AC7: OK
+- AC8: OK
+
+- [ ] **Step 2: If any criterion fails, fix and commit a small fixup**
+
+If grep finds an unexpected match (e.g., a stray `mempal` in a code comment in the tree), or AC4 reports missing modules, open `CLAUDE.md` and fix in-place via Edit. Then re-run Step 1 to confirm. If a fixup happens:
+
+```bash
+git add CLAUDE.md
+git commit -m "docs(claude): fix <specific issue> from acceptance verification"
+```
+
+If everything passes on the first try (most likely), no additional commit needed.
+
+- [ ] **Step 3: Spot-check that the file renders as the user would see it**
+
+```bash
+head -20 CLAUDE.md
+sed -n '40,80p' CLAUDE.md  # mid-section
+tail -30 CLAUDE.md
+```
+
+Visually confirm:
+- Mission paragraph says "Cognitive Castle exists"
+- Setup section has both `pip install` and "Plugin install (optional)" subsections
+- Project Structure tree has `cognitive_castle/` root and lists `fusion.py`, `reranker.py`
+- Plugin Scaffolding section exists
+- Architecture diagram includes the 3-stage Retrieval pipeline block
+- Key Files for Common Tasks includes "castle reindex" and "Plugin install / packaging"
+
+- [ ] **Step 4: Final regression check**
+
+Run the focused test suite one more time as a sanity check:
+
+```bash
+pytest tests/ --ignore=tests/benchmarks --ignore=tests/test_collection_metric_invariant.py --ignore=tests/test_hnsw_capacity.py -q 2>&1 | tail -3
+```
+
+Expected: same pass/fail counts as Task 1 Step 5. Documentation changes don't move the needle.
+
+(No commit — verification only unless a fixup was committed in Step 2.)
+
+---
+
+## Self-Review
+
+**1. Spec coverage** — every spec acceptance criterion maps to a verification step:
+- AC1 (no mempal/MemPalace) → Task 1 Step 3 AC1 + Task 2 Step 1 AC1
+- AC2 (no ChromaDB default / hybrid BM25) → Step 3 AC2 + Step 1 AC2
+- AC3 (cognitive_castle/ paths) → AC3
+- AC4 (every module in tree) → AC4 (with for-loop)
+- AC5 (3-stage + reindex) → AC5
+- AC6 (plugin scaffolding) → AC6
+- AC7 (deleted hooks not referenced) → AC7
+- AC8 (old embedder absent) → AC8
+- AC9 (no contradiction with pyproject.toml / registry.py / config.py / module list) → Step 3 Step 9 manual cross-check + AC4 covers the module-list part
+
+**2. Placeholder scan** — no "TBD"/"TODO". The complete new `CLAUDE.md` content is shown verbatim in Task 1 Step 2; the implementer writes it exactly as given. Acceptance criteria are concrete bash commands with expected outputs.
+
+**3. Consistency**:
+- Module list in the tree (Task 1 Step 2) is internally ordered: core entry points first, then retrieval modules, then knowledge / entity layers, then utility modules, then version. 41 entries total (matches `ls cognitive_castle/*.py | grep -v __init__ | grep -v __main__ | wc -l`).
+- `Architecture` section's retrieval pipeline diagram lists `paraphrase-multilingual-MiniLM-L12-v2` consistent with `embedding.py` line in Project Structure.
+- "Plugin Scaffolding" section's file list matches `.claude-plugin/` contents post-PR #4.
+- Key Files for Common Tasks references match files that actually exist after the SOTA + plugin work.
+
+**4. Known gaps requiring impl-time judgment** — none. Plan is fully prescribed. If the verification greps surface an unexpected mismatch (e.g., a typo in one of the descriptions), Task 2 Step 2 handles the fixup.
+
+---
+
+Plan complete and saved to `docs/superpowers/plans/2026-05-11-claude-md-refresh.md`.
