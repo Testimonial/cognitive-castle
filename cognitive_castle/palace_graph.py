@@ -29,7 +29,7 @@ import time
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 
-from .config import MempalaceConfig
+from .config import CognitiveCastleConfig
 from .palace import get_collection as _get_palace_collection
 from .palace import mine_lock
 
@@ -68,7 +68,7 @@ def invalidate_graph_cache():
 
 
 def _get_collection(config=None):
-    config = config or MempalaceConfig()
+    config = config or CognitiveCastleConfig()
     try:
         return _get_palace_collection(
             config.palace_path,

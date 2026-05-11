@@ -1,5 +1,5 @@
 """
-Instruction text output for MemPalace CLI commands.
+Instruction text output for Cognitive Castle CLI commands.
 
 Each instruction lives as a .md file in the instructions/ directory
 inside the package. The CLI reads and prints the file content.

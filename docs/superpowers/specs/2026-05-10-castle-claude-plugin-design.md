@@ -1,22 +1,33 @@
-# Cognitive Castle — Claude Code Plugin (Phase 1: revive the existing scaffolding)
+# Cognitive Castle — Claude Code Plugin + Rebrand Completion (Phase 1)
 
 **Date:** 2026-05-10
+**Last revised:** 2026-05-11 (scope expanded after the SOTA retrieval upgrade landed)
 **Branch target:** develop
-**Status:** Revised after the original premise (no plugin existed) was found wrong. See "Background — what changed" below.
-**Scope:** Make the existing but stale `.claude-plugin/` scaffolding actually work for personal use. MCP server + auto-save hooks. Bundle in the plugin-internal rebrand (`mempalace` → `castle`) since the existing files are referenced by tests that already pin the desired post-rebrand behavior. No SessionStart context injection, no marketplace publishing, no Windows.
+**Status:** Phase 2 revision. Original spec (b122f43) said the plugin scaffolding had to be created — wrong; it existed. First revision (4084e93) reframed as revival of the dead plugin. This revision (current) **expands scope** to also include the env-var rename, hook state-dir migration, `MempalaceConfig` class rename, and a documentation sweep — the leftovers from the MemPalace → Cognitive Castle rebrand that the first revision deliberately deferred.
 
-## Background — what changed from the previous spec
+**Scope:** Make the existing but stale `.claude-plugin/` scaffolding actually work for personal use (MCP server + auto-save hooks), AND complete the source-code rebrand from MemPalace to Cognitive Castle everywhere except the live palace data directory. Personal-use only. No marketplace publishing, no SessionStart context injection, no Windows.
 
-The first version of this spec (commit `b122f43`) said the plugin scaffolding had to be created. That was wrong. A complete `.claude-plugin/` directory already exists in the repo, untouched by the rebrand commits. Every file inside it is stale (`mempalace`-branded, references the missing `mempalace-mcp` command, mentions ChromaDB instead of LanceDB, etc.). As written, the plugin would fail to load: the MCP server entry points at a command that no longer exists, and the hook wrappers shell out to a Python module (`mempalace`) that has been renamed to `cognitive_castle`.
+## Background — what changed from the previous revision
 
-The actual Phase 1 work is to **revive the dead plugin** by completing the rebrand inside `.claude-plugin/`, fixing one half-finished TDD-red test, and removing two pieces of orphaned legacy. The `castle install-claude` CLI proposed in the previous spec is dropped — the plugin already ships a `/castle:init` slash command that does the same job via the existing skill/instructions infrastructure.
+The previous revision (`4084e93`) was correctly scoped to "revive the dead plugin." During the SOTA retrieval upgrade work (PR #2, merged), it became clear that the legacy rebrand drift was wider than the plugin scaffolding alone:
+
+- `cognitive_castle/hooks_cli.py` reads `MEMPAL_DIR`, `MEMPAL_PYTHON`, `MEMPAL_VERBOSE` env vars directly (~5 places).
+- `cognitive_castle/hooks_cli.py` (and the legacy shell scripts about to be deleted) reference `~/.mempalace/hook_state/` as the state directory.
+- The main config class is still `MempalaceConfig`.
+- ~80 source/doc files still use "MemPalace" / "mempalace" in headers, instruction text, and the package README.
+
+The plugin spec touches the plugin manifest layer cleanly, but leaves these deeper references in place. Lifting them now (with a backward-compat shim where appropriate) finishes the rebrand without doubling the work later.
 
 ## Goals
 
-1. After running `/plugin marketplace add /home/lbihari/cognitive-castle` and `/plugin install castle@cognitive-castle` inside Claude Code (then restarting), a fresh session has Castle's MCP tools available and the Stop / PreCompact hooks fire correctly.
-2. Every file under `.claude-plugin/` matches current code reality: `castle` / `castle-mcp` CLI commands, `cognitive_castle` Python package, LanceDB backend, current author / repo URL.
-3. The half-finished test `tests/test_claude_plugin_hook_wrappers.py` is finished — its `cognitive-castle` expectations are reconciled with what pyproject actually ships (`castle`), and the wrapper scripts pass it.
-4. Orphaned legacy at the top-level `hooks/` directory is cleaned up so users have one canonical install path (the plugin), not two.
+1. After `/plugin marketplace add /home/lbihari/cognitive-castle` and `/plugin install castle@cognitive-castle` (then restart), a fresh Claude Code session has Castle's MCP tools and Stop / PreCompact hooks wired correctly.
+2. Every file under `.claude-plugin/` matches current code reality (no `mempalace` / `mempalace-mcp` / ChromaDB references).
+3. The half-finished `tests/test_claude_plugin_hook_wrappers.py` is finished — its `cognitive-castle` expectations are reconciled with what pyproject actually ships (`castle`).
+4. Orphaned legacy at the top-level `hooks/` directory is deleted so there is one canonical install path (the plugin), not two.
+5. `MEMPAL_DIR` / `MEMPAL_PYTHON` / `MEMPAL_VERBOSE` env vars in `cognitive_castle/hooks_cli.py` are renamed to `CASTLE_DIR` / `CASTLE_PYTHON` / `CASTLE_VERBOSE`, with a backward-compat read-shim so users with the legacy names set in their environment keep working (with a one-time stderr deprecation log per process).
+6. Hook state directory default is moved from `~/.mempalace/hook_state/` to `~/.castle/hook_state/`. On first read: if the new dir does not exist but the old one does, read from the old location and log a one-time migration note. New writes always go to the new dir. No data movement.
+7. `MempalaceConfig` is renamed to `CognitiveCastleConfig`, with `MempalaceConfig = CognitiveCastleConfig` as a backward-compat alias. All internal callers updated to use the new name.
+8. Module-level docstrings, comments, instruction markdown, and the package README are swept to replace "MemPalace" → "Cognitive Castle" and "mempalace" → "castle" / "cognitive_castle" depending on context.
 
 ## Non-goals
 
@@ -24,46 +35,62 @@ The actual Phase 1 work is to **revive the dead plugin** by completing the rebra
 - SessionStart context injection.
 - Windows hook compatibility.
 - The CLAUDE.md doc refresh (separate spec at commit `6533e32`; resumes after this work).
-- Full source-code rebrand of `MempalaceConfig`, `~/.mempalace/` paths in `cognitive_castle/`. Still deferred. *Inside* `.claude-plugin/` and the plugin-related test/hook files, however, the rebrand is in scope, because those files already pin post-rebrand behavior in tests.
-- A new `castle install-claude` CLI verifier. Dropped — `/castle:init` already exists.
+- **Live palace data path migration.** The user has real palace data at `~/.mempalace/palace/`. Renaming that path requires its own design (detect old palace, prompt user, atomic migration with rollback). Out of scope here; tracked as a future spec.
+- Test code rebrand: ~89 `os.environ.get("MEMPAL_DIR")` / `patch.dict({"MEMPAL_DIR": ...})` references in test code keep working via the shim. A future "test cleanup" sweep can rename them, but it is not blocking.
 
-## Source of truth (current state)
+## Source of truth (current state, verified by reading the files)
 
-Verified by reading the files:
+### Plugin scaffolding state
 
-- `pyproject.toml:33-35` ships `castle = cognitive_castle.cli:main` and `castle-mcp = cognitive_castle.mcp_server:main`. **There is no `cognitive-castle` CLI command** even though `pyproject.toml:2` names the package `cognitive-castle`.
-- `.claude-plugin/plugin.json` declares `name: "mempalace"`, `mcpServers.mempalace.command: "mempalace-mcp"` (which does not exist on `$PATH` after `pip install -e .`), `keywords: [..., "chromadb", ...]`, `repository: "https://github.com/MemPalace/mempalace"`.
-- `.claude-plugin/marketplace.json` declares `name: "mempalace"`, `owner: "milla-jovovich"`, `plugins[0].source: "./.claude-plugin"`, `version: "3.3.3"`.
-- `.claude-plugin/.mcp.json` exists separately and duplicates `plugin.json`'s `mcpServers` block (`{"mempalace": {"command": "mempalace-mcp"}}`). Whether Claude Code reads both, one, or treats the inline one as canonical is *not verified*; see Open Questions.
-- `.claude-plugin/hooks/hooks.json` references `mempal-stop-hook.sh` and `mempal-precompact-hook.sh` via `${CLAUDE_PLUGIN_ROOT}/hooks/`.
-- `.claude-plugin/hooks/mempal-stop-hook.sh` and `mempal-precompact-hook.sh` are thin wrappers that try `mempalace` on `$PATH` first, then `python3 -m mempalace`, then `python -m mempalace`, then error out with `"could not find a runnable mempalace command or module"`.
-- `.claude-plugin/skills/mempalace/SKILL.md` declares `name: mempalace` and tells the agent to run `mempalace instructions <command>`.
-- `.claude-plugin/commands/{help,init,mine,search,status}.md` each say `Invoke the generic mempalace skill (using the Skill tool)`. They become slash commands `/<plugin-name>:<command-name>` once the plugin is loaded.
-- `.claude-plugin/README.md` documents `claude plugin marketplace add MemPalace/mempalace` and `/mempalace:init`. Mentions ChromaDB and `MEMPAL_DIR`.
-- `tests/test_claude_plugin_hook_wrappers.py` has `SCRIPT_CASES = [("mempal-stop-hook.sh", "stop"), ("mempal-precompact-hook.sh", "precompact")]` and expects the wrapper to invoke `cognitive-castle hook run --hook stop --harness claude-code` first (line 82, 100), but its fallback test expects `python -m mempalace` (line 131) and its error-message test expects `"could not find a runnable mempalace command or module"` (line 147). The test is half-rebranded.
-- `hooks/mempal_save_hook.sh` and `hooks/mempal_precompact_hook.sh` (top-level, underscore-named) are the *legacy* fat shell scripts from before the Python `castle hook run` command existed. They embed all logic inline. The plugin uses the dash-named thin wrappers in `.claude-plugin/hooks/` instead. The top-level `hooks/README.md` documents the legacy manual install and is also stale.
-- `cognitive_castle/instructions/init.md` exists and is what `/castle:init` will surface to the agent.
+- `pyproject.toml:33-35` ships `castle` and `castle-mcp` entry points. There is no `cognitive-castle` CLI command despite the package name being `cognitive-castle`.
+- `.claude-plugin/plugin.json` declares `name: "mempalace"`, `mcpServers.mempalace.command: "mempalace-mcp"`, `keywords: [..., "chromadb", ...]`, `repository: "https://github.com/MemPalace/mempalace"`.
+- `.claude-plugin/marketplace.json` declares `name: "mempalace"`, `owner.name: "milla-jovovich"`, `plugins[0].source: "./.claude-plugin"`, `version: "3.3.3"`.
+- `.claude-plugin/.mcp.json` duplicates the `mcpServers` block from `plugin.json`. Which Claude Code reads is unverified.
+- `.claude-plugin/hooks/hooks.json` references `mempal-stop-hook.sh` and `mempal-precompact-hook.sh`.
+- `.claude-plugin/hooks/mempal-stop-hook.sh` / `mempal-precompact-hook.sh` are thin wrappers that try `mempalace` then `python -m mempalace`.
+- `.claude-plugin/skills/mempalace/SKILL.md` and `.claude-plugin/commands/*.md` reference the `mempalace` skill name.
+- `.claude-plugin/README.md` documents the legacy install path and mentions ChromaDB + `MEMPAL_DIR`.
+- `tests/test_claude_plugin_hook_wrappers.py` is half-rebranded: expects `cognitive-castle` as the primary CLI command, but its fallback test still expects `python -m mempalace` and its error-message test still references `"mempalace command or module"`.
 
-## Naming decisions (made in this spec — change if you disagree during review)
+### Source-code legacy drift
 
-These all need to land consistently across plugin manifest, marketplace listing, slash commands, skill, hook wrappers, and tests. Picking now to avoid drift.
+- `cognitive_castle/hooks_cli.py` reads `MEMPAL_DIR` directly via `os.environ.get("MEMPAL_DIR", "")` in multiple places, and references `~/.mempalace/hook_state` for the state directory.
+- `MempalaceConfig` is defined in `cognitive_castle/config.py` and re-exported via `tests/conftest.py` (line 33).
+- ~89 test files patch `MEMPAL_DIR` in `os.environ` or reference legacy mock paths. Already validated that tests pass with the env-var shim; no test changes required for correctness.
+- ~80 source/doc files still contain "MemPalace" or "mempalace" in docstrings, instructions, or README content.
 
-1. **Plugin name in manifests: `castle`** (not `cognitive-castle`).
-   - Rationale: matches pyproject's CLI script name (`castle`), keeps slash commands short (`/castle:init` vs `/cognitive-castle:init`), matches how an end user thinks of the tool.
-   - The Python *package* name (`cognitive-castle` on PyPI / in pyproject) stays unchanged. Two namespaces: package = `cognitive-castle`, plugin = `castle`. Same pattern as npm packages with short CLI names.
-2. **Slash command namespace: `/castle:<verb>`** (follows from #1).
-3. **Hook wrapper script names: `castle-stop-hook.sh`, `castle-precompact-hook.sh`** (preserve the dash convention already established in `.claude-plugin/hooks/`).
-4. **Hook wrapper primary CLI invocation: `castle hook run`** (matches pyproject's installed script). Update the test from `"cognitive-castle"` to `"castle"` to match.
-5. **Hook wrapper Python module fallback: `python -m cognitive_castle`** (matches the renamed Python package). Update the test from `"-m mempalace"` to `"-m cognitive_castle"`.
-6. **Skill directory: `.claude-plugin/skills/castle/SKILL.md`** with `name: castle` (renamed from `mempalace`).
-7. **Marketplace listing: `name: "castle"`, `source: "./.claude-plugin"`, `owner.name: "Ladislav Bihari"`, `owner.url: "https://github.com/<your-fork>"`** — actual GitHub URL TBD per #Open-Questions.
-8. **Plugin manifest `mcpServers` entry: `{"castle": {"command": "castle-mcp"}}`** — server name and command both updated.
+### Top-level legacy
+
+- `hooks/mempal_save_hook.sh` and `hooks/mempal_precompact_hook.sh` are pre-plugin fat shell scripts. The plugin replaces them (the dash-named thin wrappers in `.claude-plugin/hooks/` do the same job through `castle hook run`).
+- `hooks/README.md` documents the legacy manual-install path. Stale.
+- `tests/test_hooks_shell.py`, `tests/test_save_hook_mines.py`, `tests/test_save_hook_verbose.py` test the legacy fat scripts directly.
+
+## Naming decisions
+
+Settled in the prior revision; carried forward unchanged:
+
+1. **Plugin name in manifests:** `castle` (not `cognitive-castle`). Matches pyproject's CLI script. Keeps slash commands short (`/castle:init`).
+2. **Slash command namespace:** `/castle:<verb>`.
+3. **Hook wrapper script names:** `castle-stop-hook.sh`, `castle-precompact-hook.sh` (dash convention).
+4. **Hook wrapper primary CLI invocation:** `castle hook run`.
+5. **Hook wrapper Python module fallback:** `python -m cognitive_castle`.
+6. **Skill directory:** `.claude-plugin/skills/castle/SKILL.md` with `name: castle`.
+7. **Marketplace listing:** `name: "cognitive-castle"`, `plugins[0].name: "castle"`, `owner.name: "Ladislav Bihari"`, `owner.url: <fork URL>` (Open Question).
+8. **Plugin manifest `mcpServers` entry:** `{"castle": {"command": "castle-mcp"}}`.
+
+New for this revision:
+
+9. **Python class:** `CognitiveCastleConfig`, with `MempalaceConfig = CognitiveCastleConfig` alias kept indefinitely (no deprecation log on this one — class imports are programmatic, harder to migrate, low cost to keep).
+10. **Env vars:** `CASTLE_DIR`, `CASTLE_PYTHON`, `CASTLE_VERBOSE`. Legacy `MEMPAL_*` names read as fallback with one-time stderr deprecation log.
+11. **Hook state dir:** `~/.castle/hook_state/`. Old `~/.mempalace/hook_state/` read as fallback if new doesn't exist (one-time log); new writes go to new dir.
 
 ## File-by-file change list
 
-### `.claude-plugin/plugin.json`
+### Plugin scaffolding (unchanged from prior revision)
 
-Replace contents with:
+[The following sections are unchanged in scope from commit 4084e93 — `.claude-plugin/plugin.json`, `marketplace.json`, `.mcp.json`, `hooks/hooks.json`, the two renamed plugin wrapper scripts, the skill, the slash-command markdowns, and the plugin README. Refer to the previous revision text; no changes here.]
+
+### `.claude-plugin/plugin.json`
 
 ```json
 {
@@ -73,27 +100,20 @@ Replace contents with:
   "author": { "name": "Ladislav Bihari" },
   "license": "MIT",
   "commands": [],
-  "mcpServers": {
-    "castle": { "command": "castle-mcp" }
-  },
+  "mcpServers": { "castle": { "command": "castle-mcp" } },
   "keywords": ["memory", "ai", "mcp", "lancedb", "palace", "search", "verbatim"],
   "repository": "<github URL of your fork — see Open Questions>"
 }
 ```
 
-Drop `chromadb` and `rag` keywords (the user has deliberately rejected the RAG framing for this project).
+Drop `chromadb` and `rag` keywords.
 
 ### `.claude-plugin/marketplace.json`
-
-Replace contents with:
 
 ```json
 {
   "name": "cognitive-castle",
-  "owner": {
-    "name": "Ladislav Bihari",
-    "url": "<github URL of your fork — see Open Questions>"
-  },
+  "owner": { "name": "Ladislav Bihari", "url": "<fork URL — Open Questions>" },
   "plugins": [
     {
       "name": "castle",
@@ -106,220 +126,264 @@ Replace contents with:
 }
 ```
 
-Note: marketplace name (`cognitive-castle`) is intentionally different from plugin name (`castle`) — the marketplace is the container; the plugin inside it is one of potentially several. This matches how `claude-plugins-official` is the marketplace and `superpowers`, `context7`, etc. are individual plugins inside.
-
 ### `.claude-plugin/.mcp.json`
 
-Two options, picking based on Open Question #1:
-- If the inline `mcpServers` in `plugin.json` is the canonical mechanism: **delete this file** as redundant.
-- If `.mcp.json` is canonical: **update its content** to `{"castle": {"command": "castle-mcp"}}` and delete the `mcpServers` block from `plugin.json`.
-
-The implementation plan resolves this by checking what other plugins do and/or testing both forms in a sandbox. As an interim safety, **keep both files but make them consistent** until verified.
+Keep both files consistent until Open Question #1 resolves which is canonical: `{"castle": {"command": "castle-mcp"}}`.
 
 ### `.claude-plugin/hooks/hooks.json`
-
-Replace contents with:
 
 ```json
 {
   "description": "Cognitive Castle auto-save and pre-compact hooks",
   "hooks": {
-    "Stop": [
-      { "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/castle-stop-hook.sh\"" }] }
-    ],
-    "PreCompact": [
-      { "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/castle-precompact-hook.sh\"" }] }
-    ]
+    "Stop": [{ "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/castle-stop-hook.sh\"" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "command", "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/castle-precompact-hook.sh\"" }] }]
   }
 }
 ```
 
-### `.claude-plugin/hooks/mempal-stop-hook.sh` → `castle-stop-hook.sh`
-
-Rename the file. Replace contents with:
+### `.claude-plugin/hooks/mempal-stop-hook.sh` → `castle-stop-hook.sh` (rename + rewrite)
 
 ```bash
 #!/bin/bash
-# Cognitive Castle Stop Hook — thin wrapper calling Python CLI.
-# All logic lives in cognitive_castle.hooks_cli for cross-harness extensibility.
+# Cognitive Castle Stop Hook — thin wrapper calling the Python CLI.
 run_castle_hook() {
-  if command -v castle >/dev/null 2>&1; then
-    castle hook run "$@"
-    return $?
-  fi
-
-  if command -v python3 >/dev/null 2>&1 && python3 -c "import cognitive_castle" >/dev/null 2>&1; then
-    python3 -m cognitive_castle hook run "$@"
-    return $?
-  fi
-
-  if command -v python >/dev/null 2>&1 && python -c "import cognitive_castle" >/dev/null 2>&1; then
-    python -m cognitive_castle hook run "$@"
-    return $?
-  fi
-
+  if command -v castle >/dev/null 2>&1; then castle hook run "$@"; return $?; fi
+  if command -v python3 >/dev/null 2>&1 && python3 -c "import cognitive_castle" >/dev/null 2>&1; then python3 -m cognitive_castle hook run "$@"; return $?; fi
+  if command -v python  >/dev/null 2>&1 && python  -c "import cognitive_castle" >/dev/null 2>&1; then python  -m cognitive_castle hook run "$@"; return $?; fi
   echo "Cognitive Castle hook error: could not find a runnable castle command or cognitive_castle module" >&2
   return 1
 }
-
 run_castle_hook --hook stop --harness claude-code
 ```
 
 ### `.claude-plugin/hooks/mempal-precompact-hook.sh` → `castle-precompact-hook.sh`
 
-Same as above, but the last line is `run_castle_hook --hook precompact --harness claude-code`.
+Same as above, last line uses `--hook precompact`.
 
 ### `.claude-plugin/skills/mempalace/` → `.claude-plugin/skills/castle/`
 
-Rename the directory. Update `SKILL.md` content:
-
-```markdown
----
-name: castle
-description: Cognitive Castle — mine projects and conversations into a searchable memory palace. Use when asked about castle, cognitive castle, memory palace, mining memories, searching memories, or palace setup.
-allowed-tools: Bash, Read, Write, Edit, Glob, Grep
----
-
-# Cognitive Castle
-
-A persistent verbatim memory palace for AI — mine projects and conversations, then search them locally with LanceDB. No vector DB to host, no API keys required.
-
-## Prerequisites
-
-Ensure `castle` is installed:
-
-```bash
-castle --version
-```
-
-If not installed:
-
-```bash
-pip install cognitive-castle
-```
-
-## Usage
-
-Cognitive Castle provides dynamic instructions via the CLI. To get instructions for any operation:
-
-```bash
-castle instructions <command>
-```
-
-Where `<command>` is one of: `help`, `init`, `mine`, `search`, `status`.
-
-Run the appropriate instructions command, then follow the returned instructions step by step.
-```
+Rename directory. Update `SKILL.md` frontmatter `name: castle`, body says "Cognitive Castle", `pip install cognitive-castle`, `castle instructions <command>`.
 
 ### `.claude-plugin/commands/*.md`
 
-Each of `help.md`, `init.md`, `mine.md`, `search.md`, `status.md` has its body line `Invoke the generic mempalace skill (using the Skill tool) with the X command, then follow its instructions.` Update each to `Invoke the generic castle skill (using the Skill tool) with the X command, then follow its instructions.`. Also rebrand each frontmatter `description` field from `MemPalace` to `Cognitive Castle`.
+Each of `help.md`, `init.md`, `mine.md`, `search.md`, `status.md`: body line changes from `Invoke the generic mempalace skill` to `Invoke the generic castle skill`. Frontmatter `description` rebranded.
 
 ### `.claude-plugin/README.md`
 
-Rewrite for the rebrand. Key changes:
-- Title: `# Cognitive Castle Claude Code Plugin`
-- Description: drop ChromaDB; mention LanceDB and "local-first, no API keys".
-- Installation: `claude plugin marketplace add <user-fork-url>` / `claude plugin install --scope user castle`.
-- Slash commands table: rename `/mempalace:*` → `/castle:*`.
-- Hooks section: replace `MEMPAL_DIR` with `CASTLE_DIR`.
-- MCP server section: "19 MCP tools" — verify the count is still accurate against `cognitive_castle/mcp_server.py`; update if changed.
+Title, install commands, `/castle:*` slash command table, hooks section (`MEMPAL_DIR` → `CASTLE_DIR`), MCP tool count verified against `cognitive_castle/mcp_server.py`.
 
 ### `tests/test_claude_plugin_hook_wrappers.py`
 
-Three updates:
-1. `SCRIPT_CASES` list at line 19-22: rename script filenames to `castle-stop-hook.sh` / `castle-precompact-hook.sh`.
-2. Line 82: the `cognitive-castle` stub command is renamed to `castle` (matching the wrapper's primary CLI invocation).
-3. Line 131: the fallback expectation `-m mempalace hook run ...` becomes `-m cognitive_castle hook run ...`.
-4. Line 147: error message check `"could not find a runnable mempalace command or module"` becomes `"could not find a runnable castle command or cognitive_castle module"`.
+- `SCRIPT_CASES`: filenames updated to `castle-stop-hook.sh` / `castle-precompact-hook.sh`.
+- Line 82: `cognitive-castle` stub → `castle`.
+- Line 131: `-m mempalace` → `-m cognitive_castle`.
+- Line 147: error message check → `"could not find a runnable castle command or cognitive_castle module"`.
 
-After these updates, the test passes against the rebranded wrappers.
+### Top-level legacy script deletion
 
-### Top-level `hooks/` cleanup
+Delete:
+- `hooks/mempal_save_hook.sh`
+- `hooks/mempal_precompact_hook.sh`
+- `hooks/README.md` (or rewrite to point at the plugin install)
+- `tests/test_hooks_shell.py`
+- `tests/test_save_hook_mines.py`
+- `tests/test_save_hook_verbose.py`
 
-The legacy fat scripts at `hooks/mempal_save_hook.sh` and `hooks/mempal_precompact_hook.sh` are orphaned post-plugin. The plugin uses the thin wrappers in `.claude-plugin/hooks/`. Two options:
+Rationale: the plugin replaces them. Single canonical install path. CHANGELOG note for users who may have manually wired the old paths into `~/.claude/settings.json`.
 
-- **Decision: delete the legacy scripts.** Single canonical install path (the plugin). Removes confusion about which script is current.
-- Update `hooks/README.md` to point users at the plugin install instead of the manual hand-edit instructions. Or delete `hooks/README.md` along with the scripts.
+### NEW: Env-var rename with backward-compat shim
 
-If a user has manually wired the old paths into their `~/.claude/settings.json`, deletion silently breaks them. Mitigation: include a CHANGELOG note. (No multi-user concern given Phase 1 is personal-use.)
+**Files:** `cognitive_castle/hooks_cli.py` primarily; minor sweeps elsewhere.
 
-### Tests that touch the legacy scripts
+Add a helper near the top of `cognitive_castle/hooks_cli.py`:
 
-Several test files reference the old `mempal_*` scripts:
-- `tests/test_hooks_shell.py` — tests the legacy fat shell scripts. If the legacy scripts are deleted, **delete this test file** along with them.
-- `tests/test_save_hook_mines.py` — tests the legacy save hook's mining behavior. **Delete with the legacy script** unless the same coverage exists on the Python `cognitive_castle.hooks_cli` path (verify before deleting).
-- `tests/test_save_hook_verbose.py` — same. Verify and delete.
+```python
+_DEPRECATED_LEGACY_ENV_WARNED: set[str] = set()
 
-### Branding tests
+def _read_castle_env(new_name: str, old_name: str, default: str = "") -> str:
+    """Read CASTLE_* env var; fall back to legacy MEMPAL_* with one-time deprecation log."""
+    new_val = os.environ.get(new_name)
+    if new_val is not None:
+        return new_val
+    old_val = os.environ.get(old_name)
+    if old_val is not None:
+        if old_name not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add(old_name)
+            sys.stderr.write(
+                f"[castle] WARNING: {old_name} is deprecated; rename to {new_name}.\n"
+            )
+        return old_val
+    return default
+```
 
-`tests/test_branding.py` likely already covers some of this surface. Verify it asserts the rebranded strings appear (or at least doesn't fail because of the plugin file changes). The implementation plan should run this test after each batch of file changes.
+Replace every direct `os.environ.get("MEMPAL_DIR", ...)` / `os.environ.get("MEMPAL_PYTHON", ...)` / `os.environ.get("MEMPAL_VERBOSE", ...)` in `cognitive_castle/hooks_cli.py` with the corresponding `_read_castle_env(...)` call. Inventory at implementation time via `grep -n "MEMPAL_DIR\|MEMPAL_PYTHON\|MEMPAL_VERBOSE" cognitive_castle/hooks_cli.py`.
 
-## Runtime data flow
+User-visible docs that mention env vars (e.g., `cognitive_castle/instructions/*.md`, package README, `.claude-plugin/README.md`) now refer to the new names. Legacy names mentioned only in a "Backward compatibility" subsection.
 
-Once the rebranded plugin is installed via the marketplace and Claude Code is restarted:
+### NEW: Hook state directory migration
 
-1. Claude Code reads `enabledPlugins`, finds `castle@cognitive-castle: true`.
-2. Loads the marketplace, resolves to the local repo's `.claude-plugin/` path, reads `plugin.json` + `hooks/hooks.json`.
-3. Spawns `castle-mcp` per `plugin.json.mcpServers` (or `.mcp.json`, pending Open Question #1). MCP tools become available with namespace prefix determined by Claude Code (typically `mcp__castle__*`).
-4. Registers Stop and PreCompact hooks per `hooks/hooks.json`.
-5. Slash commands `/castle:help`, `/castle:init`, `/castle:mine`, `/castle:search`, `/castle:status` are registered.
-6. During the session: agent calls flow MCP-protocol → `castle-mcp` subprocess → palace operations → JSON results.
-7. On Stop event: Claude Code invokes `castle-stop-hook.sh`. Wrapper resolves `castle` command (or falls back to `python -m cognitive_castle`), calls `castle hook run --hook stop --harness claude-code`, which is implemented in `cognitive_castle/hooks_cli.py`.
-8. On PreCompact event: same shape with `--hook precompact`.
-9. User runs `/castle:init` once after install to complete onboarding (palace creation, etc.).
+**Files:** `cognitive_castle/hooks_cli.py`.
+
+Replace the hardcoded `~/.mempalace/hook_state` with a helper:
+
+```python
+def _state_dir() -> Path:
+    """Return the hook state directory, migrating from the legacy path if needed."""
+    new = Path.home() / ".castle" / "hook_state"
+    old = Path.home() / ".mempalace" / "hook_state"
+    if new.exists():
+        return new
+    if old.exists():
+        if "state_dir_migration" not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add("state_dir_migration")
+            sys.stderr.write(
+                f"[castle] NOTE: reading legacy state dir {old}; new writes go to {new}.\n"
+            )
+        return old
+    new.mkdir(parents=True, exist_ok=True)
+    return new
+```
+
+All callers use `_state_dir()` instead of `Path.home() / ".mempalace" / "hook_state"`. New writes always go to the new dir (the helper creates it). Legacy dir never written to. Old data left in place; the user can delete it manually once they verify nothing depends on it.
+
+### NEW: `MempalaceConfig` → `CognitiveCastleConfig` rename
+
+**Files:** `cognitive_castle/config.py`, plus every internal caller.
+
+In `cognitive_castle/config.py`, rename the class definition:
+
+```python
+class CognitiveCastleConfig:
+    # ... existing body unchanged
+    ...
+
+# Backward-compat alias. Programmatic users still importing the old name keep working.
+MempalaceConfig = CognitiveCastleConfig
+```
+
+Find and update every internal `MempalaceConfig` reference to `CognitiveCastleConfig`:
+
+```
+grep -rln "MempalaceConfig" cognitive_castle/ tests/
+```
+
+For each file:
+- Production code (`cognitive_castle/`): rename usage to `CognitiveCastleConfig`.
+- Tests (`tests/`): rename to `CognitiveCastleConfig`. (The shim alias means tests would still work unchanged, but for internal consistency we update them.)
+
+The alias on `MempalaceConfig` stays — external callers (if any) keep working.
+
+### NEW: Documentation sweep (~80 files)
+
+Mechanical search/replace:
+- "MemPalace" → "Cognitive Castle"
+- "mempalace" (where it refers to the project/CLI/package brand, not a Python module path) → "castle" (when referring to the CLI) or "cognitive_castle" (when referring to the Python module)
+
+Files in scope:
+- `cognitive_castle/README.md` (package readme)
+- `cognitive_castle/instructions/*.md` (slash-command instruction text)
+- Module-level docstrings in `cognitive_castle/*.py` headers
+- Any inline comments / log strings still saying "MemPalace"
+
+NOT in scope (cosmetic but outside this PR):
+- `docs/` historical RFCs / plans / specs — those are historical documents; leave them as written.
+- `CHANGELOG.md` — historical entries are factual.
+- `website/` (if present) — could be a separate sweep.
+
+The implementation plan inventories the actual file list via `grep -rln "MemPalace\|mempalace" cognitive_castle/ --include="*.py" --include="*.md"` and walks them in batches with verification between batches.
+
+## Backward compatibility / migration story
+
+Everything user-facing keeps working:
+
+| Legacy | New | Behavior |
+|---|---|---|
+| `MEMPAL_DIR` env var | `CASTLE_DIR` | Both read; CASTLE wins; legacy logs deprecation once per process |
+| `MEMPAL_PYTHON` env var | `CASTLE_PYTHON` | Same |
+| `MEMPAL_VERBOSE` env var | `CASTLE_VERBOSE` | Same |
+| `~/.mempalace/hook_state/` | `~/.castle/hook_state/` | Read both; write to new; legacy logs migration note once |
+| `MempalaceConfig` class | `CognitiveCastleConfig` | Both names work; alias kept indefinitely |
+| `hooks/mempal_save_hook.sh` path | (deleted) | If a user had this in `~/.claude/settings.json`, the hook fails to find the file; user updates settings to use the plugin install. CHANGELOG note. |
+| `~/.mempalace/palace/` (live data) | unchanged | Out of scope. User keeps their existing palace data path. |
+
+## Runtime data flow (unchanged from prior revision)
+
+Plugin loads → spawns `castle-mcp` → MCP tools available → Stop/PreCompact hooks fire `castle-stop-hook.sh` / `castle-precompact-hook.sh` → wrapper calls `castle hook run --hook <event> --harness claude-code` → `cognitive_castle.hooks_cli` does the work, reading config via the new env-var shim + state dir helper.
 
 ## Failure modes
 
+Existing failure modes from the prior revision carry forward (MCP server / hook wrapper / palace not initialized / etc.). New rows:
+
 | Failure | Surface | Handling |
 |---|---|---|
-| `castle-mcp` not on `$PATH` | Plugin loads, MCP server fails to start, no tools in session. | User runs `pip install -e ".[dev]"`. The `/castle:init` command surfaces this in its checks (existing behavior). |
-| `castle` command not on `$PATH` (hook scripts) | Wrapper falls back to `python -m cognitive_castle`. If that also fails, exits non-zero with the specific error message tested by `test_plugin_hook_wrapper_errors_cleanly_when_no_runner_exists`. | Existing test pins this; rebrand preserves the behavior. |
-| Palace not yet initialized | MCP tool returns "no palace" error; `castle hook run` no-ops with a log. | Existing behavior. User runs `/castle:init` or `castle init`. |
-| `$CASTLE_DIR` env var unset | `castle hook run` reads `cognitive_castle.hooks_cli` logic which already handles unset / missing dir. (Verify by reading `hooks_cli.py` during implementation; the previous `MEMPAL_DIR` was the *fat-script* env var. The thin wrapper does not pass through env vars; the Python side reads config.) | Implementation plan: confirm Python-side handling exists; if not, add a single graceful-skip code path. |
-| User had legacy `hooks/mempal_*.sh` paths in `settings.json` and we delete them | Hook fires, file not found, Claude Code logs error. User's session is otherwise fine (Stop hooks aren't blocking). | CHANGELOG note. Personal-use only — risk is bounded to the user's own machine. |
-| `.mcp.json` and `plugin.json` `mcpServers` give conflicting info | Unknown — depends on Claude Code's resolution. | Open Question #1; address before final commit. |
+| `CASTLE_DIR` and `MEMPAL_DIR` both set | Shim takes `CASTLE_DIR` (no log). | Documented in `_read_castle_env` docstring. |
+| Only `MEMPAL_DIR` set | Shim reads it, logs one-time stderr warning. | Documented. User migrates at leisure. |
+| Both `~/.castle/hook_state` and `~/.mempalace/hook_state` exist | Helper reads new (more recent). | Documented. Legacy can be deleted by user. |
+| Programmatic user imports `from cognitive_castle.config import MempalaceConfig` | Resolves to the alias. Code keeps working. | Alias kept indefinitely. |
+| Doc-sweep search/replace touches a string that shouldn't be rebranded (e.g., a URL containing "mempalace") | Spot-checks during implementation catch this. Tests catch behavioral regressions. | Implementation plan walks the file list in batches and runs tests after each batch. |
 
 ## Testing strategy
 
-**Existing tests to update:**
-- `tests/test_claude_plugin_hook_wrappers.py` — four edits per the file-by-file change list above.
-- `tests/test_branding.py` — re-run to confirm rebranded strings now appear / mempalace strings don't.
-- `tests/test_hooks_shell.py`, `tests/test_save_hook_mines.py`, `tests/test_save_hook_verbose.py` — delete (per legacy script removal).
+**Existing tests updated** (from prior revision):
+- `tests/test_claude_plugin_hook_wrappers.py` — 4 edits.
+- `tests/test_branding.py` — re-run; should be greener after the doc sweep, not redder.
+- Delete `tests/test_hooks_shell.py`, `tests/test_save_hook_mines.py`, `tests/test_save_hook_verbose.py` (legacy scripts gone).
 
 **New tests:**
-- `tests/test_plugin_manifests.py` — assert each of `plugin.json`, `marketplace.json`, `.mcp.json` (if kept), `hooks/hooks.json` parse as valid JSON, have the expected top-level keys, name fields equal `"castle"` (or `"cognitive-castle"` for marketplace), `mcpServers.castle.command` equals `"castle-mcp"`, hook commands reference `castle-stop-hook.sh` and `castle-precompact-hook.sh` only (no `mempal_*` leftovers).
-- Version sync test: `plugin.json["version"]` and `marketplace.json["plugins"][0]["version"]` equal `cognitive_castle.version.__version__`.
+- `tests/test_plugin_manifests.py` — assert plugin.json, marketplace.json, .mcp.json, hooks.json parse and have the expected fields. Version sync with `cognitive_castle.version.__version__`.
+- `tests/test_env_var_compat.py` (NEW for this revision) — verify the shim:
+  - Set only `CASTLE_DIR` → `_read_castle_env` returns it, no log.
+  - Set only `MEMPAL_DIR` → returns it, log written to stderr.
+  - Set both → returns `CASTLE_DIR`, no log.
+  - Set neither → returns default.
+  - Log appears exactly once across multiple calls in the same process.
+- `tests/test_state_dir_migration.py` (NEW) — verify the state dir helper:
+  - New dir exists → returns new.
+  - Old dir exists, new doesn't → returns old, log written.
+  - Neither exists → creates new, returns it.
 
-**Manual end-to-end checklist (documented in spec; not automated):**
+**Existing tests left alone:**
+- ~89 test files patching `MEMPAL_DIR`. The shim makes them keep working. A future cleanup PR can rename them.
 
-1. `pip install -e ".[dev]"`. Confirm `castle --version` works.
-2. Inside Claude Code: `/plugin marketplace add /home/lbihari/cognitive-castle` then `/plugin install castle@cognitive-castle`. Restart Claude Code.
-3. New session: confirm `/castle:help`, `/castle:init`, etc. visible. Confirm Castle MCP tools visible to the agent (ask).
-4. Run `/castle:init` to complete palace onboarding.
-5. End the session, start a new one: confirm transcript was mined (run `castle status` or `/castle:status`).
-6. Trigger PreCompact (let context fill or use a debug command if available); confirm precompact hook fired.
+**Manual end-to-end checklist:**
+
+1. `pip install -e ".[dev]"`. `castle --version` works.
+2. `/plugin marketplace add /home/lbihari/cognitive-castle` then `/plugin install castle@cognitive-castle`. Restart Claude Code.
+3. Confirm `/castle:help`, `/castle:init`, etc. visible.
+4. Confirm Castle MCP tools visible to agent.
+5. `/castle:init` completes palace onboarding.
+6. End session, start new one: confirm transcript was mined via the new hook path.
+7. Trigger PreCompact (let context fill): confirm precompact hook fires.
+8. Set `MEMPAL_DIR=/tmp/test` in shell, run a hook: confirm one-time deprecation warning appears.
+9. Confirm `~/.castle/hook_state/` exists and is being written to (not `~/.mempalace/hook_state/`).
+10. Confirm existing palace at `~/.mempalace/palace/` still loads (path unchanged — out of scope).
 
 ## Open questions for the implementation plan
 
-1. **`.mcp.json` vs `plugin.json.mcpServers` redundancy.** Pick one as canonical; delete or align the other. Resolve by reading Claude Code documentation and/or testing both forms. **Implementation plan should resolve this before committing manifest changes** since the wrong choice silently breaks MCP server loading.
-2. **Repository / marketplace owner URL.** The current `marketplace.json` says `https://github.com/MemPalace`; you've forked the project. What's the fork URL to put here? (Both `plugin.json.repository` and `marketplace.json.owner.url` need it.) The implementation plan should ask once and then plug it in everywhere.
-3. **`$CASTLE_DIR` handling in `cognitive_castle.hooks_cli`.** The wrapper no longer references the env var; the Python side does. Verify it gracefully handles unset / missing dir; if not, add the no-op-with-log path. (Likely already handled; verify before assuming.)
-4. **MCP tool count in `.claude-plugin/README.md`.** Current text says "19 MCP tools". Verify against `cognitive_castle/mcp_server.py` and update if changed. Trivial check during implementation.
-5. **Marketplace ID after `/plugin marketplace add`.** Whether Claude Code uses the directory name, the `marketplace.json.name`, or something else as the ID for the second slash command (`/plugin install castle@<id>`). Verify once and document in `.claude-plugin/README.md`.
+1. **`.mcp.json` vs `plugin.json.mcpServers` redundancy.** Pick canonical, drop the other. Verify against another working plugin or by sandbox test.
+2. **Repository / marketplace owner URL.** Fork URL for `plugin.json.repository` and `marketplace.json.owner.url`.
+3. **MCP tool count in `.claude-plugin/README.md`.** Verify against `cognitive_castle/mcp_server.py` and update.
+4. **Marketplace ID after `/plugin marketplace add`.** Whether Claude Code uses directory name, `marketplace.json.name`, or something else as the ID. Verify and document in README.
+5. **Doc-sweep boundaries.** Inventory at implementation time. If file count differs significantly from the ~80 estimate, surface for confirmation. Files like `CHANGELOG.md`, historical specs/plans, `docs/rfcs/*` are explicitly OUT.
 
 ## Risk
 
-- **Medium.** This is a focused rebrand of files that already exist plus deletion of legacy scripts. The blast radius is the plugin install path and four test files. Reversible via `git revert`.
-- **Highest single risk:** Open Question #1 (`.mcp.json` vs `plugin.json.mcpServers`). A wrong call here means the plugin appears to install but tools don't surface. The implementation plan must resolve this before final commit, ideally by verifying against another working plugin's structure.
-- **Lower risks:** legacy script deletion (only a problem if user wired the old paths in — they did not, per the audit of `~/.claude/settings.json`); skill/command rename (slash command path change — user has to relearn `/castle:init` vs `/mempalace:init`; trivial).
+- **Medium-low.** The shim approach is conservative: no breaking changes for legacy env vars, no class-import breakage, no state data loss. The only genuinely breaking move is deletion of the legacy top-level shell scripts — and the prior audit confirmed those aren't wired into the user's current `~/.claude/settings.json`.
+- **Highest single risk:** `.mcp.json` vs `plugin.json.mcpServers` redundancy. Wrong choice silently breaks MCP server loading.
+- **Doc-sweep regression risk:** mechanical replace could touch a string that has semantic meaning beyond branding (e.g., a URL fragment). Mitigation: walk in batches and run tests after each batch.
 
 ## Acceptance criteria
 
-1. Every file under `.claude-plugin/` reads as if newly written for "castle / cognitive_castle / LanceDB" — `grep -rn "mempal\|MemPalace\|mempalace" .claude-plugin/` returns zero matches.
-2. `tests/test_claude_plugin_hook_wrappers.py` passes after wrapper renames + content updates.
-3. `tests/test_branding.py` passes (no mempalace-related regressions).
-4. `tests/test_plugin_manifests.py` (new) passes, asserting structural contracts on the plugin files.
-5. Manual end-to-end (above checklist) succeeds: plugin loads, slash commands appear, MCP tools appear in a fresh session, hooks fire on Stop and PreCompact.
-6. Top-level `hooks/mempal_*.sh` and corresponding tests are deleted; `hooks/README.md` updated to point at the plugin install OR also deleted.
-7. `git status` clean after a full test suite run.
+1. `grep -rn "mempal\|MemPalace\|mempalace" .claude-plugin/` returns zero matches.
+2. `tests/test_claude_plugin_hook_wrappers.py` passes against the rebranded wrappers.
+3. `tests/test_branding.py` passes (no regressions).
+4. `tests/test_plugin_manifests.py` (new) passes.
+5. `tests/test_env_var_compat.py` (new) passes.
+6. `tests/test_state_dir_migration.py` (new) passes.
+7. Top-level `hooks/mempal_*.sh` and three associated test files are deleted.
+8. `grep -n "MEMPAL_DIR\|MEMPAL_PYTHON\|MEMPAL_VERBOSE" cognitive_castle/hooks_cli.py` shows references only inside the shim helper + its docstring.
+9. `grep -rn "MempalaceConfig" cognitive_castle/` shows references only inside `config.py` (definition + alias).
+10. `grep -rln "MemPalace\|mempalace" cognitive_castle/ --include="*.py" --include="*.md"` returns ≤ 5 matches, all in contexts where rebranding would change semantics (e.g., URL fragments, historical comments justifying the rename).
+11. Manual end-to-end (above) succeeds.
+12. `git status` clean after a full test suite run.

@@ -251,3 +251,21 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
 
     cfg = MempalaceConfig(config_dir=str(tmp_path))
     assert cfg.embedder_dim == 384
+
+
+def test_cognitive_castle_config_is_canonical_name():
+    """CognitiveCastleConfig is the new canonical class name."""
+    from cognitive_castle.config import CognitiveCastleConfig
+    cfg = CognitiveCastleConfig()
+    # Sanity check: an existing property still works.
+    assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+
+def test_mempalace_config_is_backward_compat_alias():
+    """MempalaceConfig still importable as an alias to CognitiveCastleConfig."""
+    from cognitive_castle.config import MempalaceConfig, CognitiveCastleConfig
+    # Same class object (alias, not a separate class).
+    assert MempalaceConfig is CognitiveCastleConfig
+    # Instances of one are instances of the other.
+    cfg = MempalaceConfig()
+    assert isinstance(cfg, CognitiveCastleConfig)

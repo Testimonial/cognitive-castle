@@ -529,7 +529,7 @@ def _set_wing_topics(existing: dict, wing_key: str, topics_for_wing: list, coerc
 def add_to_known_entities(entities_by_category: dict, wing: str = None) -> str:
     """Union ``entities_by_category`` into ``~/.castle/known_entities.json``.
 
-    Accepts ``{category: [names]}`` shape as produced by ``mempalace init``
+    Accepts ``{category: [names]}`` shape as produced by ``castle init``
     and merges into the registry the miner reads at mine time. Existing
     categories are preserved untouched unless also present in the input;
     for categories present in both, entries are unioned case-insensitively
@@ -671,9 +671,9 @@ def detect_hall(content: str) -> str:
     """
     global _HALL_KEYWORDS_CACHE
     if _HALL_KEYWORDS_CACHE is None:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
-        _HALL_KEYWORDS_CACHE = MempalaceConfig().hall_keywords
+        _HALL_KEYWORDS_CACHE = CognitiveCastleConfig().hall_keywords
     content_lower = content[:3000].lower()
 
     scores = {}
@@ -1213,13 +1213,13 @@ def _compute_topic_tunnels_for_wing(wing: str) -> int:
     Returns the number of tunnels created or refreshed. Zero means no
     overlap found (or the registry has no ``topics_by_wing`` map yet).
     """
-    from .config import MempalaceConfig
+    from .config import CognitiveCastleConfig
     from .palace_graph import topic_tunnels_for_wing
 
     topics_map = get_topics_by_wing()
     if not topics_map or wing not in topics_map:
         return 0
-    cfg = MempalaceConfig()
+    cfg = CognitiveCastleConfig()
     min_count = cfg.topic_tunnel_min_count
     created = topic_tunnels_for_wing(wing, topics_map, min_count=min_count)
     return len(created)

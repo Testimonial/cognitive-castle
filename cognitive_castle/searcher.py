@@ -291,7 +291,7 @@ def search_memories(
         candidate_strategy: Accepted for compatibility; ignored by new pipeline.
         is_hook_call: When True, uses a smaller reranker K cap (hook budget).
     """
-    from .config import MempalaceConfig as _cfg_cls
+    from .config import CognitiveCastleConfig as _cfg_cls
 
     cfg = _cfg_cls()
     results = _new_pipeline_search(query, palace_path, wing, room, n_results, cfg, is_hook_call)

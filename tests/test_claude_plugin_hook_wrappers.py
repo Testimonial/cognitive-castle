@@ -17,8 +17,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 SCRIPT_CASES = [
-    ("mempal-stop-hook.sh", "stop"),
-    ("mempal-precompact-hook.sh", "precompact"),
+    ("castle-stop-hook.sh", "stop"),
+    ("castle-precompact-hook.sh", "precompact"),
 ]
 
 
@@ -79,7 +79,7 @@ def test_plugin_hook_wrapper_prefers_castle_cli(
     bin_dir = _make_bin_dir(
         tmp_path,
         {
-            "cognitive-castle": (
+            "castle": (
                 "#!/bin/sh\n"
                 f'printf \'%s\' "$*" > "{_shell_path(args_file)}"\n'
                 f"{_capture_stdin_to(stdin_file)}"
@@ -128,7 +128,7 @@ def test_plugin_hook_wrapper_falls_back_to_importable_python(
     assert result.stdout == "{}\n"
     assert (
         args_file.read_text(encoding="utf-8")
-        == f"-m mempalace hook run --hook {hook_name} --harness claude-code"
+        == f"-m cognitive_castle hook run --hook {hook_name} --harness claude-code"
     )
     assert stdin_file.read_text(encoding="utf-8") == payload
 
@@ -144,7 +144,7 @@ def test_plugin_hook_wrapper_errors_cleanly_when_no_runner_exists(
 
     assert result.returncode != 0
     assert result.stdout == ""
-    assert "could not find a runnable mempalace command or module" in result.stderr
+    assert "could not find a runnable castle command or cognitive_castle module" in result.stderr
 
 
 @pytest.mark.parametrize(("script_name", "hook_name"), SCRIPT_CASES)
@@ -186,7 +186,7 @@ def test_plugin_hook_wrapper_falls_back_to_python_when_python3_cannot_import(
     assert result.stdout == "{}\n"
     assert (
         args_file.read_text(encoding="utf-8")
-        == f"-m mempalace hook run --hook {hook_name} --harness claude-code"
+        == f"-m cognitive_castle hook run --hook {hook_name} --harness claude-code"
     )
     assert stdin_file.read_text(encoding="utf-8") == payload
     assert not bad_python3_used.exists()

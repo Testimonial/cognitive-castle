@@ -59,7 +59,7 @@ class PalaceContext:
         palace_path: Filesystem root of the palace (convenience; same as
             ``backend.PalaceRef.local_path``).
         config: Palace config object (hall keywords, rooms list, privacy
-            floor, etc.). Shape is the existing :class:`MempalaceConfig`.
+            floor, etc.). Shape is the existing :class:`CognitiveCastleConfig`.
         adapter_name: Name of the adapter currently ingesting; populated by
             core so drawers can carry ``metadata["adapter_name"]``.
         adapter_version: Version of the adapter currently ingesting.

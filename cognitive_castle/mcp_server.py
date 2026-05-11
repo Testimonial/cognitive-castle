@@ -51,7 +51,7 @@ from datetime import date, datetime  # noqa: E402
 from pathlib import Path  # noqa: E402
 
 from .config import (  # noqa: E402
-    MempalaceConfig,
+    CognitiveCastleConfig,
     sanitize_kg_value,
     sanitize_name,
     sanitize_content,
@@ -95,7 +95,7 @@ _args = _parse_args()
 if _args.palace:
     os.environ["CASTLE_PALACE_PATH"] = os.path.abspath(_args.palace)
 
-_config = MempalaceConfig()
+_config = CognitiveCastleConfig()
 # Only override KG path when --palace is explicitly provided; otherwise use
 # KnowledgeGraph's default (~/.castle/knowledge_graph.sqlite3).
 if _args.palace:
@@ -1124,10 +1124,10 @@ def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
 
     Call with no arguments to see current settings.
     """
-    from .config import MempalaceConfig
+    from .config import CognitiveCastleConfig
 
     try:
-        config = MempalaceConfig()
+        config = CognitiveCastleConfig()
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1141,7 +1141,7 @@ def tool_hook_settings(silent_save: bool = None, desktop_toast: bool = None):
 
     # Re-read to return current state
     try:
-        config = MempalaceConfig()
+        config = CognitiveCastleConfig()
     except Exception:
         pass
 

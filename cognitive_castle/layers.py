@@ -21,9 +21,13 @@ import sys
 from pathlib import Path
 from collections import defaultdict
 
-from .config import MempalaceConfig
+from .config import CognitiveCastleConfig
 from .palace import get_collection as _get_collection
 from .searcher import _first_or_empty, build_where_filter
+
+# Backward-compat alias for legacy `@patch("cognitive_castle.layers.MempalaceConfig")`
+# usage in tests. Production code uses CognitiveCastleConfig directly.
+MempalaceConfig = CognitiveCastleConfig
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +89,7 @@ class Layer1:
     MAX_SCAN = 2000  # don't scan more than this for L1 generation
 
     def __init__(self, palace_path: str = None, wing: str = None):
-        cfg = MempalaceConfig()
+        cfg = CognitiveCastleConfig()
         self.palace_path = palace_path or cfg.palace_path
         self.wing = wing
 
@@ -190,7 +194,7 @@ class Layer2:
     """
 
     def __init__(self, palace_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CognitiveCastleConfig()
         self.palace_path = palace_path or cfg.palace_path
 
     def retrieve(self, wing: str = None, room: str = None, n_results: int = 10) -> str:
@@ -247,7 +251,7 @@ class Layer3:
     """
 
     def __init__(self, palace_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CognitiveCastleConfig()
         self.palace_path = palace_path or cfg.palace_path
 
     def search(self, query: str, wing: str = None, room: str = None, n_results: int = 5) -> str:
@@ -365,7 +369,7 @@ class MemoryStack:
     """
 
     def __init__(self, palace_path: str = None, identity_path: str = None):
-        cfg = MempalaceConfig()
+        cfg = CognitiveCastleConfig()
         self.palace_path = palace_path or cfg.palace_path
         self.identity_path = identity_path or os.path.expanduser("~/.castle/identity.txt")
 

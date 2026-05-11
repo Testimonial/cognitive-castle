@@ -1,5 +1,5 @@
 """
-Hook logic for MemPalace — Python implementation of session-start, stop, and precompact hooks.
+Hook logic for Cognitive Castle — Python implementation of session-start, stop, and precompact hooks.
 
 Reads JSON from stdin, outputs JSON to stdout.
 Supported hooks: session-start, stop, precompact
@@ -14,30 +14,84 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+# Track which legacy env-var names have already produced a deprecation warning
+# in this process. Cleared by tests via direct manipulation.
+_DEPRECATED_LEGACY_ENV_WARNED: set[str] = set()
+
+
+def _read_castle_env(new_name: str, old_name: str, default: str = "") -> str:
+    """Read a CASTLE_* env var, falling back to legacy MEMPAL_* with a one-time deprecation log.
+
+    Precedence: CASTLE_* > MEMPAL_* > default. If only the legacy name is set,
+    a deprecation warning is written to stderr once per process. Subsequent
+    reads of the same legacy name are silent.
+    """
+    new_val = os.environ.get(new_name)
+    if new_val is not None:
+        return new_val
+    old_val = os.environ.get(old_name)
+    if old_val is not None:
+        if old_name not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add(old_name)
+            sys.stderr.write(
+                f"[castle] WARNING: {old_name} is deprecated; rename to {new_name}.\n"
+            )
+        return old_val
+    return default
+
+
+def _state_dir() -> Path:
+    """Return the hook state directory, preferring ~/.castle/ and falling back to ~/.mempalace/.
+
+    Behavior:
+    - If ~/.castle/hook_state/ exists, return it.
+    - Else if ~/.mempalace/hook_state/ exists (legacy from MemPalace days),
+      return it and log a one-time migration note to stderr.
+    - Otherwise create ~/.castle/hook_state/ and return it.
+
+    The legacy-path log uses the same one-time-warning mechanism as
+    `_read_castle_env`, sharing `_DEPRECATED_LEGACY_ENV_WARNED`.
+    """
+    new = Path.home() / ".castle" / "hook_state"
+    old = Path.home() / ".mempalace" / "hook_state"
+    if new.exists():
+        return new
+    if old.exists():
+        if "state_dir_migration" not in _DEPRECATED_LEGACY_ENV_WARNED:
+            _DEPRECATED_LEGACY_ENV_WARNED.add("state_dir_migration")
+            sys.stderr.write(
+                f"[castle] NOTE: reading legacy state dir {old}; "
+                f"new writes will go to {new}.\n"
+            )
+        return old
+    new.mkdir(parents=True, exist_ok=True)
+    return new
+
+
 SAVE_INTERVAL = 15
-STATE_DIR = Path.home() / ".castle" / "hook_state"
+STATE_DIR = _state_dir()  # module-level constant, computed once at import
 
 
 def _castle_python() -> str:
-    """Return the python interpreter that has mempalace installed.
+    """Return the python interpreter that has cognitive_castle installed.
 
     When hooks are invoked by Claude Code, sys.executable may be the system
     python which lacks chromadb and other deps.  Resolution order:
     1. MEMPALACE_PYTHON env var (explicit override)
     2. Venv python from package install path
-    3. Editable install: venv/ sibling to mempalace/
+    3. Editable install: venv/ sibling to cognitive_castle/
     4. sys.executable fallback
     """
     # Honor explicit override (used by shell hook wrappers)
     env_python = os.environ.get("MEMPALACE_PYTHON", "")
     if env_python and os.path.isfile(env_python) and os.access(env_python, os.X_OK):
         return env_python
-    # This file lives at <venv>/lib/pythonX.Y/site-packages/mempalace/hooks_cli.py
-    # or <project>/mempalace/hooks_cli.py (editable install).
+    # This file lives at <venv>/lib/pythonX.Y/site-packages/cognitive_castle/hooks_cli.py
+    # or <project>/cognitive_castle/hooks_cli.py (editable install).
     venv_bin = Path(__file__).resolve().parents[3] / "bin" / "python"
     if venv_bin.is_file():
         return str(venv_bin)
-    # Editable install: assumes project root has a venv/ sibling to mempalace/
+    # Editable install: assumes project root has a venv/ sibling to cognitive_castle/
     project_venv = Path(__file__).resolve().parents[1] / "venv" / "bin" / "python"
     if project_venv.is_file():
         return str(project_venv)
@@ -47,25 +101,25 @@ def _castle_python() -> str:
 _RECENT_MSG_COUNT = 30  # how many recent user messages to summarize
 
 STOP_BLOCK_REASON = (
-    "AUTO-SAVE checkpoint (MemPalace). Save this session's key content:\n"
+    "AUTO-SAVE checkpoint (Cognitive Castle). Save this session's key content:\n"
     "1. castle_diary_write — session summary (what was discussed, "
     "key decisions, current state of work)\n"
     "2. castle_add_drawer — verbatim quotes, decisions, code snippets "
     "(place in appropriate wing and room)\n"
     "3. castle_kg_add — entity relationships (optional)\n"
-    "For THIS save, use MemPalace MCP tools only (not auto-memory .md files). "
+    "For THIS save, use Cognitive Castle MCP tools only (not auto-memory .md files). "
     "Use verbatim quotes where possible. Continue conversation after saving."
 )
 
 PRECOMPACT_BLOCK_REASON = (
-    "COMPACTION IMMINENT (MemPalace). Save ALL session content before context is lost:\n"
+    "COMPACTION IMMINENT (Cognitive Castle). Save ALL session content before context is lost:\n"
     "1. castle_diary_write — thorough session summary\n"
     "2. castle_add_drawer — ALL verbatim quotes, decisions, code, context "
     "(place each in appropriate wing and room)\n"
     "3. castle_kg_add — entity relationships (optional)\n"
-    "For THIS save, use MemPalace MCP tools only (not auto-memory .md files). "
+    "For THIS save, use Cognitive Castle MCP tools only (not auto-memory .md files). "
     "Be thorough — after compaction this is all that survives. "
-    "Save everything to MemPalace, then allow compaction to proceed."
+    "Save everything to Cognitive Castle, then allow compaction to proceed."
 )
 
 
@@ -200,17 +254,19 @@ def _output(data: dict):
 def _get_mine_targets() -> list[tuple[str, str]]:
     """Return the list of ``(dir, mode)`` targets for auto-ingest.
 
-    MEMPAL_DIR (when set and resolvable) contributes a ``"projects"``
-    target. Transcript ingestion is handled separately by
+    CASTLE_DIR (when set and resolvable) contributes a ``"projects"``
+    target. The legacy name MEMPAL_DIR is still read as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
+    Transcript ingestion is handled separately by
     ``_ingest_transcript`` — emitting it here too would double-mine the
     same JSONL into a different wing on every hook fire (#1231 review).
 
-    An empty list means no MEMPAL_DIR ingest should run.
+    An empty list means no CASTLE_DIR ingest should run.
     """
     targets: list[tuple[str, str]] = []
-    mempal_dir = os.environ.get("MEMPAL_DIR", "")
-    if mempal_dir:
-        resolved = Path(mempal_dir).expanduser().resolve()
+    castle_dir = _read_castle_env("CASTLE_DIR", "MEMPAL_DIR", default="")
+    if castle_dir:
+        resolved = Path(castle_dir).expanduser().resolve()
         if resolved.is_dir():
             targets.append((str(resolved), "projects"))
     return targets
@@ -271,8 +327,10 @@ def _spawn_mine(cmd: list) -> None:
 
 
 def _maybe_auto_ingest():
-    """Background-mine MEMPAL_DIR (project files) if set.
+    """Background-mine CASTLE_DIR (project files) if set.
 
+    The legacy env var MEMPAL_DIR is still accepted as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
     Transcript convos are ingested separately via ``_ingest_transcript``
     in the hook handlers — this function does not handle them, to avoid
     asymmetric interpreter handling and PID-file overwrite when both
@@ -292,8 +350,10 @@ def _maybe_auto_ingest():
 
 
 def _mine_sync():
-    """Synchronously mine MEMPAL_DIR (precompact path).
+    """Synchronously mine CASTLE_DIR (precompact path).
 
+    The legacy env var MEMPAL_DIR is still accepted as a fallback with a
+    deprecation warning; rename to CASTLE_DIR to silence it.
     Transcript convos are ingested separately via ``_ingest_transcript``
     in ``hook_precompact`` — keeping them out of this function avoids
     timeout stacking against the harness 30s ceiling (#1231 review).
@@ -324,11 +384,11 @@ def _mine_sync():
             pass
 
 
-def _desktop_toast(body: str, title: str = "MemPalace"):
+def _desktop_toast(body: str, title: str = "Cognitive Castle"):
     """Send a desktop notification via notify-send. Fails silently."""
     try:
         subprocess.Popen(
-            ["notify-send", "--app-name=MemPalace", "--icon=brain", title, body],
+            ["notify-send", "--app-name=Cognitive Castle", "--icon=brain", title, body],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
@@ -469,10 +529,10 @@ def _ingest_transcript(transcript_path: str):
     if not path.is_file() or path.stat().st_size < 100:
         return
 
-    from .config import MempalaceConfig
+    from .config import CognitiveCastleConfig
 
     try:
-        MempalaceConfig()  # validate config loads
+        CognitiveCastleConfig()  # validate config loads
     except Exception:
         return
 
@@ -565,14 +625,14 @@ def hook_stop(data: dict, harness: str):
         # (v3.3.0+), so if we can't read config, behave as if it's still on.
         silent_guard = True
         try:
-            from .config import MempalaceConfig
+            from .config import CognitiveCastleConfig
         except ImportError as exc:
             _log(
-                f"WARNING: could not import MempalaceConfig for stop guard: {exc}; defaulting to silent mode"
+                f"WARNING: could not import CognitiveCastleConfig for stop guard: {exc}; defaulting to silent mode"
             )
         else:
             try:
-                silent_guard = MempalaceConfig().hook_silent_save
+                silent_guard = CognitiveCastleConfig().hook_silent_save
             except AttributeError as exc:
                 _log(f"WARNING: could not read hook_silent_save: {exc}; defaulting to silent mode")
         if not silent_guard:
@@ -600,10 +660,10 @@ def hook_stop(data: dict, harness: str):
         _log(f"TRIGGERING SAVE at exchange {exchange_count}")
 
         # Read hook settings from config
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
 
         try:
-            config = MempalaceConfig()
+            config = CognitiveCastleConfig()
             silent = config.hook_silent_save
             toast = config.hook_desktop_toast
         except Exception:
@@ -683,7 +743,7 @@ def hook_precompact(data: dict, harness: str):
     if transcript_path:
         _ingest_transcript(transcript_path)
 
-    # Mine MEMPAL_DIR synchronously so project data lands before
+    # Mine CASTLE_DIR synchronously so project data lands before
     # compaction proceeds. Transcript convos were already kicked off
     # above via _ingest_transcript.
     _mine_sync()

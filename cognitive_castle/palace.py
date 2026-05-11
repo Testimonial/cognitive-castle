@@ -143,10 +143,10 @@ def _candidate_entity_words(text: str) -> list:
     """
     global _CANDIDATE_RX_CACHE
     if _CANDIDATE_RX_CACHE is None:
-        from .config import MempalaceConfig
+        from .config import CognitiveCastleConfig
         from .i18n import get_entity_patterns
 
-        patterns = get_entity_patterns(MempalaceConfig().entity_languages)
+        patterns = get_entity_patterns(CognitiveCastleConfig().entity_languages)
         rxs = []
         for pat in patterns["candidate_patterns"]:
             try:

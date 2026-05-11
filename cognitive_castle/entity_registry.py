@@ -620,7 +620,7 @@ class EntityRegistry:
         Returns list of newly discovered candidates for review.
 
         ``languages`` is forwarded to entity detection — pass the user's
-        configured ``MempalaceConfig().entity_languages`` to match the
+        configured ``CognitiveCastleConfig().entity_languages`` to match the
         locales used at ``castle init`` time.
         """
         from cognitive_castle.entity_detector import extract_candidates, score_entity, classify_entity
