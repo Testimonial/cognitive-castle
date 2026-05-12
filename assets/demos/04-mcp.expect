@@ -5,7 +5,7 @@
 # Prereqs: asciinema, agg, claude (authenticated), Castle MCP plugin
 # installed. Burns API tokens on each regen — not free.
 
-set timeout 90
+set timeout 120
 
 if { [info exists ::env(ASCIINEMA_REC)] == 0 } {
     exec rm -f assets/demos/04-mcp.cast
@@ -24,7 +24,11 @@ expect {
     -re "(Try .help|What can I help you with|>|\\?)" { }
     timeout { puts "Claude Code didn't start in time"; exit 1 }
 }
-sleep 1
+
+# Wait for Castle MCP to warm up. The embedder loads on first
+# invocation (~5-10s); without this pause, the LLM tries castle_search
+# before MCP is ready and reports "1 MCP server failed".
+sleep 15
 
 send "What did we decide about the embedder model? Search Castle for the specific decision and tell me why we picked it.\r"
 
