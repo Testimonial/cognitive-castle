@@ -163,7 +163,7 @@ def test_cmd_init_normalizes_wing_name_for_topics_registry(mock_config_cls, tmp_
         patch("builtins.open", MagicMock()),
         patch("cognitive_castle.cli._maybe_run_mine_after_init"),
         # Pass-zero corpus-origin detection runs unconditionally inside
-        # cmd_init now (#1221 / #1223). It accesses MempalaceConfig fields
+        # cmd_init now (#1221 / #1223). It accesses CognitiveCastleConfig fields
         # that don't survive MagicMock stringification, so stub it out —
         # this test only cares about the wing-slug write to the registry.
         patch("cognitive_castle.cli._run_pass_zero", return_value=None),

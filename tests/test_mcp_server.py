@@ -313,7 +313,7 @@ class TestReadTools:
     def test_no_palace_returns_error(self, monkeypatch, config, kg, tmp_dir):
         """Status should return error when the palace directory doesn't exist."""
         import os as _os
-        from cognitive_castle.config import MempalaceConfig
+        from cognitive_castle.config import CognitiveCastleConfig
         import json
 
         # Point config at a palace path that does not exist.
@@ -322,7 +322,7 @@ class TestReadTools:
         _os.makedirs(cfg_dir)
         with open(_os.path.join(cfg_dir, "config.json"), "w") as f:
             json.dump({"palace_path": nonexistent_palace}, f)
-        no_palace_config = MempalaceConfig(config_dir=cfg_dir)
+        no_palace_config = CognitiveCastleConfig(config_dir=cfg_dir)
 
         from cognitive_castle import mcp_server as _mcp
         monkeypatch.setattr(_mcp, "_config", no_palace_config)

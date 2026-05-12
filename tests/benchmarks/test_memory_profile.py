@@ -78,11 +78,11 @@ class TestToolStatusMemoryProfile:
         palace_path = str(tmp_path / "palace")
         gen.populate_palace_directly(palace_path, n_drawers=2_000, include_needles=False)
 
-        from cognitive_castle.config import MempalaceConfig
+        from cognitive_castle.config import CognitiveCastleConfig
         from cognitive_castle.knowledge_graph import KnowledgeGraph
         import cognitive_castle.mcp_server as mcp_mod
 
-        cfg = MempalaceConfig(config_dir=str(tmp_path / "cfg"))
+        cfg = CognitiveCastleConfig(config_dir=str(tmp_path / "cfg"))
         monkeypatch.setattr(cfg, "_file_config", {"palace_path": palace_path})
         monkeypatch.setattr(mcp_mod, "_config", cfg)
         monkeypatch.setattr(mcp_mod, "_kg", KnowledgeGraph(db_path=str(tmp_path / "kg.sqlite3")))

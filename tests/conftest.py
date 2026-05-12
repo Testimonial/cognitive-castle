@@ -1,11 +1,11 @@
 """
-conftest.py — Shared fixtures for MemPalace tests.
+conftest.py — Shared fixtures for Cognitive Castle tests.
 
 Provides isolated palace and knowledge graph instances so tests never
 touch the user's real data or leak temp files on failure.
 
 HOME is redirected to a temp directory at module load time — before any
-mempalace imports — so that module-level initialisations (e.g.
+cognitive_castle imports — so that module-level initialisations (e.g.
 ``_kg = KnowledgeGraph()`` in mcp_server) write to a throwaway location
 instead of the real user profile.
 """
@@ -14,7 +14,7 @@ import os
 import shutil
 import tempfile
 
-# ── Isolate HOME before any mempalace imports ──────────────────────────
+# ── Isolate HOME before any cognitive_castle imports ──────────────────────────
 _original_env = {}
 _session_tmp = tempfile.mkdtemp(prefix="castle_session_")
 
@@ -37,7 +37,7 @@ if _real_home:
 # Now it is safe to import mempalace modules that trigger initialisation.
 import pytest  # noqa: E402
 
-from cognitive_castle.config import MempalaceConfig  # noqa: E402
+from cognitive_castle.config import CognitiveCastleConfig  # noqa: E402
 from cognitive_castle.knowledge_graph import KnowledgeGraph  # noqa: E402
 
 
@@ -95,14 +95,14 @@ def palace_path(tmp_dir):
 
 @pytest.fixture
 def config(tmp_dir, palace_path):
-    """A MempalaceConfig pointing at the temp palace."""
+    """A CognitiveCastleConfig pointing at the temp palace."""
     cfg_dir = os.path.join(tmp_dir, "config")
     os.makedirs(cfg_dir)
     import json
 
     with open(os.path.join(cfg_dir, "config.json"), "w") as f:
         json.dump({"palace_path": palace_path}, f)
-    return MempalaceConfig(config_dir=cfg_dir)
+    return CognitiveCastleConfig(config_dir=cfg_dir)
 
 
 @pytest.fixture

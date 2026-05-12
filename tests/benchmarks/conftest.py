@@ -52,7 +52,7 @@ def kg_db(tmp_path):
 
 @pytest.fixture
 def config_dir(tmp_path):
-    """Isolated config directory for monkeypatching MempalaceConfig."""
+    """Isolated config directory for monkeypatching CognitiveCastleConfig."""
     d = tmp_path / "config"
     d.mkdir()
     config = {"palace_path": str(tmp_path / "palace"), "collection_name": "castle_drawers"}
