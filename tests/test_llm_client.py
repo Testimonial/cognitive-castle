@@ -24,9 +24,9 @@ from cognitive_castle.llm_client import (
 
 
 def test_get_provider_ollama():
-    p = get_provider("ollama", "gemma4:e4b")
+    p = get_provider("ollama", "gemma3:e4b")
     assert isinstance(p, OllamaProvider)
-    assert p.model == "gemma4:e4b"
+    assert p.model == "gemma3:e4b"
     assert p.endpoint == OllamaProvider.DEFAULT_ENDPOINT
 
 
@@ -99,13 +99,13 @@ def _mock_ollama_chat_response(content: str):
 
 
 def test_ollama_check_available_finds_model():
-    tags = {"models": [{"name": "gemma4:e4b"}, {"name": "other:latest"}]}
+    tags = {"models": [{"name": "gemma3:e4b"}, {"name": "other:latest"}]}
     mock = MagicMock()
     mock.read.return_value = json.dumps(tags).encode()
     mock.__enter__.return_value = mock
     mock.__exit__.return_value = False
     with patch("cognitive_castle.llm_client.urlopen", return_value=mock):
-        p = OllamaProvider(model="gemma4:e4b")
+        p = OllamaProvider(model="gemma3:e4b")
         ok, msg = p.check_available()
     assert ok
     assert msg == "ok"
@@ -140,7 +140,7 @@ def test_ollama_check_available_unreachable():
     from urllib.error import URLError
 
     with patch("cognitive_castle.llm_client.urlopen", side_effect=URLError("refused")):
-        p = OllamaProvider(model="gemma4:e4b")
+        p = OllamaProvider(model="gemma3:e4b")
         ok, msg = p.check_available()
     assert not ok
     assert "Cannot reach Ollama" in msg
@@ -155,11 +155,11 @@ def test_ollama_classify_sends_json_format():
         return _mock_ollama_chat_response('{"classifications": []}')
 
     with patch("cognitive_castle.llm_client.urlopen", side_effect=fake_urlopen):
-        p = OllamaProvider(model="gemma4:e4b")
+        p = OllamaProvider(model="gemma3:e4b")
         resp = p.classify("sys", "user", json_mode=True)
 
     assert captured["body"]["format"] == "json"
-    assert captured["body"]["model"] == "gemma4:e4b"
+    assert captured["body"]["model"] == "gemma3:e4b"
     assert captured["url"].endswith("/api/chat")
     assert resp.provider == "ollama"
     assert resp.text == '{"classifications": []}'
@@ -341,7 +341,7 @@ def test_ollama_provider_default_endpoint_is_local():
     """OllamaProvider's default endpoint is http://localhost:11434, which
     must be classified as local — no privacy warning fires for the
     typical user running Ollama on their own machine."""
-    p = OllamaProvider(model="gemma4:e4b")
+    p = OllamaProvider(model="gemma3:e4b")
     assert p.is_external_service is False, (
         f"Default OllamaProvider endpoint must be local; got "
         f"is_external_service={p.is_external_service} for endpoint={p.endpoint}"
@@ -480,6 +480,6 @@ def test_anthropic_api_key_source_tracking(monkeypatch):
 
 def test_ollama_api_key_source_is_none():
     """Ollama doesn't use api_key at all; ``api_key_source`` should be None."""
-    p = OllamaProvider(model="gemma4:e4b")
+    p = OllamaProvider(model="gemma3:e4b")
     assert p.api_key is None
     assert p.api_key_source is None

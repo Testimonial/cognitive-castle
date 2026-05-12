@@ -136,7 +136,7 @@ def _run_pass_zero(project_dir, palace_dir, llm_provider) -> dict:
     #
     # MERGE-FIELDS, NOT REPLACE: Tier 2's persona/user/platform extraction
     # is the whole reason to run it, but a weak local model (e.g. Ollama
-    # gemma4:e4b) can return a wrong likely_ai_dialogue/confidence call
+    # gemma3:e4b) can return a wrong likely_ai_dialogue/confidence call
     # that overrides a confident heuristic answer. Per @igorls's review of
     # PR #1211: keep the heuristic's likely_ai_dialogue + confidence
     # (don't let a weak LLM flip a confident regex answer), and merge in
@@ -262,7 +262,7 @@ def cmd_init(args):
     llm_provider = None
     if not getattr(args, "no_llm", False):
         provider_name = getattr(args, "llm_provider", "ollama") or "ollama"
-        provider_model = getattr(args, "llm_model", "gemma4:e4b") or "gemma4:e4b"
+        provider_model = getattr(args, "llm_model", "gemma3:e4b") or "gemma3:e4b"
         try:
             candidate = get_provider(
                 name=provider_name,
@@ -937,8 +937,8 @@ def main():
     )
     p_init.add_argument(
         "--llm-model",
-        default="gemma4:e4b",
-        help="Model name for the chosen provider (default: gemma4:e4b for Ollama).",
+        default="gemma3:e4b",
+        help="Model name for the chosen provider (default: gemma3:e4b for Ollama).",
     )
     p_init.add_argument(
         "--llm-endpoint",

@@ -655,7 +655,7 @@ def _init_args(project_dir: Path, *, no_llm: bool = False, **overrides):
         llm=False,
         no_llm=no_llm,
         llm_provider="ollama",
-        llm_model="gemma4:e4b",
+        llm_model="gemma3:e4b",
         llm_endpoint=None,
         llm_api_key=None,
     )
@@ -1404,7 +1404,7 @@ def test_no_internal_coordination_jargon_in_source_or_tests():
 #   - evidence            → COMBINE both
 #
 # Per @igorls's review of PR #1211: a small local model (e.g. Ollama
-# gemma4:e4b) can return a wrong YES/NO classification, but Tier 2's
+# gemma3:e4b) can return a wrong YES/NO classification, but Tier 2's
 # persona/user/platform extraction is the whole point of running it.
 # Merging fields preserves persona-extraction value without letting the
 # weak model flip a confident heuristic.
@@ -1434,7 +1434,7 @@ def test_merge_tier_fields_heuristic_yes_llm_no_keeps_heuristic_bool():
     """When heuristic says AI-dialogue with high confidence and LLM
     contradicts (says NOT AI-dialogue), the merged result keeps the
     heuristic's likely_ai_dialogue=True. Igor's PR #1211 review caught
-    this exact failure mode: a local Ollama gemma4:e4b returned a wrong
+    this exact failure mode: a local Ollama gemma3:e4b returned a wrong
     "not AI-dialogue, 0.90" that flipped a correct heuristic answer.
     """
     from unittest.mock import MagicMock
