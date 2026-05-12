@@ -3,11 +3,11 @@ import json
 import tempfile
 
 import pytest
-from cognitive_castle.config import MempalaceConfig, normalize_wing_name, sanitize_kg_value, sanitize_name
+from cognitive_castle.config import CognitiveCastleConfig, normalize_wing_name, sanitize_kg_value, sanitize_name
 
 
 def test_default_config():
-    cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+    cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
     assert "palace" in cfg.palace_path
     assert cfg.collection_name == "castle_drawers"
 
@@ -16,13 +16,13 @@ def test_config_from_file():
     tmpdir = tempfile.mkdtemp()
     with open(os.path.join(tmpdir, "config.json"), "w") as f:
         json.dump({"palace_path": "/custom/palace"}, f)
-    cfg = MempalaceConfig(config_dir=tmpdir)
+    cfg = CognitiveCastleConfig(config_dir=tmpdir)
     assert cfg.palace_path == "/custom/palace"
 
 
 def test_embedding_device_defaults_to_auto(monkeypatch):
     monkeypatch.delenv("CASTLE_EMBEDDING_DEVICE", raising=False)
-    cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+    cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
     assert cfg.embedding_device == "auto"
 
 
@@ -31,7 +31,7 @@ def test_embedding_device_from_config_is_normalized(tmp_path, monkeypatch):
     with open(tmp_path / "config.json", "w") as f:
         json.dump({"embedding_device": "  CUDA  "}, f)
 
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.embedding_device == "cuda"
 
 
@@ -40,7 +40,7 @@ def test_embedding_device_env_overrides_config(tmp_path, monkeypatch):
         json.dump({"embedding_device": "cpu"}, f)
     monkeypatch.setenv("CASTLE_EMBEDDING_DEVICE", "  CoreML  ")
 
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.embedding_device == "coreml"
 
 
@@ -48,7 +48,7 @@ def test_env_override():
     raw = "/env/palace"
     os.environ["CASTLE_PALACE_PATH"] = raw
     try:
-        cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+        cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
         # palace_path normalizes with abspath + expanduser to match the
         # --palace CLI code path. On Unix that's a no-op for "/env/palace";
         # on Windows abspath prepends the current drive letter.
@@ -65,7 +65,7 @@ def test_env_path_expanduser():
     raw = os.path.join("~", "mempalace-test")
     os.environ["CASTLE_PALACE_PATH"] = raw
     try:
-        cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+        cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
         assert cfg.palace_path == os.path.abspath(os.path.expanduser(raw))
         assert cfg.palace_path.endswith("mempalace-test")
     finally:
@@ -79,7 +79,7 @@ def test_env_path_abspath_collapses_traversal():
     expected = os.path.abspath(os.path.expanduser(raw))
     os.environ["CASTLE_PALACE_PATH"] = raw
     try:
-        cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+        cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
         # .. segments must be collapsed, not preserved literally.
         assert ".." not in cfg.palace_path
         assert cfg.palace_path == expected
@@ -96,7 +96,7 @@ def test_env_path_legacy_alias_normalized():
     raw = os.path.join("~", "legacy-alias", "..", "mempalace-test")
     os.environ["MEMPAL_PALACE_PATH"] = raw
     try:
-        cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
+        cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
         assert ".." not in cfg.palace_path
         assert cfg.palace_path == os.path.abspath(os.path.expanduser(raw))
     finally:
@@ -105,7 +105,7 @@ def test_env_path_legacy_alias_normalized():
 
 def test_init():
     tmpdir = tempfile.mkdtemp()
-    cfg = MempalaceConfig(config_dir=tmpdir)
+    cfg = CognitiveCastleConfig(config_dir=tmpdir)
     cfg.init()
     assert os.path.exists(os.path.join(tmpdir, "config.json"))
 
@@ -215,8 +215,8 @@ def test_kg_value_rejects_over_length():
 
 
 def test_config_has_retrieval_upgrade_keys():
-    from cognitive_castle.config import MempalaceConfig
-    cfg = MempalaceConfig()
+    from cognitive_castle.config import CognitiveCastleConfig
+    cfg = CognitiveCastleConfig()
     # Cutover: defaults are now the new stack.
     assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     assert cfg.embedder_dim == 384
@@ -240,7 +240,7 @@ def test_use_new_retrieval_pipeline_handles_false_string_in_config_json(tmp_path
     with open(tmp_path / "config.json", "w") as f:
         json.dump({"use_new_retrieval_pipeline": "false"}, f)
 
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.use_new_retrieval_pipeline is False
 
 
@@ -249,7 +249,7 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
     with open(tmp_path / "config.json", "w") as f:
         json.dump({"embedder_dim": -1}, f)
 
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.embedder_dim == 384
 
 

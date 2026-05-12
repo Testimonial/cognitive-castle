@@ -128,7 +128,7 @@ class TestDetectHallCaching:
     """detect_hall should cache config to avoid disk reads per drawer."""
 
     def test_detect_hall_does_not_reread_config(self):
-        """After first call, config should be cached — no new MempalaceConfig()."""
+        """After first call, config should be cached — no new CognitiveCastleConfig()."""
         import cognitive_castle.miner as miner_mod
 
         # Reset cache

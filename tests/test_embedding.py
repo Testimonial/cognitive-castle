@@ -34,11 +34,11 @@ def test_embedding_respects_config_override():
 
 def _make_default_cfg():
     """Return an instance of the project's config class with all defaults."""
-    # The actual config class name may be MempalaceConfig (legacy) or CognitiveCastleConfig.
-    # Try CognitiveCastleConfig first, fall back to MempalaceConfig.
+    # The actual config class name may be CognitiveCastleConfig (legacy) or CognitiveCastleConfig.
+    # Try CognitiveCastleConfig first, fall back to CognitiveCastleConfig.
     try:
         from cognitive_castle.config import CognitiveCastleConfig
         return CognitiveCastleConfig()
     except ImportError:
-        from cognitive_castle.config import MempalaceConfig
-        return MempalaceConfig()
+        from cognitive_castle.config import CognitiveCastleConfig
+        return CognitiveCastleConfig()

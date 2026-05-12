@@ -260,7 +260,7 @@ def test_entity_metadata_finds_cyrillic_names(monkeypatch):
     # Reset cached patterns so they reload with the monkeypatched languages
     monkeypatch.setattr(palace_mod, "_CANDIDATE_RX_CACHE", None)
     monkeypatch.setattr(
-        "cognitive_castle.config.MempalaceConfig.entity_languages",
+        "cognitive_castle.config.CognitiveCastleConfig.entity_languages",
         property(lambda self: ("en", "ru")),
     )
 

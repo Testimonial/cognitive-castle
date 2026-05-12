@@ -9,7 +9,7 @@ from cognitive_castle import repair
 # ── _get_palace_path ──────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.repair.MempalaceConfig", create=True)
+@patch("cognitive_castle.repair.CognitiveCastleConfig", create=True)
 def test_get_palace_path_from_config(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/configured/palace"
     with patch.dict("sys.modules", {}):

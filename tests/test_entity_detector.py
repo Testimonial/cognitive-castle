@@ -415,15 +415,15 @@ def test_scan_for_detection_max_files(tmp_path):
 
 @contextlib.contextmanager
 def _temp_locale(locale_code: str, entity_section: dict):
-    """Context manager that drops a locale JSON into mempalace/i18n/ for the test body.
+    """Context manager that drops a locale JSON into cognitive_castle/i18n/ for the test body.
 
     Cleans up the file and clears every cache that depends on locale data on exit,
     even if the test fails or the entity section is invalid.
 
-    Note: writes into the real mempalace/i18n/ directory. If a test process is
+    Note: writes into the real cognitive_castle/i18n/ directory. If a test process is
     SIGKILLed mid-test the orphan zz-test-*.json file will break test_all_languages_load
     on the next run (the fixture lacks the required terms/cli/aaak sections).
-    Recover with `rm mempalace/i18n/zz-test-*.json`.
+    Recover with `rm cognitive_castle/i18n/zz-test-*.json`.
     """
     from cognitive_castle import i18n
     from cognitive_castle import entity_detector
@@ -576,43 +576,43 @@ def test_normalize_langs_handles_string_input():
 
 
 def test_config_entity_languages_defaults_to_english(tmp_path, monkeypatch):
-    """MempalaceConfig.entity_languages defaults to ['en'] with no config file."""
-    from cognitive_castle.config import MempalaceConfig
+    """CognitiveCastleConfig.entity_languages defaults to ['en'] with no config file."""
+    from cognitive_castle.config import CognitiveCastleConfig
 
-    monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
+    monkeypatch.delenv("CASTLE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.entity_languages == ["en"]
 
 
 def test_config_entity_languages_from_env(tmp_path, monkeypatch):
     """Env var overrides config file."""
-    from cognitive_castle.config import MempalaceConfig
+    from cognitive_castle.config import CognitiveCastleConfig
 
-    monkeypatch.setenv("MEMPALACE_ENTITY_LANGUAGES", "en,pt-br,ru")
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    monkeypatch.setenv("CASTLE_ENTITY_LANGUAGES", "en,pt-br,ru")
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg.entity_languages == ["en", "pt-br", "ru"]
 
 
 def test_config_set_entity_languages_persists(tmp_path, monkeypatch):
     """set_entity_languages writes to disk and is read back."""
-    from cognitive_castle.config import MempalaceConfig
+    from cognitive_castle.config import CognitiveCastleConfig
 
-    monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
+    monkeypatch.delenv("CASTLE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     cfg.set_entity_languages(["en", "pt-br"])
-    cfg2 = MempalaceConfig(config_dir=str(tmp_path))
+    cfg2 = CognitiveCastleConfig(config_dir=str(tmp_path))
     assert cfg2.entity_languages == ["en", "pt-br"]
 
 
 def test_config_set_entity_languages_empty_falls_back_to_english(tmp_path, monkeypatch):
     """An empty list normalizes to ['en']."""
-    from cognitive_castle.config import MempalaceConfig
+    from cognitive_castle.config import CognitiveCastleConfig
 
-    monkeypatch.delenv("MEMPALACE_ENTITY_LANGUAGES", raising=False)
+    monkeypatch.delenv("CASTLE_ENTITY_LANGUAGES", raising=False)
     monkeypatch.delenv("MEMPAL_ENTITY_LANGUAGES", raising=False)
-    cfg = MempalaceConfig(config_dir=str(tmp_path))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
     result = cfg.set_entity_languages([])
     assert result == ["en"]
     assert cfg.entity_languages == ["en"]

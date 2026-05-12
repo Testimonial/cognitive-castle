@@ -31,10 +31,10 @@ def _make_palace(tmp_path, n_drawers, scale="small"):
 
 def _patch_mcp_config(monkeypatch, palace_path, tmp_path):
     """Monkeypatch mcp_server._config and _kg to point at test dirs."""
-    from cognitive_castle.config import MempalaceConfig
+    from cognitive_castle.config import CognitiveCastleConfig
     from cognitive_castle.knowledge_graph import KnowledgeGraph
 
-    cfg = MempalaceConfig(config_dir=str(tmp_path / "cfg"))
+    cfg = CognitiveCastleConfig(config_dir=str(tmp_path / "cfg"))
     # Override palace_path directly on the object
     monkeypatch.setattr(cfg, "_file_config", {"palace_path": palace_path})
 
