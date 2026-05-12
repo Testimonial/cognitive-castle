@@ -44,6 +44,24 @@ def _get_reranker(model_name: str, device: str):
     return _model_cache[key]
 
 
+def _is_cuda_oom(exc: BaseException) -> bool:
+    """Detect CUDA out-of-memory errors by exception type or message.
+
+    On shared dev machines the GPU may not have enough free VRAM when Castle
+    loads the cross-encoder. Without a fallback the entire search pipeline
+    fails. Match torch.cuda.OutOfMemoryError when available, then fall back
+    to substring matching for environments where torch isn't importable.
+    """
+    try:
+        import torch  # type: ignore
+        if isinstance(exc, torch.cuda.OutOfMemoryError):
+            return True
+    except (ImportError, AttributeError):
+        pass
+    msg = str(exc).lower()
+    return "out of memory" in msg or "cudaerrormemoryallocation" in msg
+
+
 def rerank(
     query: str,
     candidates: list[str],
@@ -54,6 +72,10 @@ def rerank(
 
     Returns scores aligned to the input candidate order. Empty input returns
     an empty list without loading the model.
+
+    If the auto-resolved device is CUDA and the cross-encoder fails to load
+    with a CUDA out-of-memory error, fall back to the CPU reranker rather
+    than crashing the entire retrieval pipeline.
     """
     if not candidates:
         return []
@@ -62,7 +84,21 @@ def rerank(
         cfg = CognitiveCastleConfig()
     resolved_device = _resolve_device(device)
     model_name = _pick_model_for_device(resolved_device, cfg)
-    model = _get_reranker(model_name, resolved_device)
+    try:
+        model = _get_reranker(model_name, resolved_device)
+    except Exception as e:
+        if resolved_device == "cuda" and _is_cuda_oom(e):
+            import sys
+            print(
+                f"[reranker] CUDA load failed ({type(e).__name__}: {e}); "
+                f"falling back to CPU reranker",
+                file=sys.stderr,
+            )
+            resolved_device = "cpu"
+            model_name = _pick_model_for_device(resolved_device, cfg)
+            model = _get_reranker(model_name, resolved_device)
+        else:
+            raise
     pairs = [(query, doc) for doc in candidates]
     raw_scores = model.predict(pairs)
     return [float(s) for s in raw_scores]
