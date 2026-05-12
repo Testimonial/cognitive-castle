@@ -46,3 +46,55 @@ def test_rerank_returns_scores_aligned_to_input():
 def test_rerank_empty_candidates_returns_empty():
     scores = rr.rerank("query", [], device="cpu")
     assert scores == []
+
+
+def test_is_cuda_oom_detects_oom_by_message():
+    """CUDA OOM should be detected via exception message even without torch."""
+    assert rr._is_cuda_oom(RuntimeError("CUDA error: out of memory"))
+    assert rr._is_cuda_oom(Exception("cudaErrorMemoryAllocation occurred"))
+
+
+def test_is_cuda_oom_returns_false_for_other_errors():
+    """Non-OOM exceptions should not trigger the CPU fallback path."""
+    assert not rr._is_cuda_oom(RuntimeError("some other error"))
+    assert not rr._is_cuda_oom(ValueError("bad input"))
+
+
+def test_rerank_falls_back_to_cpu_on_cuda_oom():
+    """When the GPU reranker can't load (OOM), gracefully use the CPU reranker."""
+    cfg = MagicMock()
+    cfg.reranker_model_gpu = "model-gpu"
+    cfg.reranker_model_cpu = "model-cpu"
+
+    fake_cpu_ce = MagicMock()
+    fake_cpu_ce.predict.return_value = [0.7, 0.3]
+
+    calls = []
+
+    def fake_get_reranker(model_name, device):
+        calls.append((model_name, device))
+        if device == "cuda":
+            raise RuntimeError("CUDA error: out of memory")
+        return fake_cpu_ce
+
+    with patch("cognitive_castle.reranker._cuda_available", return_value=True), \
+         patch("cognitive_castle.reranker._get_reranker", side_effect=fake_get_reranker):
+        scores = rr.rerank("q", ["a", "b"], device="auto", cfg=cfg)
+
+    assert scores == [0.7, 0.3]
+    assert calls == [("model-gpu", "cuda"), ("model-cpu", "cpu")]
+
+
+def test_rerank_does_not_fall_back_on_non_oom_cuda_error():
+    """A non-OOM exception on cuda should propagate, not silently switch to cpu."""
+    cfg = MagicMock()
+    cfg.reranker_model_gpu = "model-gpu"
+    cfg.reranker_model_cpu = "model-cpu"
+
+    with patch("cognitive_castle.reranker._cuda_available", return_value=True), \
+         patch("cognitive_castle.reranker._get_reranker", side_effect=RuntimeError("unrelated error")):
+        try:
+            rr.rerank("q", ["a"], device="auto", cfg=cfg)
+            raise AssertionError("expected RuntimeError")
+        except RuntimeError as e:
+            assert "unrelated error" in str(e)
