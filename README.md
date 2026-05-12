@@ -2,7 +2,93 @@
 
 # Cognitive Castle
 
-**Local-first persistent memory for AI agents.** Verbatim storage, pluggable vector backend, 96.6% R@5 raw on LongMemEval — zero API calls.
+<svg viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg" width="640" style="max-width:640px;height:auto;" role="img" aria-label="Cognitive Castle architecture: three wings (code, convos, papers) with rooms and drawers, connected by tunnels">
+  <defs>
+    <pattern id="grid" width="14" height="14" patternUnits="userSpaceOnUse">
+      <path d="M 14 0 L 0 0 0 14" fill="none" stroke="#1a2330" stroke-width="0.5"/>
+    </pattern>
+  </defs>
+  <rect width="320" height="200" fill="url(#grid)"/>
+  <!-- wing_code -->
+  <rect x="20" y="50" width="60" height="130" fill="none" stroke="#4dc9f6" stroke-width="1.5"/>
+  <text x="50" y="42" text-anchor="middle" fill="#4dc9f6" font-size="10" font-family="monospace" font-weight="bold">code</text>
+  <!-- rooms inside code -->
+  <rect x="26" y="58" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="50" y="70" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">backends</text>
+  <rect x="26" y="80" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="50" y="92" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">retrieval</text>
+  <rect x="26" y="102" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="50" y="114" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">hooks</text>
+  <!-- drawer grid for code -->
+  <rect x="29" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="37" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="45" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="53" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="61" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="29" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="37" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="45" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="53" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="29" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="37" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <text x="50" y="170" text-anchor="middle" fill="#7dd8f8" font-size="6.5" font-family="monospace" opacity="0.7">847 drawers</text>
+
+  <!-- wing_convos -->
+  <rect x="130" y="50" width="60" height="130" fill="none" stroke="#4dc9f6" stroke-width="1.5"/>
+  <text x="160" y="42" text-anchor="middle" fill="#4dc9f6" font-size="10" font-family="monospace" font-weight="bold">convos</text>
+  <rect x="136" y="58" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="160" y="70" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">arch-debate</text>
+  <rect x="136" y="80" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="160" y="92" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">bug-hunts</text>
+  <rect x="136" y="102" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="160" y="114" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">pairing</text>
+  <!-- drawers for convos (more, since count is higher) -->
+  <rect x="139" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="147" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="155" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="163" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="171" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="139" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="147" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="155" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="163" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="171" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="179" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="139" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="147" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="155" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="163" y="144" width="6" height="4" fill="#b0e8ff"/>
+  <text x="160" y="170" text-anchor="middle" fill="#7dd8f8" font-size="6.5" font-family="monospace" opacity="0.7">2,143 drawers</text>
+
+  <!-- wing_papers -->
+  <rect x="240" y="50" width="60" height="130" fill="none" stroke="#4dc9f6" stroke-width="1.5"/>
+  <text x="270" y="42" text-anchor="middle" fill="#4dc9f6" font-size="10" font-family="monospace" font-weight="bold">papers</text>
+  <rect x="246" y="58" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="270" y="70" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">longmemeval</text>
+  <rect x="246" y="80" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="270" y="92" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">agent-mem</text>
+  <rect x="246" y="102" width="48" height="18" fill="#4dc9f6" opacity="0.15" stroke="#7dd8f8" stroke-width="0.7"/>
+  <text x="270" y="114" text-anchor="middle" fill="#7dd8f8" font-size="7" font-family="monospace">rag-eval</text>
+  <!-- drawers for papers (fewer, since count is lower) -->
+  <rect x="249" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="257" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="265" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="273" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="281" y="128" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="249" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <rect x="257" y="136" width="6" height="4" fill="#b0e8ff"/>
+  <text x="270" y="170" text-anchor="middle" fill="#7dd8f8" font-size="6.5" font-family="monospace" opacity="0.7">412 drawers</text>
+
+  <!-- tunnel 1: code/retrieval ↔ papers/longmemeval -->
+  <path d="M 80 92 Q 160 18 240 67" fill="none" stroke="#b0e8ff" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.7"/>
+  <text x="160" y="14" text-anchor="middle" fill="#b0e8ff" font-size="6.5" font-family="monospace" opacity="0.7">"3-stage pipeline" ← driven by longmemeval recall study</text>
+
+  <!-- tunnel 2: convos/bug-hunts ↔ code/hooks -->
+  <path d="M 130 92 Q 105 142 80 112" fill="none" stroke="#b0e8ff" stroke-width="1.2" stroke-dasharray="3 2" opacity="0.7"/>
+  <text x="105" y="200" text-anchor="middle" fill="#b0e8ff" font-size="6.5" font-family="monospace" opacity="0.7">"-m cognitive-castle bug" ← Stop hook fix</text>
+</svg>
+
+**Local-first persistent memory for AI agents.** Verbatim. No API key. 96.6% R@5 on LongMemEval.
 
 [![][version-shield]][release-link]
 [![][python-shield]][python-link]
@@ -12,74 +98,81 @@
 
 ---
 
-## What it is
+## The 30-second pitch
 
-Cognitive Castle stores conversation history and project context as
-verbatim text and retrieves it with semantic search. It does not
-summarise, extract, or paraphrase. The index is structured — people and
-projects become *wings*, topics become *rooms*, and original content
-lives in *drawers* — so searches can be scoped instead of running
-against a flat corpus.
+Your AI forgets between sessions. Cognitive Castle stores every conversation and project file verbatim, organises them by entity (wings → rooms → drawers), and gives them back word-for-word in milliseconds. It runs entirely on your laptop — no API keys, no cloud, no summarisation.
 
-The retrieval layer is pluggable. The default is **LanceDB**; the
-backend interface is in
-[`cognitive_castle/backends/base.py`](cognitive_castle/backends/base.py)
-and alternative backends can be dropped in without touching the rest of
-the system.
-
-Nothing leaves your machine unless you opt in.
+📦 **Verbatim** · 🔒 **100% Local** · 🔌 **MCP-native** · 🆓 **No API key**
 
 ---
-
-## Install
-
-```bash
-git clone https://github.com/Testimonial/cognitive-castle.git
-cd cognitive-castle
-pip install -e .
-```
-
-Verify:
-
-```bash
-castle --version
-# Cognitive Castle 3.3.3
-```
 
 ## Quickstart
 
 ```bash
-# 1. Detect rooms from your folder structure (and mine if you pass --yes)
+# 1. Install
+pip install cognitive-castle
+
+# 2. Build your first palace from a project directory
 castle init ~/projects/myapp --yes
 
-# 2. Mine more content into the palace later
-castle mine ~/projects/myapp                      # project files
-castle mine ~/.claude/projects/ --mode convos     # Claude Code sessions
+# 3. Find something
+castle search "why did we switch to graphql"
 
-# 3. Search
-castle search "why did we switch to GraphQL"
+# 4. Scope to a wing/room
 castle search "auth flow" --wing myapp --room backend
-
-# 4. Load wake-up context for a fresh AI session
-castle wake-up
-castle wake-up --wing myapp                       # project-scoped
-
-# 5. Inspect the palace
-castle status
 ```
 
-## Connect to Claude Code (or any MCP client)
+→ See [How it works](#how-it-works) or [Connect to Claude Code](#connect-to-claude-code)
 
-Cognitive Castle ships an MCP server with **29 tools** for palace
-reads/writes, knowledge-graph queries, cross-wing navigation, drawer
-management, and agent diaries.
+---
+
+## How it works
+
+```mermaid
+graph LR
+    A[project files] --> M[Miner]
+    B[chat exports] --> M
+    C[Stop hook] --> M
+    M --> P[(Palace<br/>LanceDB + SQLite KG)]
+    P --> S[Searcher<br/>dense + FTS + KG<br/>→ RRF + recency<br/>→ cross-rerank]
+    S --> AI[AI agent · CLI · wake-up]
+    classDef input fill:#1a2330,stroke:#4dc9f6,color:#7dd8f8
+    classDef proc fill:#2a6584,stroke:#4dc9f6,color:#b0e8ff
+    classDef store fill:#1a4a5e,stroke:#4dc9f6,color:#b0e8ff
+    class A,B,C input
+    class M,S proc
+    class P store
+```
+
+Three input streams (project files, conversation exports, auto-save hooks) feed a single miner that chunks them into verbatim **drawers** and files them into **rooms** (topics) inside **wings** (people or projects). Search runs a 3-stage pipeline — dense embeddings + Tantivy full-text + knowledge-graph traversal, fused with weighted RRF and recency, then cross-encoder reranked. The retrieved drawers come back as the original text, never a summary.
+
+---
+
+## Connect to Claude Code
+
+Cognitive Castle ships as a Claude Code plugin that auto-registers the MCP server and both auto-save hooks (Stop + PreCompact).
+
+```
+# Most users — install from the public marketplace:
+/plugin marketplace add Testimonial/cognitive-castle
+/plugin install castle@cognitive-castle
+
+# Contributors with a local clone:
+/plugin marketplace add /path/to/cognitive-castle
+/plugin install castle@cognitive-castle
+
+# then fully quit and reopen Claude Code
+```
+
+After reopening, run `/castle:init` once to complete palace setup.
+
+**Manual setup for non-Claude-Code MCP clients:**
 
 ```bash
 claude mcp add castle -- castle-mcp
 ```
 
-Restart your AI client and the `castle_*` tools become available
-mid-conversation.
+Restart your AI client and the `castle_*` tools become available mid-conversation.
 
 ---
 
@@ -90,9 +183,11 @@ mid-conversation.
 | `castle init <dir>` | Detect rooms from folder structure; with `--yes`, also mines |
 | `castle mine <dir>` | Mine project files (default mode) |
 | `castle mine <dir> --mode convos` | Mine conversation exports (Claude Code, Claude.ai, ChatGPT, Slack) |
+| `castle sweep <transcript-dir>` | Per-message catch-up miner (idempotent, resume-safe) |
 | `castle search "query"` | Semantic search; filter with `--wing`, `--room` |
 | `castle wake-up` | L0 + L1 wake-up context (~600–900 tokens) |
 | `castle status` | Drawer counts per wing/room |
+| `castle reindex --palace <path> --sources <dirs>` | Rebuild the palace from source (e.g., after embedder upgrade) |
 | `castle mcp` | Print the MCP setup command |
 | `castle repair --clean-locks` | Remove stale lock files (>24 h) |
 | `castle repair-status` | Read-only health check |
@@ -147,18 +242,52 @@ python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json
 
 ---
 
+## Why Castle vs mem0 / letta / zep
+
+mem0, letta, and zep are excellent AI memory systems. Castle is the choice when you specifically need verbatim recall on your laptop with no service running and no API key.
+
+| | Cognitive Castle | mem0 | letta | zep |
+|---|---|---|---|---|
+| Verbatim storage | ✅ guaranteed | ❌ summarises | ⚠ tiered (verbatim core + summarised archive) | ❌ extracts |
+| Local-first default | ✅ | ⚠ optional | ⚠ self-host | ⚠ self-host |
+| API key required | ❌ none for core | ⚠ for cloud | depends on LLM | ❌ |
+| MCP-native | ✅ plugin | ❌ | ❌ | ❌ |
+| Backend | LanceDB (pluggable) | pgvector/Qdrant | varies | pgvector |
+| Published benchmarks | ✅ 4 datasets | partial | ⚠ | partial |
+
+mem0 excels at multi-agent shared memory in production cloud deployments. letta is the right choice when you want a full agent runtime, not just a memory layer. zep is excellent if you're already building on PostgreSQL and want chat history with extraction.
+
+---
+
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  CLI  /  MCP server  (castle, castle-mcp — 29 tools)        │
-├─────────────────────────────────────────────────────────────┤
-│  Miner   Searcher   Knowledge Graph   Diary   Hooks         │
-├─────────────────────────────────────────────────────────────┤
-│  Backend interface  (cognitive_castle/backends/base.py)     │
-├─────────────────────────────────────────────────────────────┤
-│  LanceDB (default)  │  ChromaDB (legacy)  │  Your backend   │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Interfaces
+      CLI["castle CLI"]
+      MCP["castle-mcp · 29 tools"]
+    end
+    subgraph Logic
+      Miner
+      Searcher
+      KG["Knowledge Graph"]
+      Hooks
+      Diary
+    end
+    subgraph Abstraction
+      BIF["BaseBackend interface"]
+    end
+    subgraph Storage
+      Lance["LanceDB"]
+      SQL["SQLite (KG)"]
+    end
+    Interfaces --> Logic
+    Logic --> Abstraction
+    Abstraction --> Storage
+    classDef storage fill:#1a4a5e,stroke:#4dc9f6,color:#b0e8ff
+    classDef abstr fill:#2a6584,stroke:#4dc9f6,color:#b0e8ff
+    class Lance,SQL storage
+    class BIF abstr
 ```
 
 - **Wings** — top-level groupings (projects, agents, conversations)
@@ -167,16 +296,23 @@ python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json
 - **Tunnels** — typed cross-references between drawers (graph edges)
 - **Diaries** — per-agent append-only logs
 
+---
+
 ## Knowledge graph
 
 A temporal entity-relationship graph with validity windows: add, query,
 invalidate, timeline. Backed by local SQLite — no extra service to run.
 
+---
+
 ## Auto-save hooks
 
-Two Claude Code hooks save context periodically and before compaction;
-`castle sweep <transcript-dir>` provides per-message recall on top of the
-file-level chunks the hooks produce — idempotent and resume-safe.
+Two Claude Code hooks save context automatically in the background:
+
+- **Stop hook** — fires every ~15 turns, mines the conversation into the palace without interrupting you
+- **PreCompact hook** — emergency save triggered before context compaction so nothing is lost
+
+Both hooks are auto-registered when you install the plugin. `castle sweep <transcript-dir>` provides per-message catch-up on top of the file-level chunks the hooks produce — idempotent and resume-safe.
 
 ---
 
@@ -184,13 +320,17 @@ file-level chunks the hooks produce — idempotent and resume-safe.
 
 - Python 3.9+
 - LanceDB (installed automatically)
-- ~300 MB disk for the default embedding model (`all-MiniLM-L6-v2`)
+- ~500 MB disk for the default embedding model (`paraphrase-multilingual-MiniLM-L12-v2`)
 
 No API key is required for the core path.
+
+---
 
 ## License
 
 MIT — see [LICENSE](LICENSE).
+
+---
 
 ## Acknowledgements
 
