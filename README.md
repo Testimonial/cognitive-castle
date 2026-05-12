@@ -343,9 +343,11 @@ MIT — see [LICENSE](LICENSE).
 ## Acknowledgements
 
 Cognitive Castle is a fork and continuation of the MemPalace project,
-re-architected around LanceDB and the SOAR cognitive-architecture
-heuristics. Original benchmark methodology and "wings/rooms/drawers"
-naming preserved with credit to the upstream authors.
+re-architected around LanceDB and a 3-stage retrieval pipeline (dense +
+Tantivy FTS + knowledge-graph traversal, fused via weighted RRF +
+recency, then cross-encoder reranked). Original benchmark methodology
+and "wings/rooms/drawers" naming preserved with credit to the upstream
+authors.
 
 <!-- Link Definitions -->
 [version-shield]: https://img.shields.io/badge/version-3.3.3-4dc9f6?style=flat-square&labelColor=0a0e14
