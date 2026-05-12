@@ -98,6 +98,19 @@ def _castle_python() -> str:
     return sys.executable
 
 
+def _castle_script() -> str:
+    """Return the `castle` console script in the same venv as _castle_python().
+
+    pyproject.toml installs `castle = "cognitive_castle.cli:main"` as a console
+    script. Spawning it directly avoids `python -m <name>` (which can't accept
+    the hyphenated distribution name `cognitive-castle`).
+    """
+    castle_bin = Path(_castle_python()).parent / "castle"
+    if castle_bin.is_file():
+        return str(castle_bin)
+    return "castle"  # fall back to PATH lookup
+
+
 _RECENT_MSG_COUNT = 30  # how many recent user messages to summarize
 
 STOP_BLOCK_REASON = (
@@ -344,7 +357,7 @@ def _maybe_auto_ingest():
         return
     for mine_dir, mode in targets:
         try:
-            _spawn_mine([_castle_python(), "-m", "cognitive-castle", "mine", mine_dir, "--mode", mode])
+            _spawn_mine([_castle_script(), "mine", mine_dir, "--mode", mode])
         except OSError:
             pass
 
@@ -368,9 +381,7 @@ def _mine_sync():
             with open(log_path, "a") as log_f:
                 subprocess.run(
                     [
-                        _castle_python(),
-                        "-m",
-                        "cognitive-castle",
+                        _castle_script(),
                         "mine",
                         mine_dir,
                         "--mode",
@@ -542,9 +553,7 @@ def _ingest_transcript(transcript_path: str):
         with open(log_path, "a") as log_f:
             subprocess.Popen(
                 [
-                    _castle_python(),
-                    "-m",
-                    "cognitive-castle",
+                    _castle_script(),
                     "mine",
                     str(path.parent),
                     "--mode",
