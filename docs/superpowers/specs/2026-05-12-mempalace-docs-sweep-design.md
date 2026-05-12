@@ -60,6 +60,37 @@ Categorization rules:
 - **PRESERVE** if it's a historical credit / origin story.
 - **PRESERVE** if it's a deliberately-kept legacy fallback path comment (e.g., `~/.mempalace/knowledge_graph.db` referenced where the production code falls back to that path).
 
+## Critical: hyphen vs underscore distinction
+
+The repo uses two different rebrand replacements depending on context:
+
+| Old | Context | Replacement |
+|---|---|---|
+| `mempalace` (in URL like `mempalace.git` or `MemPalace/mempalace`) | GitHub repo name | `cognitive-castle` (HYPHEN — matches `Testimonial/cognitive-castle` and the PyPI distribution name) |
+| `mempalace` (Python import or in-repo file path like `mempalace/searcher.py`) | Module / package directory | `cognitive_castle` (UNDERSCORE — matches the actual Python package name) |
+| `mempalace` (CLI command like `mempalace mine`) | Console script | `castle` (the actual console script name from `pyproject.toml`) |
+| `MemPalace` (prose / branding) | Project name | `Cognitive Castle` |
+
+A naive `sed -i 's/mempalace/cognitive_castle/g'` would corrupt GitHub URLs (`mempalace.git` → `cognitive_castle.git` is WRONG; the real repo is `cognitive-castle.git`). The implementer should use context-aware sed patterns rather than one bulk substitution. Example safe pattern set:
+
+```bash
+# For each prose/doc file, apply these in order:
+sed -i \
+  -e 's|https://github.com/MemPalace/mempalace|https://github.com/Testimonial/cognitive-castle|g' \
+  -e 's|mempalace\.git|cognitive-castle.git|g' \
+  -e 's|cd mempalace$|cd cognitive-castle|g' \
+  -e 's|\bmempalace/|cognitive_castle/|g' \
+  -e 's|`mempalace`|`castle`|g' \
+  -e 's|mempalace mine|castle mine|g' \
+  -e 's|mempalace init|castle init|g' \
+  -e 's|mempalace search|castle search|g' \
+  -e 's|mempalace-mcp|castle-mcp|g' \
+  -e 's|MemPalace|Cognitive Castle|g' \
+  "$file"
+```
+
+Implementer should grep each file after sed to catch anything that slipped through, and visually inspect for prose where `Cognitive Castle` reads awkwardly (e.g., possessive forms that need a comma adjustment).
+
 ## File-by-file change list
 
 ### Critical — functional bug fixes
@@ -191,39 +222,51 @@ Two acceptable resolutions:
 
 Implementer should investigate briefly (`grep -rn "\.agents/plugins/marketplace" .`) and decide. **Default: delete** if no consumer is found.
 
-#### `integrations/openclaw/SKILL.md` — plugin metadata with stale name
+#### `integrations/openclaw/SKILL.md` — plugin metadata with stale name (multiple fields)
+
+Full frontmatter has 6+ mempalace references — not just `name` + `homepage`:
 
 ```yaml
 ---
-name: mempalace
-description: "MemPalace — Local AI memory with ..."
-homepage: https://github.com/MemPalace/mempalace
+name: mempalace                                          # → castle
+description: "MemPalace — Local AI memory ..."           # → "Cognitive Castle — Local AI memory ..."
+homepage: https://github.com/MemPalace/mempalace         # → https://github.com/Testimonial/cognitive-castle
+metadata:
+  openclaw:
+    requires:
+      anyBins:
+        - mempalace                                       # → castle (console script name)
+    install:
+      - id: mempalace-pip                                 # → castle-pip
+        label: "Install MemPalace (Python, local ChromaDB)"  # → "Install Cognitive Castle (Python, local LanceDB)" — note: also fix ChromaDB → LanceDB since chroma was removed
+        package: mempalace                                # → cognitive-castle (PyPI distribution name, HYPHEN)
+        bins:
+          - mempalace                                     # → castle
 ---
 ```
 
-Should be:
-```yaml
----
-name: castle
-description: "Cognitive Castle — Local AI memory with ..."
-homepage: https://github.com/Testimonial/cognitive-castle
----
-```
+**Note on `package:` vs `bins:`**: `package` is the PyPI distribution name (`cognitive-castle`, hyphen — matches `pyproject.toml [project] name`). `bins` are the console-script entry-points from `pyproject.toml [project.scripts]` (just `castle` and `castle-mcp`).
 
-Plus any body content referencing `mempalace ...` commands.
+Body section also has stale brand references:
+- `# MemPalace — Local AI Memory System` heading → `# Cognitive Castle — Local AI Memory System`
+- Any `mempalace ...` command examples → `castle ...`
+- Any `MemPalace` prose mentions → `Cognitive Castle`
 
 ### Brand updates — top-level repo docs
 
 #### `CONTRIBUTING.md` (7 refs)
 
-Stale brand + outdated file paths:
-- `# Contributing to MemPalace` → `# Contributing to Cognitive Castle`
-- `MemPalace is open source` → `Cognitive Castle is open source`
-- `git clone https://github.com/<your-username>/mempalace.git` → `git clone https://github.com/<your-username>/cognitive-castle.git`
-- `cd mempalace` → `cd cognitive-castle`
-- `git remote add upstream https://github.com/MemPalace/mempalace.git` → `git remote add upstream https://github.com/Testimonial/cognitive-castle.git`
-- `mempalace/` (file structure description) → `cognitive_castle/`
-- `https://github.com/MemPalace/mempalace/issues` → `https://github.com/Testimonial/cognitive-castle/issues`
+Stale brand + outdated file paths. Each line uses a DIFFERENT replacement target — illustrates the hyphen/underscore distinction:
+
+- `# Contributing to MemPalace` → `# Contributing to Cognitive Castle` (prose name)
+- `MemPalace is open source` → `Cognitive Castle is open source` (prose name)
+- `git clone https://github.com/<your-username>/mempalace.git` → `git clone https://github.com/<your-username>/cognitive-castle.git` (GitHub URL — HYPHEN)
+- `cd mempalace` → `cd cognitive-castle` (dir after clone — HYPHEN since that's what git clone creates)
+- `git remote add upstream https://github.com/MemPalace/mempalace.git` → `git remote add upstream https://github.com/Testimonial/cognitive-castle.git` (note org changed too: `MemPalace` → `Testimonial`)
+- `mempalace/` (file structure description: "core package (see mempalace/README.md for module guide)") → `cognitive_castle/` (Python module — UNDERSCORE)
+- `https://github.com/MemPalace/mempalace/issues` → `https://github.com/Testimonial/cognitive-castle/issues` (GitHub URL — HYPHEN)
+
+The context-aware sed pattern set in the "Critical: hyphen vs underscore distinction" section handles all 7 correctly. Apply that pattern, then verify zero residue with `grep -nE "mempalace|MemPalace" CONTRIBUTING.md`.
 
 #### `AGENTS.md` (8 refs)
 
