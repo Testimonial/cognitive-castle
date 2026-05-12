@@ -37,7 +37,7 @@ PRs 2-6 are deferred and out of scope here. The hero copy, comparison content, a
 4. Engineers evaluating mem0 / letta / zep can see the differentiator (verbatim + local-first + MCP-native) without reading the full README.
 5. Stale content from previous PRs is removed.
 6. All three diagrams render natively in GitHub-flavored Markdown (no PNG assets to maintain).
-7. README length stays under 320 lines (currently 208).
+7. README length stays under 360 lines (currently 208).
 
 ## Non-goals
 
@@ -121,12 +121,17 @@ Then 2-3 sentences of prose:
 
 #### 5. Connect to Claude Code (lines ~110-140)
 
-UPDATED. Lead with plugin install path:
+UPDATED. Lead with plugin install path. Show both forms (public + local-dev) since contributors and curious cloners need the second:
 
 ```
-# In Claude Code:
+# In Claude Code — most users:
 /plugin marketplace add Testimonial/cognitive-castle
 /plugin install castle@cognitive-castle
+
+# Or for contributors with a local clone:
+/plugin marketplace add /path/to/cognitive-castle
+/plugin install castle@cognitive-castle
+
 # then fully quit and reopen Claude Code
 ```
 
@@ -170,7 +175,7 @@ Then a compact comparison table:
 
 | | Cognitive Castle | mem0 | letta | zep |
 |---|---|---|---|---|
-| Verbatim storage | ✅ guaranteed | ❌ summarises | ❌ summarises | ❌ summarises |
+| Verbatim storage | ✅ guaranteed | ❌ summarises | ⚠ tiered (verbatim core + summarised archive) | ❌ extracts |
 | Local-first default | ✅ | ⚠ optional | ⚠ self-host | ⚠ self-host |
 | API key required | ❌ none for core | ⚠ for cloud | depends on LLM | ❌ |
 | MCP-native | ✅ plugin | ❌ | ❌ | ❌ |
@@ -401,7 +406,7 @@ Constraints:
 
 ## Acceptance criteria
 
-1. `README.md` final length is ≤ 320 lines.
+1. `README.md` final length is ≤ 360 lines.
 2. Hero SVG renders inline; no `<script>` tags; has `role="img"` + `aria-label`.
 3. Two Mermaid code fences render as diagrams on github.com.
 4. `grep -c "ChromaDB\|all-MiniLM-L6-v2\|castle migrate" README.md` returns 0 (or only historical-context lines that explicitly say "removed in PR #8").
