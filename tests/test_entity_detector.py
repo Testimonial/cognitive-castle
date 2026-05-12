@@ -1,4 +1,4 @@
-"""Tests for mempalace.entity_detector."""
+"""Tests for cognitive_castle.entity_detector."""
 
 import contextlib
 import json
@@ -425,8 +425,8 @@ def _temp_locale(locale_code: str, entity_section: dict):
     on the next run (the fixture lacks the required terms/cli/aaak sections).
     Recover with `rm mempalace/i18n/zz-test-*.json`.
     """
-    from mempalace import i18n
-    from mempalace import entity_detector
+    from cognitive_castle import i18n
+    from cognitive_castle import entity_detector
 
     locale_path = Path(i18n.__file__).parent / f"{locale_code}.json"
     if locale_path.exists():

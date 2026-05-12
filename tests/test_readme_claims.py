@@ -267,10 +267,10 @@ class TestDiaryIngest:
     def test_diary_ingest_importable(self):
         """diary_ingest should be importable."""
         try:
-            importlib.import_module("mempalace.diary_ingest")
+            importlib.import_module("cognitive_castle.diary_ingest")
         except ImportError:
             pytest.fail(
-                "mempalace.diary_ingest is not importable. Module must exist and import cleanly."
+                "cognitive_castle.diary_ingest is not importable. Module must exist and import cleanly."
             )
 
 
@@ -294,10 +294,10 @@ class TestFactChecker:
     def test_fact_checker_importable(self):
         """fact_checker should be importable."""
         try:
-            importlib.import_module("mempalace.fact_checker")
+            importlib.import_module("cognitive_castle.fact_checker")
         except ImportError:
             pytest.fail(
-                "mempalace.fact_checker is not importable. Module must exist and import cleanly."
+                "cognitive_castle.fact_checker is not importable. Module must exist and import cleanly."
             )
 
 
@@ -358,10 +358,10 @@ class TestClosetLLM:
     def test_closet_llm_importable(self):
         """closet_llm should be importable."""
         try:
-            importlib.import_module("mempalace.closet_llm")
+            importlib.import_module("cognitive_castle.closet_llm")
         except ImportError:
             pytest.fail(
-                "mempalace.closet_llm is not importable. Module must exist and import cleanly."
+                "cognitive_castle.closet_llm is not importable. Module must exist and import cleanly."
             )
 
 

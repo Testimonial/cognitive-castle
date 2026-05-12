@@ -22,7 +22,7 @@ def test_module_import_redirects_stdout_to_stderr():
         """
         import sys
         original_stdout = sys.stdout
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
         assert sys.stdout is sys.stderr, (
             f"Expected sys.stdout to be redirected to sys.stderr, "
             f"got: {sys.stdout!r}"
@@ -48,7 +48,7 @@ def test_restore_stdout_returns_real_stdout():
         """
         import sys
         original_stdout = sys.stdout
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
         assert sys.stdout is sys.stderr
         mcp_server._restore_stdout()
         assert sys.stdout is original_stdout, (

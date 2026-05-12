@@ -1,4 +1,4 @@
-"""Tests for mempalace.entity_registry."""
+"""Tests for cognitive_castle.entity_registry."""
 
 from unittest.mock import patch
 
@@ -230,7 +230,7 @@ def test_research_local_only_by_default(tmp_path):
     registry.seed(mode="personal", people=[], projects=[])
 
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "cognitive_castle.entity_registry._wikipedia_lookup",
         side_effect=AssertionError("network call should not happen"),
     ):
         result = registry.research("Saoirse")
@@ -247,7 +247,7 @@ def test_research_with_allow_network(tmp_path):
     registry.seed(mode="personal", people=[], projects=[])
 
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "cognitive_castle.entity_registry._wikipedia_lookup",
         return_value=dict(_MOCK_SAOIRSE_PERSON),
     ):
         result = registry.research("Saoirse", auto_confirm=True, allow_network=True)
@@ -260,7 +260,7 @@ def test_research_caches_result(tmp_path):
     registry.seed(mode="personal", people=[], projects=[])
 
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "cognitive_castle.entity_registry._wikipedia_lookup",
         return_value=dict(_MOCK_SAOIRSE_PERSON),
     ):
         result = registry.research("Saoirse", auto_confirm=True, allow_network=True)
@@ -268,7 +268,7 @@ def test_research_caches_result(tmp_path):
 
     # Second call should use cache, not call Wikipedia again
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "cognitive_castle.entity_registry._wikipedia_lookup",
         side_effect=AssertionError("should not be called"),
     ):
         cached = registry.research("Saoirse")
@@ -289,7 +289,7 @@ def test_confirm_research_adds_to_people(tmp_path):
     registry.seed(mode="personal", people=[], projects=[])
 
     with patch(
-        "mempalace.entity_registry._wikipedia_lookup",
+        "cognitive_castle.entity_registry._wikipedia_lookup",
         return_value=dict(_MOCK_SAOIRSE_PERSON),
     ):
         registry.research("Saoirse", auto_confirm=False, allow_network=True)

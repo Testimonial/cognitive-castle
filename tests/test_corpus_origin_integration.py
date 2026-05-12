@@ -277,7 +277,7 @@ def test_init_pass_zero_writes_origin_json_to_palace(ai_dialogue_corpus: Path, t
     ):
         cmd_init(args)
 
-    origin_path = palace / ".mempalace" / "origin.json"
+    origin_path = palace / ".castle" / "origin.json"
     assert origin_path.exists(), (
         f"Pass 0 did not write {origin_path}. cmd_init is supposed to call "
         f"corpus_origin detection and persist the result before entity detection."
@@ -359,7 +359,7 @@ def test_init_pass_zero_skipped_when_no_readable_files(tmp_path: Path):
     ):
         cmd_init(args)  # must not raise
 
-    origin_path = palace / ".mempalace" / "origin.json"
+    origin_path = palace / ".castle" / "origin.json"
     assert not origin_path.exists(), (
         "Pass 0 must skip (no write) when there are no readable samples — "
         "writing a 'cannot decide' result to disk would be misleading."
@@ -404,7 +404,7 @@ def test_init_pass_zero_uses_full_file_content_not_front_sampled(tmp_path: Path)
     ):
         cmd_init(args)
 
-    origin_path = palace / ".mempalace" / "origin.json"
+    origin_path = palace / ".castle" / "origin.json"
     assert origin_path.exists()
     data = json.loads(origin_path.read_text())
     assert data["result"]["likely_ai_dialogue"] is True, (
@@ -546,7 +546,7 @@ def test_mine_default_does_not_redetect_origin(ai_dialogue_corpus: Path, tmp_pat
         cmd_mine(args)
 
     mock_pass_zero.assert_not_called()
-    assert not (palace / ".mempalace" / "origin.json").exists()
+    assert not (palace / ".castle" / "origin.json").exists()
 
 
 def test_mine_with_redetect_origin_flag_writes_origin_json(
@@ -566,7 +566,7 @@ def test_mine_with_redetect_origin_flag_writes_origin_json(
     ):
         cmd_mine(args)
 
-    origin_path = palace / ".mempalace" / "origin.json"
+    origin_path = palace / ".castle" / "origin.json"
     assert origin_path.exists(), "--redetect-origin must write <palace>/.mempalace/origin.json"
     data = json.loads(origin_path.read_text())
     assert data["schema_version"] == 1
@@ -581,7 +581,7 @@ def test_mine_redetect_overwrites_existing_origin_json(ai_dialogue_corpus: Path,
     from cognitive_castle.cli import cmd_mine
 
     palace = tmp_path / "palace"
-    origin_dir = palace / ".mempalace"
+    origin_dir = palace / ".castle"
     origin_dir.mkdir(parents=True)
     stale_origin = {
         "schema_version": 1,
@@ -636,7 +636,7 @@ def test_mine_redetect_uses_full_content_not_sampled(tmp_path: Path):
     ):
         cmd_mine(args)
 
-    data = json.loads((palace / ".mempalace" / "origin.json").read_text())
+    data = json.loads((palace / ".castle" / "origin.json").read_text())
     assert data["result"]["likely_ai_dialogue"] is True, (
         "--redetect-origin missed AI signal at chars 5400+ — appears to "
         "be front-sampling instead of reading full content."
@@ -848,7 +848,7 @@ def test_end_to_end_init_with_llm_separates_personas(ai_dialogue_corpus: Path, t
         patch("cognitive_castle.cli.MempalaceConfig", return_value=_stub_cfg(palace)),
         patch("cognitive_castle.cli.get_provider", return_value=fake_provider),
         patch(
-            "mempalace.cli.detect_origin_llm",
+            "cognitive_castle.cli.detect_origin_llm",
             return_value=fake_llm_origin_result,
         ),
         patch("cognitive_castle.cli._maybe_run_mine_after_init"),
@@ -857,7 +857,7 @@ def test_end_to_end_init_with_llm_separates_personas(ai_dialogue_corpus: Path, t
         cmd_init(args)
 
     # 1. origin.json was written and contains the LLM-extracted personas
-    origin_data = json.loads((palace / ".mempalace" / "origin.json").read_text())
+    origin_data = json.loads((palace / ".castle" / "origin.json").read_text())
     assert origin_data["result"]["likely_ai_dialogue"] is True
     assert origin_data["result"]["agent_persona_names"] == ["Echo", "Sparrow", "Cipher"]
     assert origin_data["result"]["user_name"] == "Jordan"
@@ -907,7 +907,7 @@ def test_no_llm_path_matches_v333_classification(ai_dialogue_corpus: Path, tmp_p
         cmd_init(args)
 
     # origin.json still written — Tier 1 still runs and detects AI-dialogue.
-    origin = json.loads((palace / ".mempalace" / "origin.json").read_text())
+    origin = json.loads((palace / ".castle" / "origin.json").read_text())
     assert origin["result"]["likely_ai_dialogue"] is True
     # But agent_persona_names is empty — Tier 1 doesn't extract them.
     assert origin["result"]["agent_persona_names"] == [], (
@@ -948,9 +948,9 @@ def test_re_init_idempotent(ai_dialogue_corpus: Path, tmp_path: Path):
         patch("cognitive_castle.room_detector_local.detect_rooms_local"),
     ):
         cmd_init(args)
-        first = json.loads((palace / ".mempalace" / "origin.json").read_text())
+        first = json.loads((palace / ".castle" / "origin.json").read_text())
         cmd_init(args)
-        second = json.loads((palace / ".mempalace" / "origin.json").read_text())
+        second = json.loads((palace / ".castle" / "origin.json").read_text())
 
     # The result payload must be identical between runs (same fixture, same
     # heuristic, no nondeterminism in Tier 1).
@@ -1078,7 +1078,7 @@ def test_integration_cmd_init_runs_pass_zero_to_pass_four_in_order(
     args = _init_args(ai_dialogue_corpus, no_llm=True)
     call_log: list = []
 
-    real_run_pass_zero = __import__("mempalace.cli", fromlist=["_run_pass_zero"])._run_pass_zero
+    real_run_pass_zero = __import__("cognitive_castle.cli", fromlist=["_run_pass_zero"])._run_pass_zero
 
     def trace_pass_zero(*a, **kw):
         call_log.append("pass_zero")

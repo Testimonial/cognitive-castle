@@ -1,4 +1,4 @@
-"""Tests for mempalace.convo_scanner."""
+"""Tests for cognitive_castle.convo_scanner."""
 
 import json
 from pathlib import Path

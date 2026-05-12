@@ -1,4 +1,4 @@
-"""Tests for mempalace.project_scanner."""
+"""Tests for cognitive_castle.project_scanner."""
 
 import json
 import os

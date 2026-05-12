@@ -31,7 +31,7 @@ def test_project_mining():
             project_root / "backend" / "app.py",
             "def main():\n    print('hello world')\n" * 20,
         )
-        with open(project_root / "mempalace.yaml", "w") as f:
+        with open(project_root / "castle.yaml", "w") as f:
             yaml.dump(
                 {
                     "wing": "test_project",
@@ -88,7 +88,7 @@ def test_scan_project_skips_castle_generated_files():
     with tempfile.TemporaryDirectory() as tmpdir:
         project_root = Path(tmpdir).resolve()
         write_file(project_root / "entities.json", '{"people": [], "projects": []}')
-        write_file(project_root / "mempalace.yaml", "wing: test\nrooms: []\n")
+        write_file(project_root / "castle.yaml", "wing: test\nrooms: []\n")
         write_file(project_root / "notes.md", "real user content\n" * 10)
 
         assert scanned_files(project_root) == ["notes.md"]
@@ -341,7 +341,7 @@ def test_mine_dry_run_with_tiny_file_no_crash():
         write_file(project_root / "good.py", "def main():\n    print('hello world')\n" * 20)
         write_file(project_root / "tiny.txt", "x")
 
-        with open(project_root / "mempalace.yaml", "w") as f:
+        with open(project_root / "castle.yaml", "w") as f:
             yaml.dump(
                 {
                     "wing": "test_project",
@@ -398,7 +398,7 @@ def test_status_handles_none_metadata_without_crash(tmp_path, capsys):
 
 
 def test_process_file_uses_bounded_upsert_batches(tmp_path, monkeypatch):
-    from mempalace import miner
+    from cognitive_castle import miner
 
     class FakeCol:
         def __init__(self):
@@ -516,7 +516,7 @@ def test_mine_creates_topic_tunnels_for_shared_topics(tmp_path, monkeypatch):
 
     Issue #1180.
     """
-    from mempalace import miner, palace_graph
+    from cognitive_castle import miner, palace_graph
 
     # Redirect both the registry and tunnel-storage paths into tmp_path
     # so we never touch the developer's real ~/.mempalace directory.
@@ -539,7 +539,7 @@ def test_mine_creates_topic_tunnels_for_shared_topics(tmp_path, monkeypatch):
         project_root / "notes.md",
         "Some prose long enough to make a chunk. " * 20,
     )
-    with open(project_root / "mempalace.yaml", "w") as f:
+    with open(project_root / "castle.yaml", "w") as f:
         yaml.dump({"wing": "wing_two", "rooms": [{"name": "general"}]}, f)
 
     palace_path = tmp_path / "palace"
@@ -557,16 +557,16 @@ def test_mine_creates_topic_tunnels_for_shared_topics(tmp_path, monkeypatch):
 
 
 def test_mine_no_tunnel_when_threshold_blocks_overlap(tmp_path, monkeypatch):
-    """Bumping ``MEMPALACE_TOPIC_TUNNEL_MIN_COUNT`` above the actual overlap
+    """Bumping ``CASTLE_TOPIC_TUNNEL_MIN_COUNT`` above the actual overlap
     suppresses tunnel creation."""
-    from mempalace import miner, palace_graph
+    from cognitive_castle import miner, palace_graph
 
     registry = tmp_path / "known_entities.json"
     monkeypatch.setattr(miner, "_ENTITY_REGISTRY_PATH", str(registry))
     miner._ENTITY_REGISTRY_CACHE.update({"mtime": None, "names": frozenset(), "raw": {}})
     tunnels_file = tmp_path / "tunnels.json"
     monkeypatch.setattr(palace_graph, "_TUNNEL_FILE", str(tunnels_file))
-    monkeypatch.setenv("MEMPALACE_TOPIC_TUNNEL_MIN_COUNT", "2")
+    monkeypatch.setenv("CASTLE_TOPIC_TUNNEL_MIN_COUNT", "2")
 
     miner.add_to_known_entities({"topics": ["foo"]}, wing="wing_one")
     miner.add_to_known_entities({"topics": ["foo"]}, wing="wing_two")
@@ -577,7 +577,7 @@ def test_mine_no_tunnel_when_threshold_blocks_overlap(tmp_path, monkeypatch):
         project_root / "notes.md",
         "Some prose long enough to make a chunk. " * 20,
     )
-    with open(project_root / "mempalace.yaml", "w") as f:
+    with open(project_root / "castle.yaml", "w") as f:
         yaml.dump({"wing": "wing_two", "rooms": [{"name": "general"}]}, f)
 
     palace_path = tmp_path / "palace"
@@ -589,7 +589,7 @@ def test_mine_no_tunnel_when_threshold_blocks_overlap(tmp_path, monkeypatch):
 
 def test_mine_no_tunnel_when_only_one_wing_has_topics(tmp_path, monkeypatch):
     """A wing in isolation (no other wing has confirmed topics) creates no tunnels."""
-    from mempalace import miner, palace_graph
+    from cognitive_castle import miner, palace_graph
 
     registry = tmp_path / "known_entities.json"
     monkeypatch.setattr(miner, "_ENTITY_REGISTRY_PATH", str(registry))
@@ -605,7 +605,7 @@ def test_mine_no_tunnel_when_only_one_wing_has_topics(tmp_path, monkeypatch):
         project_root / "notes.md",
         "Some prose long enough to make a chunk. " * 20,
     )
-    with open(project_root / "mempalace.yaml", "w") as f:
+    with open(project_root / "castle.yaml", "w") as f:
         yaml.dump({"wing": "wing_one", "rooms": [{"name": "general"}]}, f)
 
     palace_path = tmp_path / "palace"
@@ -624,7 +624,7 @@ def _make_minable_project(project_root: Path, n_files: int = 3) -> None:
             project_root / f"f{idx}.py",
             f"def fn_{idx}():\n    print('hi {idx}')\n" * 20,
         )
-    with open(project_root / "mempalace.yaml", "w") as f:
+    with open(project_root / "castle.yaml", "w") as f:
         yaml.dump(
             {
                 "wing": "interrupt_test",
@@ -667,7 +667,7 @@ def test_mine_keyboard_interrupt_prints_summary_and_exits_130(tmp_path, capsys):
 
 def test_mine_keyboard_interrupt_quotes_path_with_spaces_in_resume_hint(tmp_path, capsys):
     """Resume hint must shell-quote the project dir so a path containing
-    spaces / metacharacters yields a copy-paste-safe `mempalace mine ...`
+    spaces / metacharacters yields a copy-paste-safe `castle mine ...`
     command. Otherwise users on a path like "My Project" hit a broken
     invocation when they re-run after Ctrl-C."""
     import pytest
@@ -689,7 +689,7 @@ def test_mine_keyboard_interrupt_quotes_path_with_spaces_in_resume_hint(tmp_path
     # Use shlex.quote so the assertion matches whatever the production
     # code emits on this platform (POSIX paths with spaces vs Windows
     # paths with backslashes both end up wrapped in single quotes).
-    assert f"mempalace mine {shlex.quote(str(project_root))}" in out
+    assert f"castle mine {shlex.quote(str(project_root))}" in out
 
 
 def test_mine_cleans_up_pid_file_on_interrupt(tmp_path):

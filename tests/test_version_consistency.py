@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from mempalace import __version__
+from cognitive_castle import __version__
 from cognitive_castle.mcp_server import handle_request
 
 

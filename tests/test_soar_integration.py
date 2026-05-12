@@ -11,8 +11,6 @@ Verifies that:
 
 import glob as _glob_mod
 import os
-import tempfile
-import shutil
 from pathlib import Path
 import pytest
 

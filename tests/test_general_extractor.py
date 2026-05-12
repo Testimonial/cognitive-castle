@@ -1,4 +1,4 @@
-"""Tests for mempalace.general_extractor."""
+"""Tests for cognitive_castle.general_extractor."""
 
 from cognitive_castle.general_extractor import (
     ALL_MARKERS,

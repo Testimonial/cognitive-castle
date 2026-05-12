@@ -1,4 +1,4 @@
-"""Tests for mempalace.cli — the main CLI dispatcher."""
+"""Tests for cognitive_castle.cli — the main CLI dispatcher."""
 
 import argparse
 import shlex
@@ -25,7 +25,7 @@ from cognitive_castle.cli import (
 # ── cmd_status ─────────────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_status_default_palace(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None)
@@ -35,7 +35,7 @@ def test_cmd_status_default_palace(mock_config_cls):
         mock_miner.status.assert_called_once_with(palace_path="/fake/palace")
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_status_custom_palace(mock_config_cls):
     args = argparse.Namespace(palace="~/my_palace")
     mock_miner = MagicMock()
@@ -50,7 +50,7 @@ def test_cmd_status_custom_palace(mock_config_cls):
 # ── cmd_search ─────────────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -67,7 +67,7 @@ def test_cmd_search_calls_search(mock_config_cls):
         )
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_search_error_exits(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, query="q", wing=None, room=None, results=5)
@@ -102,7 +102,7 @@ def test_cmd_hook_calls_run_hook():
 # ── cmd_init ───────────────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_init_no_entities(mock_config_cls, tmp_path):
     args = argparse.Namespace(dir=str(tmp_path), yes=True)
     with (
@@ -115,7 +115,7 @@ def test_cmd_init_no_entities(mock_config_cls, tmp_path):
         mock_config_cls.return_value.init.assert_called_once()
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_init_with_entities(mock_config_cls, tmp_path):
     fake_files = [tmp_path / "a.txt"]
     detected = {"people": [{"name": "Alice"}], "projects": [], "uncertain": []}
@@ -137,7 +137,7 @@ def test_cmd_init_with_entities(mock_config_cls, tmp_path):
         cmd_init(args)
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_init_normalizes_wing_name_for_topics_registry(mock_config_cls, tmp_path):
     """Regression for #1194: hyphenated dir names must be normalized to the
     same slug ``mempalace.yaml`` uses, otherwise ``topics_by_wing`` keys
@@ -226,10 +226,10 @@ def test_cmd_init_honors_palace_flag(tmp_path, monkeypatch):
     # ``cfg.palace_path`` read in this process resolves correctly too.
     import os
 
-    assert os.environ.get("MEMPALACE_PALACE_PATH") == os.path.abspath(expected)
+    assert os.environ.get("CASTLE_PALACE_PATH") == os.path.abspath(expected)
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_init_with_entities_zero_total(mock_config_cls, tmp_path, capsys):
     """When entities detected but total is 0, prints 'No entities' message."""
     fake_files = [tmp_path / "a.txt"]
@@ -473,7 +473,7 @@ def test_maybe_run_mine_estimate_appears_before_prompt(tmp_path, capsys):
 # ── cmd_mine ───────────────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_mine_projects_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -502,7 +502,7 @@ def test_cmd_mine_projects_mode(mock_config_cls):
         )
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_mine_convos_mode(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -530,7 +530,7 @@ def test_cmd_mine_convos_mode(mock_config_cls):
         )
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
@@ -555,7 +555,7 @@ def test_cmd_mine_include_ignored_comma_split(mock_config_cls):
 # ── cmd_wakeup ─────────────────────────────────────────────────────────
 
 
-@patch("cognitive_castle.cli.MempalaceConfig")
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_wakeup(mock_config_cls, capsys):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(palace=None, wing=None)
@@ -594,7 +594,7 @@ def test_main_no_args_prints_help(capsys):
     with patch("sys.argv", ["cognitive-castle"]):
         main()
     out = capsys.readouterr().out
-    assert "MemPalace" in out
+    assert "Cognitive Castle" in out or "castle" in out.lower()
 
 
 def test_main_status_dispatches():
@@ -657,10 +657,10 @@ def test_mcp_command_prints_setup_guidance(monkeypatch, capsys):
     main()
 
     captured = capsys.readouterr()
-    assert "MemPalace MCP quick setup:" in captured.out
-    assert "claude mcp add mempalace -- mempalace-mcp" in captured.out
+    assert "Cognitive Castle MCP quick setup:" in captured.out
+    assert "claude mcp add castle -- castle-mcp" in captured.out
     assert "\nOptional custom palace:\n" in captured.out
-    assert "mempalace-mcp --palace /path/to/palace" in captured.out
+    assert "castle-mcp --palace /path/to/palace" in captured.out
     assert "[--palace /path/to/palace]" not in captured.out
     assert captured.err == ""
 
@@ -673,7 +673,7 @@ def test_mcp_command_uses_custom_palace_path_when_provided(monkeypatch, capsys):
     captured = capsys.readouterr()
     expanded = str(Path("~/tmp/my palace").expanduser())
 
-    assert "mempalace-mcp --palace" in captured.out
+    assert "castle-mcp --palace" in captured.out
     assert expanded in captured.out
     assert "Optional custom palace:" not in captured.out
     assert "[--palace /path/to/palace]" not in captured.out

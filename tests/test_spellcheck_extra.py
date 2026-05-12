@@ -26,7 +26,7 @@ class TestLoadKnownNames:
 
     def test_returns_empty_on_exception(self):
         with patch(
-            "mempalace.entity_registry.EntityRegistry.load",
+            "cognitive_castle.entity_registry.EntityRegistry.load",
             side_effect=Exception("no registry"),
         ):
             names = _load_known_names()
