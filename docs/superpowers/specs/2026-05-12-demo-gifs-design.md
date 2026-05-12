@@ -59,10 +59,10 @@ This is PR #2 of a 6-piece productization series:
 - `assets/demos/02-quickstart.gif` (~450 KB)
 - `assets/demos/03-verbatim.tape` (~25 lines)
 - `assets/demos/03-verbatim.gif` (~750 KB)
-- `assets/demos/04-mcp.cast` (asciinema recording, JSON text format, ~30 KB)
+- `assets/demos/04-mcp.cast` (asciinema recording, JSON text format, ~30 KB — regenerated each run)
 - `assets/demos/04-mcp.gif` (`agg`-rendered GIF, ~600 KB)
-- `assets/demos/recording-script.md` (~40 lines — exactly what the human types during demo #4 recording, since asciinema captures a live session)
-- `assets/demos/README.md` (~80 lines — install commands, regen commands, demo-palace setup)
+- `assets/demos/04-mcp.expect` (~35 lines — TCL `expect` script that drives Claude Code deterministically while asciinema records)
+- `assets/demos/README.md` (~90 lines — install commands, regen commands, demo-palace setup, ANTHROPIC_API_KEY note)
 
 ### Added — `scripts/`
 
@@ -221,39 +221,76 @@ Sleep 3s
 
 ### Demo #4 — MCP in Claude Code (~30s)
 
-`assets/demos/recording-script.md` documents the exact sequence for the human recorder:
+Fully automated via `expect`. The script drives a real `claude` session (real LLM call, real Castle MCP tool use), with asciinema recording the whole thing, then `agg` converts to GIF.
 
+`assets/demos/04-mcp.expect`:
+
+```tcl
+#!/usr/bin/expect -f
+# Records a Claude Code MCP demo by driving claude via expect.
+# Real LLM call, real castle_search MCP tool use.
+#
+# Prereqs: asciinema, agg, claude (authenticated), Castle MCP plugin
+# installed. Burns API tokens on each regen — not free.
+
+set timeout 90
+
+# Start asciinema, which itself runs `expect_inner` to drive claude
+# (Single-script self-spawn — see assets/demos/README.md for why)
+if { [info exists ::env(ASCIINEMA_REC)] == 0 } {
+    # Outer run: launch asciinema with this same script as the command
+    exec rm -f assets/demos/04-mcp.cast
+    set ::env(ASCIINEMA_REC) "1"
+    exec asciinema rec --command "expect [info script]" \
+        assets/demos/04-mcp.cast >@stdout 2>@stderr
+    # After asciinema exits, convert to gif
+    exec agg --theme=monokai --speed=1.5 --font-size=14 \
+        assets/demos/04-mcp.cast assets/demos/04-mcp.gif >@stdout 2>@stderr
+    puts "Demo #4 recorded: assets/demos/04-mcp.gif"
+    exit 0
+}
+
+# Inner run (recorded): drive claude
+spawn claude
+
+# Wait for Claude Code's main prompt to appear. The exact string may
+# change across Claude Code versions — the implementer should update
+# this pattern by running `claude` once and capturing the welcome
+# screen's bottom indicator.
+expect {
+    -re "(Try .help|What can I help you with|>|\\?)" { }
+    timeout { puts "Claude Code didn't start in time"; exit 1 }
+}
+sleep 1
+
+# Send the demo prompt
+send "What did we decide about the embedder model? Search Castle for the specific decision and tell me why we picked it.\r"
+
+# Wait for response to finish. Claude Code emits a token/cost line at
+# the end of each turn. Match flexibly.
+expect {
+    -re "(tokens? used|memories filed|✓ Done|context: \\d)" { }
+    timeout { puts "Response didn't complete in time"; exit 1 }
+}
+sleep 2
+
+# Exit Claude Code cleanly
+send "\003"
+expect {
+    -re "(Exit|exit conversation|sure)" {
+        send "y\r"
+    }
+    timeout { }
+}
+expect eof
 ```
-1. In a terminal: cd ~/cognitive-castle && asciinema rec assets/demos/04-mcp.cast
 
-2. Within the recording, launch Claude Code: `claude`
+**Implementation notes for the recorder:**
+- The exact `expect` regex patterns for "Claude Code is ready" and "response is done" may need tuning. The implementer should run `claude` interactively once, observe the prompt + exit flow, and update the patterns.
+- Each regen burns Anthropic API tokens. Don't run in CI without an `ANTHROPIC_API_KEY` secret AND a token budget.
+- Response wording will vary between runs. The demo recording captures one real conversation; the next run will show different prose. This is acceptable for a marketing artifact — the *what* (Castle MCP tool use, verbatim hit) matters more than the *when*.
 
-3. Confirm Castle plugin is loaded by typing in the prompt:
-   /castle:status
-
-   Wait for response showing palace stats.
-
-4. Press Esc to clear, then type the demo prompt:
-   What did we decide about the embedder model? Search Castle for the
-   specific decision and tell me why we picked it.
-
-5. Claude will call castle_search MCP tool. The verbatim result
-   appears in the Castle MCP tool-use block. Claude then responds
-   citing the retrieved content.
-
-6. Wait for the response to finish. Total elapsed ~25-30 seconds.
-
-7. Press Ctrl+C twice to exit Claude Code, then Ctrl+D to end
-   asciinema recording.
-
-8. Convert the cast to a GIF:
-   agg --theme=monokai --speed=1.5 --font-size=14 \
-       assets/demos/04-mcp.cast assets/demos/04-mcp.gif
-
-   (Adjust --speed and --font-size based on what looks right.)
-```
-
-This is the only demo that's not deterministic. The recording captures a real Claude Code session; Claude's response timing and exact wording will vary. That's acceptable for a demo — the *what* matters more than the *when*.
+The script self-spawns: running `expect 04-mcp.expect` once starts asciinema, which then re-invokes the same script inside the recording to drive claude. Single file, single command.
 
 ## VHS / asciinema setup
 
@@ -282,6 +319,10 @@ brew install asciinema
 # agg — asciinema-to-gif converter
 brew install agg
 # OR: cargo install --git https://github.com/asciinema/agg
+
+# expect — drives claude programmatically for demo #4
+brew install expect
+# OR: apt install expect (Debian/Ubuntu) — pre-installed on macOS
 ```
 
 ### Demo palace setup (one-time, before recording)
@@ -307,9 +348,14 @@ vhs 01-hero.tape
 vhs 02-quickstart.tape
 vhs 03-verbatim.tape
 
+echo "Demos 1-3 done."
+
+# 4. Record demo #4 via expect-driven claude session
+echo "Recording demo #4 (MCP in Claude Code via expect) — this burns API tokens."
+expect assets/demos/04-mcp.expect
+
 echo
-echo "Demos 1-3 done. For demo #4, follow assets/demos/recording-script.md"
-echo "to manually record the Claude Code MCP session via asciinema."
+echo "All 4 demos rendered to assets/demos/0X-name.gif"
 ```
 
 ## README integration
@@ -370,9 +416,9 @@ echo "to manually record the Claude Code MCP session via asciinema."
 
 ## Acceptance criteria
 
-1. `assets/demos/` directory exists with all 10 expected files (4 `.tape` + `.cast`, 4 `.gif`, 1 `recording-script.md`, 1 `README.md`).
+1. `assets/demos/` directory exists with all 10 expected files (3 `.tape` + 1 `.cast` + 1 `.expect`, 4 `.gif`, 1 `README.md`).
 2. Each `.tape` file is committed and matches the storyboards in this spec exactly (or with minor timing adjustments documented in the file).
-3. `scripts/record-demos.sh` exists, is executable (`chmod +x`), and runs without error on a Linux box with VHS installed and the embedder pre-warmed.
+3. `scripts/record-demos.sh` exists, is executable (`chmod +x`), and runs without error on a Linux box with VHS + asciinema + agg + expect installed and Claude Code authenticated. All 4 GIFs are regenerated in one invocation.
 4. `assets/demos/README.md` documents the regen commands for all 4 demos (VHS + asciinema + agg) and the demo-palace setup.
 5. `README.md` has 4 inline `![](assets/demos/0X-*.gif)` references at the placements described above.
 6. Each `![](...)` has descriptive alt text ≥ 30 characters.
@@ -380,5 +426,5 @@ echo "to manually record the Claude Code MCP session via asciinema."
 8. `git diff develop..HEAD -- README.md | grep -c '^+'` shows ≤ 20 added lines for README changes.
 9. No production code under `cognitive_castle/`, `tests/`, `pyproject.toml`, `.claude-plugin/` is modified.
 10. All 4 GIFs render correctly when viewed at `github.com/Testimonial/cognitive-castle/blob/<branch>/README.md` (visual check by user).
-11. Demos 1-3 are reproducible: deleting any GIF and re-running `vhs <tape-file>` produces an equivalent output (timing tolerance ±20%).
+11. All 4 demos are reproducible: `scripts/record-demos.sh` regenerates every GIF without human keyboard input. Timing tolerance ±20% for the VHS demos; demo #4 will have variable wording per regen since it's a real LLM call.
 12. PR body explains the 4 demos and links to the brainstorm spec.
