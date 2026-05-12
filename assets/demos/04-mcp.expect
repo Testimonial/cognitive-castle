@@ -1,0 +1,44 @@
+#!/usr/bin/expect -f
+# Records a Claude Code MCP demo by driving claude via expect.
+# Real LLM call, real castle_search MCP tool use.
+#
+# Prereqs: asciinema, agg, claude (authenticated), Castle MCP plugin
+# installed. Burns API tokens on each regen — not free.
+
+set timeout 90
+
+if { [info exists ::env(ASCIINEMA_REC)] == 0 } {
+    exec rm -f assets/demos/04-mcp.cast
+    set ::env(ASCIINEMA_REC) "1"
+    exec asciinema rec --command "expect [info script]" \
+        assets/demos/04-mcp.cast >@stdout 2>@stderr
+    exec agg --theme=monokai --speed=1.5 --font-size=14 \
+        assets/demos/04-mcp.cast assets/demos/04-mcp.gif >@stdout 2>@stderr
+    puts "Demo #4 recorded: assets/demos/04-mcp.gif"
+    exit 0
+}
+
+spawn claude
+
+expect {
+    -re "(Try .help|What can I help you with|>|\\?)" { }
+    timeout { puts "Claude Code didn't start in time"; exit 1 }
+}
+sleep 1
+
+send "What did we decide about the embedder model? Search Castle for the specific decision and tell me why we picked it.\r"
+
+expect {
+    -re "(tokens? used|memories filed|✓ Done|context: \\d)" { }
+    timeout { puts "Response didn't complete in time"; exit 1 }
+}
+sleep 2
+
+send "\003"
+expect {
+    -re "(Exit|exit conversation|sure)" {
+        send "y\r"
+    }
+    timeout { }
+}
+expect eof
