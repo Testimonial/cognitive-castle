@@ -172,10 +172,6 @@ Cognitive Castle ships as a Claude Code plugin that auto-registers the MCP serve
 # then fully quit and reopen Claude Code
 ```
 
-**What it looks like in a Claude Code session:**
-
-![MCP demo — Claude using Castle's castle_search tool mid-conversation](assets/demos/04-mcp.gif)
-
 After reopening, run `/castle:init` once to complete palace setup.
 
 **Manual setup for non-Claude-Code MCP clients:**

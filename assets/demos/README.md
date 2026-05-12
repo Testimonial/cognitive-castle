@@ -9,7 +9,7 @@ Recordings used in the main `README.md`. Regenerate them with `scripts/record-de
 | `01-hero.tape` / `01-hero.gif` | Full pitch arc (~40s) — install, init, mine, status, search, wake-up | VHS |
 | `02-quickstart.tape` / `02-quickstart.gif` | Quickstart loop (~13s) — install, init, scoped search | VHS |
 | `03-verbatim.tape` / `03-verbatim.gif` | Verbatim recall (~20s) — mine the Castle repo, search a real PR decision | VHS |
-| `04-mcp.expect` / `04-mcp.cast` / `04-mcp.gif` | MCP in Claude Code (~30s) — real LLM call using `castle_search` tool | asciinema + agg |
+| `04-mcp.expect` | **WIP scaffolding** for a future MCP-in-Claude-Code demo (asciinema + agg). Currently can't record cleanly when another `claude` session is active on the same machine — Castle MCP fails to initialize in the spawned context. Deferred to a follow-up PR. |
 
 ## Regenerating
 
@@ -25,7 +25,9 @@ One command from the repo root:
 2. Writes a tiny demo project to `/tmp/castle-demo-src`.
 3. Pre-warms the embedder.
 4. Runs `vhs` against demos 1-3 — outputs land at `assets/demos/0X-name.gif`.
-5. Runs `assets/demos/04-mcp.expect` which records demo #4 via asciinema and converts to GIF via agg.
+5. Attempts to run `assets/demos/04-mcp.expect` — currently fails when another `claude` session is active. See "WIP" caveat above. The recording for demo #4 is deferred to a follow-up PR.
+
+The committed `.gif` files were further compressed via `ffmpeg` (10fps, 32-color palette, optional downscale) to keep the asset weight under 4 MB. Regenerate the post-VHS compressed versions with the one-liner shown under "Regenerating just one demo" below.
 
 ### One-time prereqs
 
