@@ -77,8 +77,14 @@ Current code (line 32):
 LUMI_DIR = Path(os.environ.get("MEMPALACE_SOURCE_DIR", str(HOME / "Desktop/transcripts")))
 ```
 
-New code (insert a helper near the top of the file, after imports, before `LUMI_DIR`):
+`split_mega_files.py` does NOT currently import `sys` — add it to the existing imports block at the top. Then add a helper before `LUMI_DIR`:
+
 ```python
+# At top of file, in the imports block:
+import sys
+
+
+# Then before LUMI_DIR:
 def _source_dir_default() -> Path:
     """Resolve the transcript source dir, supporting both CASTLE_SOURCE_DIR (current)
     and MEMPALACE_SOURCE_DIR (legacy, deprecation-warned)."""
@@ -87,7 +93,6 @@ def _source_dir_default() -> Path:
         return Path(new)
     old = os.environ.get("MEMPALACE_SOURCE_DIR", "")
     if old:
-        import sys
         print(
             "[split-mega-files] MEMPALACE_SOURCE_DIR is deprecated — "
             "rename to CASTLE_SOURCE_DIR. Reading legacy value for now.",
@@ -99,6 +104,8 @@ def _source_dir_default() -> Path:
 
 LUMI_DIR = _source_dir_default()
 ```
+
+**Note:** `LUMI_DIR` is computed at module-import time. If `MEMPALACE_SOURCE_DIR` is set in the user's shell, the deprecation warning fires when the module is imported — not at command invocation. This is fine (informational, one-time per process) but worth noting for testing.
 
 Also update the argparse help text at line 242:
 ```python
@@ -150,7 +157,6 @@ def _castle_python() -> str:
     if not env_python:
         legacy = os.environ.get("MEMPALACE_PYTHON", "")
         if legacy:
-            import sys
             if "castle_python_deprecation" not in _DEPRECATED_LEGACY_ENV_WARNED:
                 print(
                     "[hooks] MEMPALACE_PYTHON is deprecated — rename to "
@@ -163,6 +169,8 @@ def _castle_python() -> str:
         return env_python
     ...
 ```
+
+(`sys` is already imported at the top of `hooks_cli.py` — no additional import needed inside the function.)
 
 The `_DEPRECATED_LEGACY_ENV_WARNED` set already exists in `hooks_cli.py` (used by `_state_dir()` for the `~/.mempalace/` path fallback). Re-use it.
 
