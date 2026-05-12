@@ -30,7 +30,7 @@
     "init_exists": "Istana sudah ada pada {path}",
     "repair_complete": "Perbaikan selesai. {fixed} masalah berhasil diperbaiki.",
     "migrate_complete": "Migrasi selesai.",
-    "no_palace": "Istana tidak ditemukan. Jalankan: mempalace init <dir>"
+    "no_palace": "Istana tidak ditemukan. Jalankan: castle init <dir>"
   },
   "aaak": {
     "instruction": "Ringkas ke format indeks. Gunakan tanda hubung (-) antar kata dan garis vertikal (|) antar konsep. Buang kata fungsi dan kata pengisi yang tidak penting. Pertahankan nama serta angka tetap persis."

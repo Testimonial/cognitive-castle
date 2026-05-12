@@ -30,7 +30,7 @@
     "init_exists": "Esiste già un palazzo in {path}",
     "repair_complete": "Riparazione completata. {fixed} problemi risolti.",
     "migrate_complete": "Migrazione completata.",
-    "no_palace": "Nessun palazzo trovato. Esegui: mempalace init <cartella>"
+    "no_palace": "Nessun palazzo trovato. Esegui: castle init <cartella>"
   },
   "aaak": {
     "instruction": "Comprimi in italiano. Trattini tra le parole, pipe tra i concetti. Elimina articoli e parole di riempimento. Mantieni nomi propri e numeri esatti."

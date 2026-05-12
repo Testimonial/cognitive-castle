@@ -30,7 +30,7 @@
     "init_exists": "Un palais existe déjà dans {path}",
     "repair_complete": "Réparation terminée. {fixed} problèmes corrigés.",
     "migrate_complete": "Migration terminée.",
-    "no_palace": "Aucun palais trouvé. Exécutez : mempalace init <dossier>"
+    "no_palace": "Aucun palais trouvé. Exécutez : castle init <dossier>"
   },
   "aaak": {
     "instruction": "Comprimez en français. Tirets entre les mots, pipes entre les concepts. Supprimez les articles et mots de remplissage. Gardez les noms propres et chiffres exacts."

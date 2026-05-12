@@ -26,10 +26,30 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
 HOME = Path.home()
-LUMI_DIR = Path(os.environ.get("MEMPALACE_SOURCE_DIR", str(HOME / "Desktop/transcripts")))
+
+
+def _source_dir_default() -> Path:
+    """Resolve the transcript source dir, supporting both CASTLE_SOURCE_DIR (current)
+    and MEMPALACE_SOURCE_DIR (legacy, deprecation-warned)."""
+    new = os.environ.get("CASTLE_SOURCE_DIR", "")
+    if new:
+        return Path(new)
+    old = os.environ.get("MEMPALACE_SOURCE_DIR", "")
+    if old:
+        print(
+            "[split-mega-files] MEMPALACE_SOURCE_DIR is deprecated — "
+            "rename to CASTLE_SOURCE_DIR. Reading legacy value for now.",
+            file=sys.stderr,
+        )
+        return Path(old)
+    return HOME / "Desktop/transcripts"
+
+
+LUMI_DIR = _source_dir_default()
 
 # People we know about (for name detection in content)
 # Loaded from ~/.castle/known_names.json if it exists, otherwise generic fallback.
@@ -239,7 +259,8 @@ def main():
         "--source",
         type=str,
         default=None,
-        help="Source directory (default: MEMPALACE_SOURCE_DIR or ~/Desktop/transcripts)",
+        help="Source directory (default: CASTLE_SOURCE_DIR or ~/Desktop/transcripts; "
+             "MEMPALACE_SOURCE_DIR is deprecated but still honored)",
     )
     parser.add_argument(
         "--output-dir", type=str, default=None, help="Output directory (default: same as source)"

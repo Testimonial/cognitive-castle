@@ -77,13 +77,25 @@ def _castle_python() -> str:
 
     When hooks are invoked by Claude Code, sys.executable may be the system
     python which lacks cognitive_castle and its deps.  Resolution order:
-    1. MEMPALACE_PYTHON env var (explicit override)
+    1. CASTLE_PYTHON env var (explicit override; MEMPALACE_PYTHON also honored
+       for back-compat with one-time deprecation warning)
     2. Venv python from package install path
     3. Editable install: venv/ sibling to cognitive_castle/
     4. sys.executable fallback
     """
     # Honor explicit override (used by shell hook wrappers)
-    env_python = os.environ.get("MEMPALACE_PYTHON", "")
+    env_python = os.environ.get("CASTLE_PYTHON", "")
+    if not env_python:
+        legacy = os.environ.get("MEMPALACE_PYTHON", "")
+        if legacy:
+            if "castle_python_deprecation" not in _DEPRECATED_LEGACY_ENV_WARNED:
+                print(
+                    "[hooks] MEMPALACE_PYTHON is deprecated — rename to "
+                    "CASTLE_PYTHON. Reading legacy value for now.",
+                    file=sys.stderr,
+                )
+                _DEPRECATED_LEGACY_ENV_WARNED.add("castle_python_deprecation")
+            env_python = legacy
     if env_python and os.path.isfile(env_python) and os.access(env_python, os.X_OK):
         return env_python
     # This file lives at <venv>/lib/pythonX.Y/site-packages/cognitive_castle/hooks_cli.py
