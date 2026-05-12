@@ -41,6 +41,7 @@ The user decided **remove now** rather than "install + benchmark first". Reasoni
 - Replacing SOAR with another rule-based system (e.g., a Python rules engine). Don't add complexity to compensate for the removal.
 - Re-litigating the install-+-benchmark vs remove decision (user already decided remove).
 - Restoring SOAR via a different mechanism (e.g., LLM-as-judge re-ranker). Defer that question.
+- Preserving dead infrastructure on the hope it might be useful later. If symbolic-reasoning capability becomes a stated goal, build it deliberately as a new project — a small Python rules engine, an LLM-as-judge layer, or a reinstalled-and-benchmarked SOAR. Don't keep this code "just in case."
 
 ## Source of truth
 
@@ -198,6 +199,7 @@ If matches appear (e.g., in `test_mcp_server.py` or `test_searcher.py`), strip t
 - **Low for API compat.** The deleted fields (`soar_boost`, `soar_score`, `soar_boosted`) were always `1.0` / equal to `similarity` / `True`-but-from-failed-boost. No useful information is being lost.
 - **Test breakage** if any test file outside `test_soar_integration.py` asserts SOAR fields — caught by Step 3 of the testing strategy before commit.
 - **Doc drift** if other docs (beyond README) reference SOAR — caught by a grep during implementation. Brainstorm grep showed zero matches in top-level docs (MISSION/ROADMAP/CHANGELOG/AGENTS/CONTRIBUTING/SECURITY).
+- **Conceptual: we are closing a bridge, not just deleting dead code.** `soar_bridge.py` is named accurately — it was designed to bridge symbolic reasoning (SOAR production rules) to statistical ranking (cosine similarity). It also bridged retrieval to *action* signals (`widen-search`, `chunk-candidate` actions returned by `run_soar_reasoning`). Both halves of the bridge were never operational on this machine: the symbolic side never loaded because SML bindings were missing, and the action side was unwired even when the symbolic side worked — `apply_soar_boosts` discards the `actions` list before returning to callers. We are removing a conceptual layer that *could* have done something useful, not one that *was* doing something useful. If a future deliberate effort wants symbolic reasoning, see the Non-goals section above for cleaner replacement paths.
 
 ## Acceptance criteria
 
