@@ -44,3 +44,5 @@ entities.json
 # Benchmark result artifacts — not source code, not mined into palace
 benchmarks/*.json
 benchmarks/*.jsonl
+
+.superpowers/
