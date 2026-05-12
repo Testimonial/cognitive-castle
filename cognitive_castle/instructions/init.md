@@ -24,8 +24,7 @@ If `pip install cognitive-castle` fails, try these fallbacks in order:
 
 1. Try `pip3 install cognitive-castle`
 2. Try `python -m pip install cognitive-castle` (or `python3 -m pip install cognitive-castle`)
-3. If the error mentions missing build tools or compilation failures (commonly
-   from chromadb or its native dependencies):
+3. If the error mentions missing build tools or compilation failures:
    - On Linux/macOS: suggest `sudo apt-get install build-essential python3-dev`
      (Debian/Ubuntu) or `xcode-select --install` (macOS)
    - On Windows: suggest installing Microsoft C++ Build Tools from

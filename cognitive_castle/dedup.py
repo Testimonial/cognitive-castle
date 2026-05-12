@@ -7,7 +7,7 @@ accumulate. This module finds drawers from the same source_file that
 are too similar (cosine distance < threshold), keeps the longest/richest
 version, and deletes the rest.
 
-No API calls — uses ChromaDB's built-in embedding similarity.
+No API calls — uses LanceDB's built-in embedding similarity.
 
 Usage (standalone):
     python -m cognitive_castle.dedup                          # dedup all
@@ -27,8 +27,7 @@ import os
 import time
 from collections import defaultdict
 
-from .backends.chroma import ChromaBackend
-
+from .backends.lancedb_backend import LanceDBBackend
 
 COLLECTION_NAME = "castle_drawers"
 # Cosine DISTANCE threshold (not similarity). Lower = stricter.
@@ -130,7 +129,7 @@ def dedup_source_group(col, drawer_ids, threshold=DEFAULT_THRESHOLD, dry_run=Tru
 def show_stats(palace_path=None):
     """Show duplication statistics without making changes."""
     palace_path = palace_path or _get_palace_path()
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = LanceDBBackend().get_collection(palace_path, COLLECTION_NAME)
 
     groups = get_source_groups(col)
 
@@ -162,7 +161,7 @@ def dedup_palace(
     print("  Cognitive Castle Deduplicator")
     print(f"{'=' * 55}")
 
-    col = ChromaBackend().get_collection(palace_path, COLLECTION_NAME)
+    col = LanceDBBackend().get_collection(palace_path, COLLECTION_NAME)
 
     print(f"  Palace: {palace_path}")
     print(f"  Drawers: {col.count():,}")

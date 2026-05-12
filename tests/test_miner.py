@@ -4,9 +4,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
-import chromadb
 import yaml
 
+from cognitive_castle.backends.lancedb_backend import LanceDBBackend
 from cognitive_castle.miner import load_config, mine, scan_project, status
 from cognitive_castle.palace import NORMALIZE_VERSION, file_already_mined
 
@@ -46,8 +46,7 @@ def test_project_mining():
         palace_path = project_root / "palace"
         mine(str(project_root), str(palace_path))
 
-        client = chromadb.PersistentClient(path=str(palace_path))
-        col = client.get_collection("castle_drawers")
+        col = LanceDBBackend().get_collection(str(palace_path), "castle_drawers")
         assert col.count() > 0
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
@@ -275,10 +274,7 @@ def test_file_already_mined_check_mtime():
     try:
         palace_path = os.path.join(tmpdir, "palace")
         os.makedirs(palace_path)
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_or_create_collection(
-            "castle_drawers", metadata={"hnsw:space": "cosine"}
-        )
+        col = LanceDBBackend().get_collection(palace_path, "castle_drawers", True)
 
         test_file = os.path.join(tmpdir, "test.txt")
         with open(test_file, "w") as f:
@@ -331,8 +327,7 @@ def test_file_already_mined_check_mtime():
         )
         assert file_already_mined(col, "/fake/no_mtime.txt", check_mtime=True) is False
     finally:
-        # Release ChromaDB file handles before cleanup (required on Windows)
-        del col, client
+        del col
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
@@ -455,8 +450,7 @@ def test_file_already_mined_returns_false_for_stale_normalize_version():
     try:
         palace_path = os.path.join(tmpdir, "palace")
         os.makedirs(palace_path)
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_or_create_collection("castle_drawers")
+        col = LanceDBBackend().get_collection(palace_path, "castle_drawers", True)
 
         # Pre-v2 drawer: no normalize_version field at all
         col.add(
@@ -487,7 +481,7 @@ def test_file_already_mined_returns_false_for_stale_normalize_version():
         )
         assert file_already_mined(col, "/fake/current.jsonl") is True
     finally:
-        del col, client
+        del col
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
@@ -497,8 +491,7 @@ def test_add_drawer_stamps_normalize_version(tmp_path):
 
     palace_path = tmp_path / "palace"
     palace_path.mkdir()
-    client = chromadb.PersistentClient(path=str(palace_path))
-    col = client.get_or_create_collection("castle_drawers")
+    col = LanceDBBackend().get_collection(str(palace_path), "castle_drawers", True)
     try:
         added = add_drawer(
             collection=col,
@@ -514,7 +507,7 @@ def test_add_drawer_stamps_normalize_version(tmp_path):
         meta = stored["metadatas"][0]
         assert meta["normalize_version"] == NORMALIZE_VERSION
     finally:
-        del col, client
+        del col
 
 
 def test_mine_creates_topic_tunnels_for_shared_topics(tmp_path, monkeypatch):

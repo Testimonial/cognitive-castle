@@ -76,7 +76,7 @@ def _castle_python() -> str:
     """Return the python interpreter that has cognitive_castle installed.
 
     When hooks are invoked by Claude Code, sys.executable may be the system
-    python which lacks chromadb and other deps.  Resolution order:
+    python which lacks cognitive_castle and its deps.  Resolution order:
     1. MEMPALACE_PYTHON env var (explicit override)
     2. Venv python from package install path
     3. Editable install: venv/ sibling to cognitive_castle/

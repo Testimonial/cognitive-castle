@@ -71,7 +71,7 @@ def _register_file(collection, source_file: str, wing: str, agent: str):
 
     Without this, files that normalize to nothing or produce zero chunks are
     re-read and re-processed on every mine run because nothing was written to
-    ChromaDB on the first pass.
+    the palace on the first pass.
     """
     sentinel_id = f"_reg_{hashlib.sha256(source_file.encode()).hexdigest()[:24]}"
     collection.upsert(

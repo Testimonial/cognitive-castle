@@ -3,10 +3,9 @@ import tempfile
 import shutil
 from pathlib import Path
 
-import chromadb
-
+from cognitive_castle.backends.lancedb_backend import LanceDBBackend
 from cognitive_castle.convo_miner import mine_convos
-from cognitive_castle.palace import file_already_mined
+from cognitive_castle.palace import file_already_mined, get_collection
 
 
 def test_convo_mining():
@@ -19,8 +18,7 @@ def test_convo_mining():
     palace_path = os.path.join(tmpdir, "palace")
     mine_convos(tmpdir, palace_path, wing="test_convos")
 
-    client = chromadb.PersistentClient(path=palace_path)
-    col = client.get_collection("castle_drawers")
+    col = LanceDBBackend().get_collection(palace_path, "castle_drawers")
     assert col.count() >= 2
 
     # Verify search works
@@ -46,8 +44,7 @@ def test_mine_convos_does_not_reprocess_short_files(capsys):
 
         # Verify sentinel was written (resolve path -- macOS /var -> /private/var)
         resolved_file = str(Path(tmpdir).resolve() / "tiny.txt")
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("castle_drawers")
+        col = get_collection(palace_path)
         assert file_already_mined(col, resolved_file)
 
         # Second run -- file should be skipped
@@ -100,8 +97,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         mine_convos(tmpdir, palace_path, wing="test")
         capsys.readouterr()
 
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("castle_drawers")
+        col = get_collection(palace_path)
         resolved = str(Path(tmpdir).resolve() / "chat.txt")
         first_pass = col.get(where={"source_file": resolved})
         first_ids = set(first_pass["ids"])
@@ -135,7 +131,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
                 }
             ],
         )
-        del col, client
+        del col
 
         # Second mine — version gate should trigger rebuild
         mine_convos(tmpdir, palace_path, wing="test")
@@ -144,8 +140,7 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
             "Files skipped (already filed): 0" in out
         ), "stale drawers should force a rebuild, not a skip"
 
-        client = chromadb.PersistentClient(path=palace_path)
-        col = client.get_collection("castle_drawers")
+        col = get_collection(palace_path)
         rebuilt = col.get(where={"source_file": resolved})
         # Orphan is gone
         assert "orphan_drawer" not in rebuilt["ids"]
@@ -155,6 +150,6 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         # All rebuilt drawers carry the current version
         for meta in rebuilt["metadatas"]:
             assert meta.get("normalize_version") == NORMALIZE_VERSION
-        del col, client
+        del col
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)

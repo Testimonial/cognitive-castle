@@ -594,23 +594,15 @@ class TestBackendAbstraction:
             "ABC" in src or "abstractmethod" in src
         ), "backends/base.py does not define an abstract base class."
 
-    def test_backends_chroma_exists(self):
-        """Claim: ChromaDB backend implementation.
-        backends/chroma.py must exist and subclass the base."""
-        path = MEMPALACE_PKG / "backends" / "chroma.py"
-        assert path.is_file(), "mempalace/backends/chroma.py does not exist."
+    def test_lancedb_backend_exists(self):
+        """Claim: LanceDB backend implementation.
+        backends/lancedb_backend.py must exist and subclass the base."""
+        path = MEMPALACE_PKG / "backends" / "lancedb_backend.py"
+        assert path.is_file(), "mempalace/backends/lancedb_backend.py does not exist."
         src = _read(path)
         assert (
             "BaseCollection" in src or "base" in src
-        ), "backends/chroma.py does not reference the base class."
-
-    def test_backends_importable(self):
-        """Both backend modules should be importable."""
-        from cognitive_cognitive_castle.backends.base import BaseCollection
-        from cognitive_cognitive_castle.backends.chroma import ChromaBackend
-
-        assert BaseCollection is not None
-        assert ChromaBackend is not None
+        ), "backends/lancedb_backend.py does not reference the base class."
 
 
 # ---------------------------------------------------------------------------

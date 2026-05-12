@@ -1,9 +1,9 @@
-"""Tests for mempalace.dedup — near-duplicate drawer detection and removal."""
+"""Tests for cognitive_castle.dedup — near-duplicate drawer detection and removal."""
 
 from unittest.mock import MagicMock, patch
 
 
-from mempalace import dedup
+from cognitive_castle import dedup
 
 
 # ── get_source_groups ─────────────────────────────────────────────────
@@ -205,7 +205,7 @@ def _install_mock_backend(mock_backend_cls, collection):
     return mock_backend
 
 
-@patch("cognitive_castle.dedup.ChromaBackend")
+@patch("cognitive_castle.dedup.LanceDBBackend")
 def test_show_stats(mock_backend_cls, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 5
@@ -232,7 +232,7 @@ def test_show_stats(mock_backend_cls, tmp_path):
 
 @patch("cognitive_castle.dedup.dedup_source_group")
 @patch("cognitive_castle.dedup.get_source_groups")
-@patch("cognitive_castle.dedup.ChromaBackend")
+@patch("cognitive_castle.dedup.LanceDBBackend")
 def test_dedup_palace_dry_run(mock_backend_cls, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 10
@@ -247,7 +247,7 @@ def test_dedup_palace_dry_run(mock_backend_cls, mock_groups, mock_dedup_group, t
 
 @patch("cognitive_castle.dedup.dedup_source_group")
 @patch("cognitive_castle.dedup.get_source_groups")
-@patch("cognitive_castle.dedup.ChromaBackend")
+@patch("cognitive_castle.dedup.LanceDBBackend")
 def test_dedup_palace_with_wing(mock_backend_cls, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 10
@@ -260,7 +260,7 @@ def test_dedup_palace_with_wing(mock_backend_cls, mock_groups, mock_dedup_group,
 
 @patch("cognitive_castle.dedup.dedup_source_group")
 @patch("cognitive_castle.dedup.get_source_groups")
-@patch("cognitive_castle.dedup.ChromaBackend")
+@patch("cognitive_castle.dedup.LanceDBBackend")
 def test_dedup_palace_no_groups(mock_backend_cls, mock_groups, mock_dedup_group, tmp_path):
     mock_col = MagicMock()
     mock_col.count.return_value = 3

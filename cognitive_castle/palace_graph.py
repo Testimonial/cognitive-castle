@@ -114,7 +114,7 @@ def build_graph(col=None, config=None):
     while offset < total:
         batch = col.get(limit=1000, offset=offset, include=["metadatas"])
         for meta in batch["metadatas"]:
-            # ChromaDB can return ``None`` for drawers without metadata
+            # The backend can return ``None`` for drawers without metadata
             # (legacy data, partial writes — upstream #1020 territory).
             # Skip these silently rather than crash the whole graph
             # build — a single None drawer shouldn't take down /stats
@@ -329,7 +329,7 @@ def _fuzzy_match(query: str, nodes: dict, n: int = 5):
 # between two specific drawers or rooms in different wings/projects.
 #
 # Stored as a JSON file at ~/.castle/tunnels.json so they persist
-# across palace rebuilds (not in ChromaDB which can be recreated).
+# across palace rebuilds (not in the palace vector store which can be recreated).
 
 
 _TUNNEL_FILE = os.path.join(os.path.expanduser("~"), ".castle", "tunnels.json")

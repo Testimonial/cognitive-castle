@@ -1,7 +1,7 @@
-"""Embedding using sentence-transformers (replaces ChromaDB ONNX dependency).
+"""Embedding using sentence-transformers.
 
-Produces the same all-MiniLM-L6-v2 model and 384-dim L2-normalised vectors
-as the ChromaDB default, so the switch is transparent to callers.
+Produces 384-dim L2-normalised vectors (default: all-MiniLM-L6-v2, configurable
+via ``embedder_model`` in config).
 
 Supported hardware (env ``CASTLE_EMBEDDING_DEVICE`` or config key):
   auto   — prefer MPS ▸ CUDA ▸ CPU
@@ -93,7 +93,7 @@ def embed_texts(texts: list[str], device: str = "auto") -> list[list[float]]:
 
 
 class _SentenceTransformerEF:
-    """Thin wrapper with a ChromaDB-compatible callable interface."""
+    """Thin wrapper with a callable embedding-function interface."""
 
     def __init__(self, device: str = "auto"):
         self._device = device
@@ -110,7 +110,7 @@ _WARNED: set = set()
 
 
 def get_embedding_function(device: Optional[str] = None):
-    """Return a callable embedding function compatible with the ChromaDB EF contract."""
+    """Return a callable embedding function for use with the LanceDB backend."""
     if device is None:
         try:
             from .config import CognitiveCastleConfig

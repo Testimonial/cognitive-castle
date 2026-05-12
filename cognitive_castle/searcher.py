@@ -30,10 +30,9 @@ def _first_or_empty(results, key: str) -> list:
     """Return the first inner list of a query result field, or [].
 
     Accepts both the typed :class:`QueryResult` (attribute access) and the
-    pre-typed chroma dict shape; this polymorphism is retained so test mocks
-    still work and callers mid-migration do not crash. Preserves the empty-
-    collection semantics from issue #195: when no queries returned hits, the
-    outer list may be empty and indexing ``[0]`` would raise.
+    plain dict shape; this polymorphism is retained so test mocks still work.
+    Preserves the empty-collection semantics from issue #195: when no queries
+    returned hits, the outer list may be empty and indexing ``[0]`` would raise.
     """
     outer = getattr(results, key, None) if not isinstance(results, dict) else results.get(key)
     if not outer:
@@ -44,7 +43,7 @@ def _first_or_empty(results, key: str) -> list:
 def _tokenize(text: str) -> list:
     """Lowercase + strip to alphanumeric tokens of length ≥ 2.
 
-    Tolerates ``None`` documents — Chroma can return ``None`` in the
+    Tolerates ``None`` documents — the backend can return ``None`` in the
     ``documents`` field for drawers without text content, which would
     otherwise raise ``AttributeError`` mid-rerank.
     """
@@ -55,7 +54,7 @@ def _tokenize(text: str) -> list:
 
 
 def build_where_filter(wing: str = None, room: str = None) -> dict:
-    """Build ChromaDB where filter for wing/room filtering."""
+    """Build a metadata where-filter dict for wing/room filtering."""
     if wing and room:
         return {"$and": [{"wing": wing}, {"room": room}]}
     elif wing:
@@ -93,7 +92,7 @@ def _expand_with_neighbors(drawers_col, matched_doc: str, matched_meta: dict, ra
         ``drawer_index``    the matched chunk's index in the source file
         ``total_drawers``   total drawer count for the source file (or None)
 
-    On any ChromaDB failure or missing metadata, falls back to returning the
+    On any backend failure or missing metadata, falls back to returning the
     matched drawer alone so search never breaks because neighbor expansion
     failed.
     """

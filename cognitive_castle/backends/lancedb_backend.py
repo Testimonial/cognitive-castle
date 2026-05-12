@@ -1,4 +1,4 @@
-"""LanceDB storage backend for Cognitive Castle (replaces ChromaDB).
+"""LanceDB storage backend for Cognitive Castle.
 
 Storage layout per palace directory:
   <palace_path>/lancedb/                  — LanceDB database root
@@ -17,7 +17,7 @@ Schema (both tables):
   decay_score    float64  freshness score (1.0 = fresh, decays over time)
 
 Filter translation:
-  ChromaDB's $eq / $ne / $in / $nin / $and / $or / $contains / $gt / $gte / $lt / $lte
+  $eq / $ne / $in / $nin / $and / $or / $contains / $gt / $gte / $lt / $lte
   are translated to LanceDB SQL WHERE clauses at query time.
   Only the hoisted columns are indexed; filtering on other metadata fields falls
   through to a metadata_json scan (not currently supported — raise UnsupportedFilterError).
@@ -60,7 +60,7 @@ EMBED_DIM = _legacy_embed_dim()  # backward-compat: prefer cfg.embedder_dim in n
 # Columns extracted from metadata dict and stored as first-class filterable columns.
 _HOISTED = {"wing", "room", "source_file", "chunk_index", "decay_score"}
 
-# Supported filter operators (same set as the chroma backend enforces).
+# Supported filter operators.
 _SUPPORTED_OPS = frozenset(
     {"$eq", "$ne", "$in", "$nin", "$contains", "$and", "$or", "$gt", "$gte", "$lt", "$lte"}
 )
@@ -104,7 +104,7 @@ def _make_schema() -> pa.Schema:
 
 
 # ---------------------------------------------------------------------------
-# Filter translation: ChromaDB $-operators → SQL string
+# Filter translation: $-operators → SQL string
 # ---------------------------------------------------------------------------
 
 
@@ -155,7 +155,7 @@ def _translate_field_filter(col: str, val: Any) -> str:
 
 
 def _where_to_sql(where: Optional[dict]) -> Optional[str]:
-    """Recursively translate a ChromaDB-style where dict to a SQL string."""
+    """Recursively translate a where filter dict to a SQL string."""
     if not where:
         return None
 
@@ -184,7 +184,7 @@ def _where_to_sql(where: Optional[dict]) -> Optional[str]:
 
 
 def _where_doc_to_sql(where_document: Optional[dict]) -> Optional[str]:
-    """Translate a ChromaDB where_document filter to a SQL clause on the ``text`` column."""
+    """Translate a where_document filter to a SQL clause on the ``text`` column."""
     if not where_document:
         return None
     op, operand = next(iter(where_document.items()))

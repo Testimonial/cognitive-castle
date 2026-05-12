@@ -34,7 +34,7 @@ def export_palace(palace_path: str, output_dir: str, format: str = "markdown") -
     than total palace size.
 
     Args:
-        palace_path: Path to the ChromaDB palace directory.
+        palace_path: Path to the palace directory.
         output_dir: Where to write the exported markdown tree.
         format: Output format (currently only "markdown").
 

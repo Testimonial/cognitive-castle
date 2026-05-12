@@ -626,18 +626,6 @@ def cmd_split(args):
         sys.argv = old_argv
 
 
-def cmd_migrate(args):
-    """Migrate palace from a different ChromaDB version."""
-    from .migrate import migrate
-
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
-    migrate(
-        palace_path=palace_path,
-        dry_run=args.dry_run,
-        confirm=getattr(args, "yes", False),
-    )
-
-
 def cmd_reindex(args) -> None:
     """Rebuild the palace from sources at the current embedder identity.
 
@@ -700,7 +688,7 @@ def cmd_repair_status(args):
 
 
 def cmd_repair(args):
-    """Rebuild palace vector index from SQLite metadata."""
+    """Clean stale palace lock files."""
     if getattr(args, "clean_locks", False):
         from .palace import clean_stale_locks, get_lock_dir
         lock_dir = get_lock_dir()
@@ -708,127 +696,11 @@ def cmd_repair(args):
         print(f"Removed {removed} stale lock(s). Kept {kept} active lock(s).")
         return
 
-    import shutil
-    from .backends.chroma import ChromaBackend
-    from .migrate import confirm_destructive_action, contains_palace_database
-    from .repair import TruncationDetected, check_extraction_safety
-
-    palace_path = os.path.abspath(
-        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    print(
+        "\n  castle repair (legacy ChromaDB rebuild) has been removed.\n"
+        "  To rebuild a LanceDB palace from source files, use:\n\n"
+        "    castle reindex --palace <path> --sources <dirs>\n"
     )
-
-    if getattr(args, "mode", "legacy") == "max-seq-id":
-        from .repair import repair_max_seq_id
-
-        repair_max_seq_id(
-            palace_path,
-            segment=getattr(args, "segment", None),
-            from_sidecar=getattr(args, "from_sidecar", None),
-            backup=getattr(args, "backup", True),
-            dry_run=getattr(args, "dry_run", False),
-            assume_yes=getattr(args, "yes", False),
-        )
-        return
-
-    db_path = os.path.join(palace_path, "chroma.sqlite3")
-
-    if not os.path.isdir(palace_path):
-        print(f"\n  No palace found at {palace_path}")
-        return
-    if not contains_palace_database(palace_path):
-        print(f"\n  No palace database found at {db_path}")
-        return
-
-    print(f"\n{'=' * 55}")
-    print("  Cognitive Castle Repair")
-    print(f"{'=' * 55}\n")
-    print(f"  Palace: {palace_path}")
-
-    backend = ChromaBackend()
-
-    # Try to read existing drawers
-    try:
-        col = backend.get_collection(palace_path, "castle_drawers")
-        total = col.count()
-        print(f"  Drawers found: {total}")
-    except Exception as e:
-        print(f"  Error reading palace: {e}")
-        print("  Cannot recover — palace may need to be re-mined from source files.")
-        return
-
-    if total == 0:
-        print("  Nothing to repair.")
-        return
-
-    if not confirm_destructive_action(
-        "Repair", palace_path, assume_yes=getattr(args, "yes", False)
-    ):
-        return
-
-    # Extract all drawers in batches
-    print("\n  Extracting drawers...")
-    batch_size = 5000
-    all_ids = []
-    all_docs = []
-    all_metas = []
-    offset = 0
-    while offset < total:
-        batch = col.get(limit=batch_size, offset=offset, include=["documents", "metadatas"])
-        if not batch["ids"]:
-            break
-        all_ids.extend(batch["ids"])
-        all_docs.extend(batch["documents"])
-        all_metas.extend(batch["metadatas"])
-        offset += len(batch["ids"])
-    print(f"  Extracted {len(all_ids)} drawers")
-
-    # ── #1208 guard ──────────────────────────────────────────────────
-    # Cross-check against the SQLite ground truth before doing anything
-    # destructive. Catches the user-reported case where chromadb's
-    # collection-layer get() silently caps at 10,000 rows even on much
-    # larger palaces (e.g. after manual HNSW quarantine). Override with
-    # --confirm-truncation-ok only after independently verifying the
-    # extraction count is real.
-    try:
-        check_extraction_safety(
-            palace_path,
-            len(all_ids),
-            confirm_truncation_ok=getattr(args, "confirm_truncation_ok", False),
-        )
-    except TruncationDetected as e:
-        print(e.message)
-        return
-
-    # Backup and rebuild
-    palace_path = os.path.normpath(palace_path)
-    backup_path = palace_path + ".backup"
-    if os.path.exists(backup_path):
-        if not contains_palace_database(backup_path):
-            print(
-                "  Backup validation failed: backup path exists but does not contain chroma.sqlite3. "
-                f"Please remove or rename: {backup_path}"
-            )
-            return
-        shutil.rmtree(backup_path)
-    print(f"  Backing up to {backup_path}...")
-    shutil.copytree(palace_path, backup_path)
-
-    print("  Rebuilding collection...")
-    backend.delete_collection(palace_path, "castle_drawers")
-    new_col = backend.create_collection(palace_path, "castle_drawers")
-
-    filed = 0
-    for i in range(0, len(all_ids), batch_size):
-        batch_ids = all_ids[i : i + batch_size]
-        batch_docs = all_docs[i : i + batch_size]
-        batch_metas = all_metas[i : i + batch_size]
-        new_col.add(documents=batch_docs, ids=batch_ids, metadatas=batch_metas)
-        filed += len(batch_ids)
-        print(f"  Re-filed {filed}/{len(all_ids)} drawers...")
-
-    print(f"\n  Repair complete. {filed} drawers rebuilt.")
-    print(f"  Backup saved at {backup_path}")
-    print(f"\n{'=' * 55}\n")
 
 
 def cmd_hook(args):
@@ -868,7 +740,7 @@ def cmd_mcp(args):
 
 def cmd_compress(args):
     """Compress drawers in a wing using AAAK Dialect."""
-    from .backends.chroma import ChromaBackend
+    from .backends.lancedb_backend import LanceDBBackend
     from .dialect import Dialect
 
     palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
@@ -888,7 +760,7 @@ def cmd_compress(args):
         dialect = Dialect()
 
     # Connect to palace
-    backend = ChromaBackend()
+    backend = LanceDBBackend()
     try:
         col = backend.get_collection(palace_path, "castle_drawers")
     except Exception:
@@ -965,7 +837,7 @@ def cmd_compress(args):
     # Store compressed versions (unless dry-run)
     if not args.dry_run:
         try:
-            comp_col = backend.get_or_create_collection(palace_path, "castle_closets")
+            comp_col = backend.get_collection(palace_path, "castle_closets")
             for doc_id, compressed, meta, stats in compressed_entries:
                 comp_meta = dict(meta)
                 comp_meta["compression_ratio"] = round(stats["size_ratio"], 1)
@@ -1232,56 +1104,7 @@ def main():
     # repair
     p_repair = sub.add_parser(
         "repair",
-        help=(
-            "Rebuild palace vector index (legacy mode) or un-poison max_seq_id rows "
-            "(--mode max-seq-id)"
-        ),
-    )
-    p_repair.add_argument(
-        "--yes", action="store_true", help="Skip confirmation for destructive changes"
-    )
-    p_repair.add_argument(
-        "--confirm-truncation-ok",
-        action="store_true",
-        help=(
-            "Override the #1208 safety guard. Required when chromadb's collection-layer "
-            "extraction returns exactly 10,000 drawers and the SQLite ground-truth check "
-            "either matches or can't be read. Use only after independently confirming "
-            "the palace really contains that count."
-        ),
-    )
-    p_repair.add_argument(
-        "--mode",
-        choices=["legacy", "max-seq-id"],
-        default="legacy",
-        help=(
-            "legacy: full-palace rebuild (default). "
-            "max-seq-id: un-poison max_seq_id rows corrupted by the legacy 0.6.x shim."
-        ),
-    )
-    p_repair.add_argument(
-        "--segment",
-        default=None,
-        help="Segment UUID filter for --mode max-seq-id (repairs only that segment).",
-    )
-    p_repair.add_argument(
-        "--from-sidecar",
-        default=None,
-        help=(
-            "Path to a pre-corruption chroma.sqlite3 sidecar (for --mode max-seq-id); "
-            "clean values are copied from its max_seq_id table verbatim."
-        ),
-    )
-    p_repair.add_argument(
-        "--backup",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Back up SQLite before mutation (default: on)",
-    )
-    p_repair.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Print detected poisoned rows and exit without mutation (--mode max-seq-id only)",
+        help="Clean stale palace lock files (use 'castle reindex' to rebuild a LanceDB palace)",
     )
     p_repair.add_argument(
         "--clean-locks",
@@ -1302,20 +1125,6 @@ def main():
     )
 
     # status
-    # migrate
-    p_migrate = sub.add_parser(
-        "migrate",
-        help="Migrate palace from a different ChromaDB version (fixes 3.0.0 → 3.1.0 upgrade)",
-    )
-    p_migrate.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Show what would be migrated without changing anything",
-    )
-    p_migrate.add_argument(
-        "--yes", action="store_true", help="Skip confirmation for destructive changes"
-    )
-
     p_reindex = sub.add_parser(
         "reindex",
         help="Rebuild the palace from sources (e.g. after an embedder upgrade)",
@@ -1369,7 +1178,6 @@ def main():
         "wake-up": cmd_wakeup,
         "repair": cmd_repair,
         "repair-status": cmd_repair_status,
-        "migrate": cmd_migrate,
         "reindex": cmd_reindex,
         "status": cmd_status,
     }

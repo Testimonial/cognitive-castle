@@ -150,7 +150,7 @@ def resolve_backend_for_palace(
     2. Per-palace config value
     3. ``CASTLE_BACKEND`` env var
     4. Auto-detect from on-disk artifacts (migration/upgrade path only)
-    5. Default (``chroma``)
+    5. Default (``lancedb``)
 
     Auto-detection is strictly a migration aid: it fires only when a local path
     is presented, no earlier rule has chosen a backend, AND the path already
@@ -178,21 +178,11 @@ def resolve_backend_for_palace(
 
 
 def _register_builtins() -> None:
-    """Register lancedb as the in-tree default; keep chroma as fallback."""
+    """Register lancedb as the in-tree default (lancedb-only architecture)."""
     from .lancedb_backend import LanceDBBackend
 
     if "lancedb" not in _registry:
         _registry["lancedb"] = LanceDBBackend
-
-    # Keep chroma registered so existing palaces can still be opened with
-    # CASTLE_BACKEND=chroma, but it is no longer the default.
-    try:
-        from .chroma import ChromaBackend
-
-        if "chroma" not in _registry:
-            _registry["chroma"] = ChromaBackend
-    except ImportError:
-        pass
 
 
 _register_builtins()
