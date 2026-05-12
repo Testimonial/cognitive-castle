@@ -63,7 +63,7 @@ def test_layer0_strips_whitespace(tmp_path):
 
 def test_layer0_default_path():
     layer = Layer0()
-    expected = os.path.expanduser("~/.mempalace/identity.txt")
+    expected = os.path.expanduser("~/.castle/identity.txt")
     assert layer.path == expected
 
 

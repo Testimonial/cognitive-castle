@@ -1,9 +1,9 @@
-"""Tests for mempalace.repair — generic helpers."""
+"""Tests for cognitive_castle.repair — generic helpers."""
 
 import os
 from unittest.mock import MagicMock, patch
 
-from mempalace import repair
+from cognitive_castle import repair
 
 
 # ── _get_palace_path ──────────────────────────────────────────────────

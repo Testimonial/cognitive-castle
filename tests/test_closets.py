@@ -84,7 +84,7 @@ class TestMineLock:
     def test_lock_acquires_and_releases(self, tmp_path):
         target = str(tmp_path / "lock_target.txt")
         with mine_lock(target):
-            lock_dir = os.path.expanduser("~/.mempalace/locks")
+            lock_dir = os.path.expanduser("~/.castle/locks")
             assert os.path.isdir(lock_dir)
         # Re-acquire after release should succeed instantly.
         start = time.time()
@@ -282,7 +282,7 @@ class TestMinerClosetRebuild:
     def test_remine_replaces_closets_completely(self, tmp_path):
         project = tmp_path / "proj"
         project.mkdir()
-        (project / "mempalace.yaml").write_text(
+        (project / "castle.yaml").write_text(
             yaml.dump({"wing": "proj", "rooms": [{"name": "general", "description": "x"}]})
         )
         target = project / "doc.md"
@@ -478,7 +478,7 @@ class TestEntityMetadata:
         # Point the registry at a temp file we control, exercise the cache.
         registry = tmp_path / "known_entities.json"
         registry.write_text(json.dumps({"people": ["Zelda"]}))
-        from mempalace import miner
+        from cognitive_castle import miner
 
         monkeypatch.setattr(miner, "_ENTITY_REGISTRY_PATH", str(registry))
         miner._ENTITY_REGISTRY_CACHE["mtime"] = None
@@ -571,7 +571,7 @@ class TestDiaryIngest:
         # Platform-neutral path check: compare parents rather than a hardcoded
         # separator string that would fail on Windows (``\.mempalace\state\``).
         assert state_path.parent.name == "state"
-        assert state_path.parent.parent.name == ".mempalace"
+        assert state_path.parent.parent.name == ".castle"
 
     def test_wing_prefixed_drawer_id_prevents_cross_diary_collision(self, tmp_path):
         # Regression: the original implementation used

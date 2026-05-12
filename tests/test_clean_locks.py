@@ -1,7 +1,6 @@
 import os
 import time
 import tempfile
-import pytest
 from cognitive_castle.palace import clean_stale_locks
 
 

@@ -1,4 +1,4 @@
-"""Tests for mempalace.llm_client.
+"""Tests for cognitive_castle.llm_client.
 
 HTTP is mocked throughout — these tests do not require a running Ollama
 or network access. Live-provider smoke tests live outside the unit-test

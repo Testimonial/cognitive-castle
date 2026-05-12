@@ -247,7 +247,7 @@ class TestCheckTextContract:
         # Bypass the real registry by pointing cache at a temp file.
         registry = tmp_path / "known_entities.json"
         registry.write_text(json.dumps({"people": ["Milla", "Mila"]}))
-        from mempalace import miner
+        from cognitive_castle import miner
 
         monkeypatch.setattr(miner, "_ENTITY_REGISTRY_PATH", str(registry))
         miner._ENTITY_REGISTRY_CACHE.update({"mtime": None, "names": frozenset(), "raw": {}})
@@ -265,7 +265,7 @@ class TestCLI:
         pin it explicitly."""
         registry = tmp_path / "known_entities.json"
         registry.write_text(json.dumps({"people": ["Milla", "Mila"]}))
-        from mempalace import fact_checker, miner
+        from cognitive_castle import fact_checker, miner
 
         monkeypatch.setattr(miner, "_ENTITY_REGISTRY_PATH", str(registry))
         miner._ENTITY_REGISTRY_CACHE.update({"mtime": None, "names": frozenset(), "raw": {}})
@@ -279,7 +279,7 @@ class TestCLI:
             # Re-exec the __main__ block via runpy.
             import runpy
 
-            runpy.run_module("mempalace.fact_checker", run_name="__main__")
+            runpy.run_module("cognitive_castle.fact_checker", run_name="__main__")
         # Issues found → exit code 1.
         assert excinfo.value.code == 1
         out = capsys.readouterr().out

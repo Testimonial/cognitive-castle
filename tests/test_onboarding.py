@@ -1,4 +1,4 @@
-"""Tests for mempalace.onboarding."""
+"""Tests for cognitive_castle.onboarding."""
 
 import os
 from unittest.mock import patch
@@ -423,7 +423,7 @@ def test_run_onboarding_basic_flow(tmp_path):
     with (
         patch("cognitive_castle.onboarding._ask_mode", return_value="work"),
         patch(
-            "mempalace.onboarding._ask_people",
+            "cognitive_castle.onboarding._ask_people",
             return_value=([{"name": "Bob", "relationship": "boss", "context": "work"}], {}),
         ),
         patch("cognitive_castle.onboarding._ask_projects", return_value=["Acme"]),
@@ -441,7 +441,7 @@ def test_run_onboarding_with_ambiguous_names(tmp_path):
     with (
         patch("cognitive_castle.onboarding._ask_mode", return_value="personal"),
         patch(
-            "mempalace.onboarding._ask_people",
+            "cognitive_castle.onboarding._ask_people",
             return_value=([{"name": "Grace", "relationship": "friend", "context": "personal"}], {}),
         ),
         patch("cognitive_castle.onboarding._ask_projects", return_value=[]),

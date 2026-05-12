@@ -21,13 +21,13 @@ def test_config_from_file():
 
 
 def test_embedding_device_defaults_to_auto(monkeypatch):
-    monkeypatch.delenv("MEMPALACE_EMBEDDING_DEVICE", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDING_DEVICE", raising=False)
     cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
     assert cfg.embedding_device == "auto"
 
 
 def test_embedding_device_from_config_is_normalized(tmp_path, monkeypatch):
-    monkeypatch.delenv("MEMPALACE_EMBEDDING_DEVICE", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDING_DEVICE", raising=False)
     with open(tmp_path / "config.json", "w") as f:
         json.dump({"embedding_device": "  CUDA  "}, f)
 
@@ -38,7 +38,7 @@ def test_embedding_device_from_config_is_normalized(tmp_path, monkeypatch):
 def test_embedding_device_env_overrides_config(tmp_path, monkeypatch):
     with open(tmp_path / "config.json", "w") as f:
         json.dump({"embedding_device": "cpu"}, f)
-    monkeypatch.setenv("MEMPALACE_EMBEDDING_DEVICE", "  CoreML  ")
+    monkeypatch.setenv("CASTLE_EMBEDDING_DEVICE", "  CoreML  ")
 
     cfg = MempalaceConfig(config_dir=str(tmp_path))
     assert cfg.embedding_device == "coreml"
@@ -46,7 +46,7 @@ def test_embedding_device_env_overrides_config(tmp_path, monkeypatch):
 
 def test_env_override():
     raw = "/env/palace"
-    os.environ["MEMPALACE_PALACE_PATH"] = raw
+    os.environ["CASTLE_PALACE_PATH"] = raw
     try:
         cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
         # palace_path normalizes with abspath + expanduser to match the
@@ -54,7 +54,7 @@ def test_env_override():
         # on Windows abspath prepends the current drive letter.
         assert cfg.palace_path == os.path.abspath(os.path.expanduser(raw))
     finally:
-        del os.environ["MEMPALACE_PALACE_PATH"]
+        del os.environ["CASTLE_PALACE_PATH"]
 
 
 def test_env_path_expanduser():
@@ -63,13 +63,13 @@ def test_env_path_expanduser():
     # paths (e.g. C:\Users\RUNNER~1\...) legitimately contain tildes — the
     # equality check is authoritative.
     raw = os.path.join("~", "mempalace-test")
-    os.environ["MEMPALACE_PALACE_PATH"] = raw
+    os.environ["CASTLE_PALACE_PATH"] = raw
     try:
         cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
         assert cfg.palace_path == os.path.abspath(os.path.expanduser(raw))
         assert cfg.palace_path.endswith("mempalace-test")
     finally:
-        del os.environ["MEMPALACE_PALACE_PATH"]
+        del os.environ["CASTLE_PALACE_PATH"]
 
 
 def test_env_path_abspath_collapses_traversal():
@@ -77,22 +77,22 @@ def test_env_path_abspath_collapses_traversal():
     # the assertion is portable (Windows uses \, POSIX uses /).
     raw = os.path.join(tempfile.gettempdir(), "palace", "..", "mempalace-test")
     expected = os.path.abspath(os.path.expanduser(raw))
-    os.environ["MEMPALACE_PALACE_PATH"] = raw
+    os.environ["CASTLE_PALACE_PATH"] = raw
     try:
         cfg = MempalaceConfig(config_dir=tempfile.mkdtemp())
         # .. segments must be collapsed, not preserved literally.
         assert ".." not in cfg.palace_path
         assert cfg.palace_path == expected
     finally:
-        del os.environ["MEMPALACE_PALACE_PATH"]
+        del os.environ["CASTLE_PALACE_PATH"]
 
 
 def test_env_path_legacy_alias_normalized():
     # Legacy MEMPAL_PALACE_PATH gets the same normalization treatment as
-    # MEMPALACE_PALACE_PATH. We don't assert "~" is absent from the final
+    # CASTLE_PALACE_PATH. We don't assert "~" is absent from the final
     # string because Windows 8.3 short paths (e.g. C:\Users\RUNNER~1\...)
     # legitimately contain tildes — the equality check below is authoritative.
-    os.environ.pop("MEMPALACE_PALACE_PATH", None)
+    os.environ.pop("CASTLE_PALACE_PATH", None)
     raw = os.path.join("~", "legacy-alias", "..", "mempalace-test")
     os.environ["MEMPAL_PALACE_PATH"] = raw
     try:

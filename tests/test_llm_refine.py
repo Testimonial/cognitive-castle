@@ -1,4 +1,4 @@
-"""Tests for mempalace.llm_refine.
+"""Tests for cognitive_castle.llm_refine.
 
 Uses a fake provider for deterministic, offline tests. No network.
 """

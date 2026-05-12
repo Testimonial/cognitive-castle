@@ -382,7 +382,7 @@ class TestSearchTool:
 
     def test_list_rooms_rejects_invalid_wing(self, monkeypatch, config, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         monkeypatch.setattr(mcp_server, "_get_collection", lambda: pytest.fail())
 
@@ -391,7 +391,7 @@ class TestSearchTool:
 
     def test_search_rejects_invalid_room(self, monkeypatch, config, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         monkeypatch.setattr(mcp_server, "search_memories", lambda: pytest.fail())
 
@@ -400,7 +400,7 @@ class TestSearchTool:
 
     def test_list_drawers_rejects_invalid_wing(self, monkeypatch, config, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         monkeypatch.setattr(mcp_server, "_get_collection", lambda: pytest.fail())
 
@@ -409,7 +409,7 @@ class TestSearchTool:
 
     def test_find_tunnels_rejects_invalid_wing(self, monkeypatch, config, kg):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         monkeypatch.setattr(mcp_server, "_get_collection", lambda: pytest.fail())
 
@@ -418,7 +418,7 @@ class TestSearchTool:
 
     def test_wal_redacts_sensitive_fields(self, monkeypatch, config, kg, tmp_path):
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         wal_file = tmp_path / "write_log.jsonl"
         monkeypatch.setattr(mcp_server, "_WAL_FILE", wal_file)
@@ -840,7 +840,7 @@ class TestDiaryTools:
         _client, _col = _get_collection(palace_path, create=True)
         del _client
 
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         class FrozenDateTime:
             calls = [
@@ -962,7 +962,7 @@ class TestCacheInvalidation:
     def test_reconnect_reports_failure_when_no_palace(self, monkeypatch, config, kg):
         """tool_reconnect should report failure when no collection is available."""
         _patch_mcp_server(monkeypatch, config, kg)
-        from mempalace import mcp_server
+        from cognitive_castle import mcp_server
 
         # Make _get_collection always return None
         monkeypatch.setattr(mcp_server, "_get_collection", lambda create=False: None)
