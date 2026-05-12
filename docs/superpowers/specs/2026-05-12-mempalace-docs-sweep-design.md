@@ -39,7 +39,7 @@ PR #D is the **fourth and final** PR of the cleanup series:
 ## Non-goals
 
 - Touching the backward-compat aliases in production code (`MempalaceConfig` aliases at `config.py:643`, `cli.py:43`, `layers.py:30`, `repair.py:34`) — handled in PR #B's scope.
-- Removing `~/.mempalace/` legacy state-dir fallback in `_state_dir()` — intentional behavior.
+- Removing `~/.mempalace/` legacy state-dir fallback in `_state_dir()` — intentional behavior. Confirmed at spec-review: `cognitive_castle/hooks_cli.py` + `cognitive_castle/miner.py` still have mempalace refs but ALL are intentional back-compat (legacy state-dir + legacy filename fallback). Leave them.
 - Rewriting CHANGELOG entries — those describe historical state and stay verbatim.
 - Touching `docs/HISTORY.md` — historical narrative.
 - Touching `docs/superpowers/{specs,plans}/` — frozen design history.
@@ -47,6 +47,7 @@ PR #D is the **fourth and final** PR of the cleanup series:
 - Changing the GitHub issue links in docs/rfcs/002 that point to `github.com/MemPalace/mempalace/issues/X` — those reference the upstream org's PR/issue history at the time the RFC was forked. Preserve.
 - Renaming directories, modules, or anything import-touched.
 - Adding new documentation or expanding existing files beyond brand corrections.
+- **Touching `website/`** (36 files, 2702 markdown lines — full Vitepress site). Out of scope here because it's its own product surface that deserves its own PR (potentially merged with productization #3 landing-page work). The spec acknowledges website/ has mempalace residue but defers it.
 
 ## Source of truth
 
@@ -115,21 +116,25 @@ print(f"  castle mine {project_dir}")
 print("  castle search 'why did we choose this approach'")
 ```
 
-#### `examples/HOOKS_TUTORIAL.md`
+#### `examples/HOOKS_TUTORIAL.md` — **DOUBLY BROKEN**
 
-Multi-line tutorial. Replace user-followable command/env-var references:
+Two layers of staleness:
+
+1. **Stale shell-script names**: tutorial references `mempal_save_hook.sh` and `mempal_precompact_hook.sh`. These were renamed in PR #5 to `castle-stop-hook.sh` and `castle-precompact-hook.sh` and now live at `.claude-plugin/hooks/`. The old script names DO NOT EXIST anywhere in the repo (confirmed by `find . -name "mempal_*_hook.sh"` returning empty). Users following the tutorial would fail at step 1.
+2. **Stale CLI command + env var names**: `mempalace mine`, `MEMPALACE_PYTHON`, `MEMPAL_DIR`.
+
+Updates needed:
+- `mempal_save_hook.sh` → `castle-stop-hook.sh` (with note that it lives at `.claude-plugin/hooks/castle-stop-hook.sh` once the plugin is installed)
+- `mempal_precompact_hook.sh` → `castle-precompact-hook.sh`
 - `mempalace mine` → `castle mine`
-- `mempalace init` → `castle init` (if any)
-- `mempalace` (standalone CLI name) → `castle`
+- `mempalace init` → `castle init`
 - `MemPalace hooks` / `MemPalace repository` → `Cognitive Castle hooks` / `Cognitive Castle repository`
-- `MEMPALACE_PYTHON` env var → `CASTLE_PYTHON` (with note that `MEMPALACE_PYTHON` is still honored as deprecation alias per PR #B)
-- `MEMPAL_DIR` → `CASTLE_DIR` (verify the alias is set up similarly; if production still requires `MEMPAL_DIR`, leave it)
+- `MEMPALACE_PYTHON` → `CASTLE_PYTHON` (with note that `MEMPALACE_PYTHON` is honored as deprecation alias per PR #B)
+- `MEMPAL_DIR` → `CASTLE_DIR` (similar deprecation pattern exists for the dir alias)
 
-The implementer should read the file end-to-end and apply consistent updates. Use sed for the bulk patterns:
+Actually the cleanest fix for HOOKS_TUTORIAL.md is to point readers at the **plugin install path** (`/plugin marketplace add Testimonial/cognitive-castle && /plugin install castle@cognitive-castle`) which auto-registers the hooks. The manual `~/.claude/settings.local.json` config block in the current tutorial is obsolete — that pattern was for when hooks were standalone scripts, before the plugin packaged them.
 
-```bash
-sed -i 's/mempalace mine/castle mine/g; s/mempalace init/castle init/g; s/MemPalace hooks/Cognitive Castle hooks/g; s/MemPalace repository/Cognitive Castle repository/g; s/MEMPALACE_PYTHON/CASTLE_PYTHON/g' examples/HOOKS_TUTORIAL.md
-```
+Implementer should: read the file end-to-end, decide if the manual-config section is salvageable or should be replaced with the plugin-install path entirely. Worst case: simplify HOOKS_TUTORIAL.md to point at the plugin install + a one-paragraph "hooks fire automatically once the plugin is installed".
 
 #### `examples/mcp_setup.md`
 
@@ -138,6 +143,74 @@ sed -i 's/mempalace mine/castle mine/g; s/mempalace init/castle init/g; s/MemPal
 ```bash
 sed -i 's/mempalace-mcp/castle-mcp/g' examples/mcp_setup.md
 ```
+
+#### `examples/convo_import.py` — **broken `mempalace` print statements**
+
+```python
+# Before:
+print("  mempalace mine ~/claude-sessions/ --mode convos --wing my_project")
+print("  mempalace mine ~/chatgpt-exports/ --mode convos")
+# After:
+print("  castle mine ~/claude-sessions/ --mode convos --wing my_project")
+print("  castle mine ~/chatgpt-exports/ --mode convos")
+```
+
+Plus any other `mempalace ...` references in the file.
+
+#### `examples/gemini_cli_setup.md`
+
+User-facing guide for Gemini CLI integration. Full brand sweep needed: `MemPalace` → `Cognitive Castle`, `mempalace` commands → `castle`, repository paths, env vars.
+
+```bash
+sed -i 's/MemPalace/Cognitive Castle/g; s/mempalace mine/castle mine/g; s/mempalace init/castle init/g; s/mempalace search/castle search/g; s/mempalace-mcp/castle-mcp/g; s/mempalace\//cognitive_castle\//g' examples/gemini_cli_setup.md
+```
+
+Implementer should then re-read and fix any sentence that got over-clobbered.
+
+#### `benchmarks/mine_bench.py` — **broken Python import**
+
+Lines 60, 75, 142 currently:
+```python
+# Line 60:
+(dest / "mempalace.yaml").write_text(...)
+# Lines 75, 142:
+from mempalace import miner
+```
+
+Fixes:
+- Line 60: `mempalace.yaml` → `castle.yaml` (matches the production filename — see PR #B's i18n + miner work). Also note `cognitive_castle/miner.py:61` lists `mempalace.yml` as a legacy fallback, so writing `castle.yaml` is correct for new fixtures.
+- Lines 75, 142: `from mempalace import miner` → `from cognitive_castle import miner`. The `mempalace` package doesn't exist — this import currently raises `ModuleNotFoundError` if anyone runs the benchmark.
+
+#### `.agents/plugins/marketplace.json` — **points to deleted `.codex-plugin/`**
+
+The whole file describes a "mempalace" plugin pointing at `./.codex-plugin/`. That directory was DELETED in PR #8 (Phase 5 of chroma removal). This file is dead code.
+
+Two acceptable resolutions:
+1. **Delete the file** if `.agents/` is unused / no one reads marketplace.json from here (verify by checking if anything reads `.agents/plugins/marketplace.json` — probably not).
+2. **Update it** to point at `./.claude-plugin/` if it's actively read by some agent runtime. Rename `"mempalace"` → `"castle"`, `"MemPalace"` → `"Cognitive Castle"`.
+
+Implementer should investigate briefly (`grep -rn "\.agents/plugins/marketplace" .`) and decide. **Default: delete** if no consumer is found.
+
+#### `integrations/openclaw/SKILL.md` — plugin metadata with stale name
+
+```yaml
+---
+name: mempalace
+description: "MemPalace — Local AI memory with ..."
+homepage: https://github.com/MemPalace/mempalace
+---
+```
+
+Should be:
+```yaml
+---
+name: castle
+description: "Cognitive Castle — Local AI memory with ..."
+homepage: https://github.com/Testimonial/cognitive-castle
+---
+```
+
+Plus any body content referencing `mempalace ...` commands.
 
 ### Brand updates — top-level repo docs
 
@@ -367,4 +440,10 @@ All other CHANGELOG entries (lines 4-end) preserved verbatim as historical recor
 11. `README.md` UNCHANGED. `docs/HISTORY.md` UNCHANGED. `docs/superpowers/` UNCHANGED.
 12. `git diff --name-only develop..HEAD | grep -E "^(cognitive_castle|tests)/"` returns empty (no production code touched).
 13. Focused suite: failed ≤ 65 (post-#C baseline).
-14. PR commit count ≤ 2.
+14. PR commit count ≤ 3 (allows surgical fixes if HOOKS_TUTORIAL.md rewrite or `.agents/plugins/marketplace.json` decision needs a separate commit).
+15. `examples/HOOKS_TUTORIAL.md` references the current hook script names (`castle-stop-hook.sh`, `castle-precompact-hook.sh`) OR has been simplified to point at the plugin install path.
+16. `examples/convo_import.py`, `examples/gemini_cli_setup.md` use `castle` commands.
+17. `benchmarks/mine_bench.py` imports `from cognitive_castle import miner` (not `mempalace`); fixture writes `castle.yaml` (not `mempalace.yaml`).
+18. `.agents/plugins/marketplace.json` is either deleted (preferred if dead code) or updated to point at `.claude-plugin/` with current brand naming.
+19. `integrations/openclaw/SKILL.md` frontmatter uses current name + homepage.
+20. `website/` directory is **NOT** modified by this PR (deferred to a separate PR — confirmed via `git diff --name-only develop..HEAD | grep ^website/` returning empty).
