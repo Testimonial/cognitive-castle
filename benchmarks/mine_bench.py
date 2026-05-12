@@ -57,7 +57,7 @@ def build_corpus(dest: Path, n_files: int, paragraphs_per_file: int, seed: int) 
             ]
             paragraphs.append(" ".join(words))
         (dest / f"doc_{i:03d}.md").write_text("\n\n".join(paragraphs))
-    (dest / "mempalace.yaml").write_text(
+    (dest / "castle.yaml").write_text(
         "wing: bench\n"
         "rooms:\n"
         "  - name: general\n"
@@ -72,7 +72,7 @@ def _process_file_unbatched(filepath, project_path, collection, wing, rooms, age
     Reproduces the exact loop shape the miner used before this PR so the
     comparison is apples-to-apples; only the upsert granularity differs.
     """
-    from mempalace import miner
+    from cognitive_castle import miner
     from cognitive_castle.palace import (
         build_closet_lines,
         file_already_mined,
@@ -139,7 +139,7 @@ def _process_file_unbatched(filepath, project_path, collection, wing, rooms, age
 
 def mine_once(project_dir: str, palace_path: str, batched: bool) -> tuple[int, float]:
     """Mine a project dir with either the batched (new) or per-chunk (old) path."""
-    from mempalace import miner
+    from cognitive_castle import miner
     from cognitive_castle.miner import load_config, scan_project
     from cognitive_castle.palace import get_closets_collection, get_collection
 

@@ -15,7 +15,7 @@ An agent searching "who built the auth?" hits the closet first (fast scan of sho
 
 ### When are closets created?
 
-Closets are created during `mempalace mine`. For each file mined:
+Closets are created during `castle mine`. For each file mined:
 1. Content is chunked into drawers (verbatim, ~800 chars each)
 2. Topics, entities, and quotes are extracted from the content
 3. A closet is created with pointer lines to those drawers
@@ -40,16 +40,16 @@ There are no stale topics: each re-mine is a clean rebuild for that source file.
 
 ### Do closets survive palace rebuilds?
 
-Closets are stored in the `mempalace_closets` ChromaDB collection alongside `mempalace_drawers`. If you delete and rebuild the palace, closets are recreated during the next `mempalace mine`.
+Closets are stored in the `castle_closets` LanceDB collection alongside `castle_drawers`. If you delete and rebuild the palace, closets are recreated during the next `castle mine`.
 
 ## How search uses closets
 
 ```
-Query → search mempalace_closets (fast, small documents)
+Query → search castle_closets (fast, small documents)
          ↓
     top closet hits → parse `→drawer_id_a,drawer_id_b` pointers
          ↓
-    fetch exactly those drawers from mempalace_drawers (verbatim content)
+    fetch exactly those drawers from castle_drawers (verbatim content)
          ↓
     apply max_distance filter
          ↓
@@ -60,13 +60,13 @@ Hits carry `matched_via: "closet"` (or `"drawer"` for the fallback path) plus a 
 
 If no closets exist (palace created before this feature) — or all closet hits get filtered out by `max_distance` — search falls back to direct drawer search. Closets are created on next mine.
 
-> **BM25 hybrid re-rank** is on the roadmap (deferred to a follow-up PR alongside generic `LLM_*` env-var support); the current closet search ranks purely by ChromaDB cosine distance against the closet text.
+> **BM25 hybrid re-rank** is on the roadmap (deferred to a follow-up PR alongside generic `LLM_*` env-var support); the current closet search ranks purely by LanceDB cosine distance against the closet text.
 
 ## Limits
 
 | Setting | Value | Reason |
 |---------|-------|--------|
-| Max closet size | 1,500 chars (`CLOSET_CHAR_LIMIT`) | Leaves buffer under ChromaDB's working limit |
+| Max closet size | 1,500 chars (`CLOSET_CHAR_LIMIT`) | Leaves buffer under LanceDB's working limit |
 | Source content scanned | 5,000 chars (`CLOSET_EXTRACT_WINDOW`) | Caps regex extraction cost on long files; back-of-file content is currently invisible to closet extraction (tracked for follow-up) |
 | Max topics per file | 12 | Keeps closets focused |
 | Max quotes per file | 3 | Most relevant only |
@@ -74,14 +74,14 @@ If no closets exist (palace created before this feature) — or all closet hits 
 
 ## For developers
 
-Closet functions live in `mempalace/palace.py`:
-- `get_closets_collection()` — get the closets ChromaDB collection
+Closet functions live in `cognitive-castle/palace.py`:
+- `get_closets_collection()` — get the closets LanceDB collection
 - `build_closet_lines()` — extract topics/entities/quotes into pointer lines
 - `upsert_closet_lines()` — write lines to closets respecting the char limit (overwrites existing IDs; does not append — call `purge_file_closets` first when re-mining)
 - `purge_file_closets()` — delete every closet for a given source file before rebuild
 - `CLOSET_CHAR_LIMIT` / `CLOSET_EXTRACT_WINDOW` — size constants
 
-The closet-first search path lives in `mempalace/searcher.py`:
+The closet-first search path lives in `cognitive-castle/searcher.py`:
 - `_extract_drawer_ids_from_closet()` — parse `→drawer_a,drawer_b` pointers out of a closet document
 - `_closet_first_hits()` — query closets, parse pointers, hydrate matching drawers, return chunk-level hits or `None` to fall back
 

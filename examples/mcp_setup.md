@@ -5,22 +5,22 @@
 Run the MCP server:
 
 ```bash
-mempalace-mcp
+castle-mcp
 ```
 
 Or add it to Claude Code:
 
 ```bash
-claude mcp add mempalace -- mempalace-mcp
+claude mcp add castle -- castle-mcp
 ```
 
 ## Available Tools
 
-The server exposes the full MemPalace MCP toolset. Common entry points include:
+The server exposes the full Cognitive Castle MCP toolset. Common entry points include:
 
-- **mempalace_status** — palace stats (wings, rooms, drawer counts)
-- **mempalace_search** — semantic search across all memories
-- **mempalace_list_wings** — list all projects in the palace
+- **castle_status** — palace stats (wings, rooms, drawer counts)
+- **castle_search** — semantic search across all memories
+- **castle_list_wings** — list all projects in the palace
 
 ## Usage in Claude Code
 

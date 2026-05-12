@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-MemPalace follows semantic versioning. Security fixes land on the current major version line.
+Cognitive Castle follows semantic versioning. Security fixes land on the current major version line.
 
 | Version            | Supported |
 | ------------------ | --------- |
@@ -13,9 +13,9 @@ MemPalace follows semantic versioning. Security fixes land on the current major 
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-We take the security of MemPalace seriously. If you believe you have found a security vulnerability, please report it privately using **GitHub Private Vulnerability Reporting**:
+We take the security of Cognitive Castle seriously. If you believe you have found a security vulnerability, please report it privately using **GitHub Private Vulnerability Reporting**:
 
-1. Open the [Security tab](https://github.com/MemPalace/mempalace/security) of this repository.
+1. Open the [Security tab](https://github.com/Testimonial/cognitive-castle/security) of this repository.
 2. Click **Advisories** → **Report a vulnerability**.
 3. Fill in the form with the details below.
 

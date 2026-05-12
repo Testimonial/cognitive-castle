@@ -8,9 +8,9 @@
 
 ## Summary
 
-A formal contract for MemPalace source adapters so third parties can ship `pip install mempalace-source-<name>` packages (Cursor, OpenCode, git, Slack, Notion, email, calendar, Whisper transcripts, …) that drop into `mempalace mine` without patching core. The spec defines the adapter interface, record shape, metadata schema contract, privacy class, entry-point registration, incremental-ingest semantics, closet integration, a declared-transformation model that replaces the informal "verbatim" promise with a verifiable one, conformance tests, and the refactor of the existing file and conversation miners into first-party adapters on the same contract.
+A formal contract for Cognitive Castle source adapters so third parties can ship `pip install cognitive-castle-source-<name>` packages (Cursor, OpenCode, git, Slack, Notion, email, calendar, Whisper transcripts, …) that drop into `castle mine` without patching core. The spec defines the adapter interface, record shape, metadata schema contract, privacy class, entry-point registration, incremental-ingest semantics, closet integration, a declared-transformation model that replaces the informal "verbatim" promise with a verifiable one, conformance tests, and the refactor of the existing file and conversation miners into first-party adapters on the same contract.
 
-RFC 001 formalized the write side (where drawers are stored). This RFC formalizes the read side (where content comes from). Both are required for MemPalace to function as a durable daemon managing heterogeneous palaces across many source types.
+RFC 001 formalized the write side (where drawers are stored). This RFC formalizes the read side (where content comes from). Both are required for Cognitive Castle to function as a durable daemon managing heterogeneous palaces across many source types.
 
 ## Motivation
 
@@ -28,9 +28,9 @@ Six source ingesters are currently in flight, each solving the same problem a di
 
 Plus three ingesters already grafted into core:
 
-- `mempalace/miner.py` — filesystem project miner, fixed char-window chunking, keyword hall routing
-- `mempalace/convo_miner.py` — chat transcript miner with exchange-pair chunking
-- `mempalace/normalize.py` — format detection for four chat-export shapes (Claude Code JSONL, Codex JSONL, Claude.ai / ChatGPT / Slack JSON)
+- `cognitive-castle/miner.py` — filesystem project miner, fixed char-window chunking, keyword hall routing
+- `cognitive-castle/convo_miner.py` — chat transcript miner with exchange-pair chunking
+- `cognitive-castle/normalize.py` — format detection for four chat-export shapes (Claude Code JSONL, Codex JSONL, Claude.ai / ChatGPT / Slack JSON)
 
 Plus one open proposal for a different ingest semantic:
 
@@ -54,8 +54,8 @@ Enterprises key on their own domain metadata — `repo/PR/SHA` for engineering, 
 
 ## Goals
 
-1. A source adapter ships as a standalone Python package; `pip install mempalace-source-<name>` is sufficient to use it.
-2. `mempalace mine` and the MCP mine tool are source-agnostic — all extraction goes through registered adapters. No `if source_type == 'foo'` branches in core.
+1. A source adapter ships as a standalone Python package; `pip install cognitive-castle-source-<name>` is sufficient to use it.
+2. `castle mine` and the MCP mine tool are source-agnostic — all extraction goes through registered adapters. No `if source_type == 'foo'` branches in core.
 3. Content transformations are **declared** (§1.4): each adapter advertises the set of transformations it applies to source bytes. Byte-preserving adapters declare the empty set. Consumers can programmatically determine what happened to their data.
 4. Incremental ingest is cheap and correct: re-running mine only touches items whose source-side version changed, using the palace itself as the cursor (no sidecar).
 5. Each adapter declares a structured metadata schema. Enterprises index and filter on that schema. Core is schema-agnostic beyond the universal fields in §5.1.
@@ -128,7 +128,7 @@ def is_current(
     return False
 
 def source_summary(self, *, source: SourceRef) -> SourceSummary:
-    """Describe a source without extracting (e.g., 'git repo mempalace,
+    """Describe a source without extracting (e.g., 'git repo cognitive-castle,
     847 commits, 132 PRs'). Default: returns empty summary."""
     return SourceSummary(description=self.name)
 
@@ -339,18 +339,18 @@ See `SourceRef` in §1.3. The shape is deliberately open — adapters parse `uri
 
 ### 2.4 Concurrency
 
-An adapter instance is long-lived and serves many mine operations. Adapters MUST be thread-safe for concurrent `ingest` calls across different `SourceRef` values. MemPalace core serializes calls within a single `SourceRef` unless an adapter advertises `supports_parallel_ingest` (not in v1 — reserved for v1.1).
+An adapter instance is long-lived and serves many mine operations. Adapters MUST be thread-safe for concurrent `ingest` calls across different `SourceRef` values. Cognitive Castle core serializes calls within a single `SourceRef` unless an adapter advertises `supports_parallel_ingest` (not in v1 — reserved for v1.1).
 
 ### 2.5 Routing
 
-Routing is the adapter's responsibility. The filesystem adapter reads `mempalace.yaml` (hall keywords, rooms list) via `MempalaceConfig()` and returns `RouteHint(wing=..., room=..., hall=...)` on each drawer. This relocates `detect_room()` and `detect_hall()` (currently in `miner.py` and `convo_miner.py`) into their respective adapters.
+Routing is the adapter's responsibility. The filesystem adapter reads `castle.yaml` (hall keywords, rooms list) via `CognitiveCastleConfig()` and returns `RouteHint(wing=..., room=..., hall=...)` on each drawer. This relocates `detect_room()` and `detect_hall()` (currently in `miner.py` and `convo_miner.py`) into their respective adapters.
 
 Order of precedence for routing:
 1. Explicit `--wing` / `--room` CLI flags → passed through `SourceRef.options` → adapter honors verbatim.
-2. Palace config match (`mempalace.yaml` hall keywords, room keywords) → adapter computes.
+2. Palace config match (`castle.yaml` hall keywords, room keywords) → adapter computes.
 3. Adapter-internal fallback (e.g., filesystem adapter falls back to `"general"` room).
 
-Adapters advertising `adapter_owns_routing` return the final answer; core uses it verbatim. Adapters not advertising it return None and core applies a generic fallback router (writing to wing `default`, room `general`, hall `general`). Absent any adapter, this is how `mempalace mine` behaves today.
+Adapters advertising `adapter_owns_routing` return the final answer; core uses it verbatim. Adapters not advertising it return None and core applies a generic fallback router (writing to wing `default`, room `general`, hall `general`). Absent any adapter, this is how `castle mine` behaves today.
 
 ### 2.6 Incremental ingest
 
@@ -378,17 +378,17 @@ Adapters advertising `adapter_owns_routing` return the final answer; core uses i
 Third-party adapters ship as installable packages:
 
 ```toml
-# pyproject.toml of mempalace-source-cursor
-[project.entry-points."mempalace.sources"]
-cursor = "mempalace_source_cursor:CursorAdapter"
+# pyproject.toml of cognitive-castle-source-cursor
+[project.entry-points."cognitive_castle.sources"]
+cursor = "cognitive_castle_source_cursor:CursorAdapter"
 ```
 
-MemPalace discovers adapters at process start via `importlib.metadata.entry_points(group="mempalace.sources")`.
+Cognitive Castle discovers adapters at process start via `importlib.metadata.entry_points(group="cognitive_castle.sources")`.
 
 ### 3.2 In-tree registry (secondary)
 
 ```python
-from mempalace.sources.registry import register
+from cognitive_castle.sources.registry import register
 
 register("my-experimental-adapter", MyAdapter)
 ```
@@ -400,13 +400,13 @@ Entry-point discovery and explicit `register()` populate the same registry. Expl
 Unlike storage backends (RFC 001 §3.3), source adapters are never auto-detected. The user selects the adapter explicitly:
 
 ```bash
-mempalace mine --source cursor ~/                      # explicit adapter
-mempalace mine --source git /path/to/repo              # explicit adapter
-mempalace mine --source filesystem /path/to/project    # explicit adapter
-mempalace mine /path/to/project                        # implicit: filesystem (default)
+castle mine --source cursor ~/                      # explicit adapter
+castle mine --source git /path/to/repo              # explicit adapter
+castle mine --source filesystem /path/to/project    # explicit adapter
+castle mine /path/to/project                        # implicit: filesystem (default)
 ```
 
-The default when no `--source` is given is `filesystem`, preserving current `mempalace mine <path>` behavior.
+The default when no `--source` is given is `filesystem`, preserving current `castle mine <path>` behavior.
 
 **Backwards compatibility with `--mode`.** Current `cli.py:517-519` exposes `--mode {projects,convos}`. This spec maps:
 - `--mode projects` → `--source filesystem` (the new default)
@@ -431,7 +431,7 @@ Auto-detection would be hostile — a directory containing a `.git` folder, a `w
     },
     "my-git": {
       "type": "git",
-      "repos": ["/projects/mempalace", "/projects/site"]
+      "repos": ["/projects/cognitive-castle", "/projects/site"]
     }
   },
   "palaces": {
@@ -446,7 +446,7 @@ Auto-detection would be hostile — a directory containing a `.git` folder, a `w
 }
 ```
 
-Single-user local mode: config is optional. `mempalace mine <path>` with no config uses the `filesystem` adapter and defaults.
+Single-user local mode: config is optional. `castle mine <path>` with no config uses the `filesystem` adapter and defaults.
 
 ### 4.2 Environment variables
 
@@ -541,18 +541,18 @@ This is how "structured data" serves company use cases without breaking transfor
 Adapters with `supports_entity_hints` MAY include:
 
 ```python
-metadata["entity_hints_json"] = '[{"type":"person","name":"Milla Jovovich","confidence":0.95,"offset":120},{"type":"project","name":"MemPalace","confidence":1.0,"offset":0}]'
+metadata["entity_hints_json"] = '[{"type":"person","name":"Milla Jovovich","confidence":0.95,"offset":120},{"type":"project","name":"Cognitive Castle","confidence":1.0,"offset":0}]'
 ```
 
-The value is a JSON-encoded string (type `json_string` in the adapter schema). Core parses on read and feeds into `mempalace/entity_detector.py` as a prior: hints with `confidence >= 0.9` bypass the heuristic detector; lower-confidence hints feed into it as candidates.
+The value is a JSON-encoded string (type `json_string` in the adapter schema). Core parses on read and feeds into `cognitive-castle/entity_detector.py` as a prior: hints with `confidence >= 0.9` bypass the heuristic detector; lower-confidence hints feed into it as candidates.
 
 This is additive to the existing flat `entities` field — entity_hints carries structure (type, confidence, offset); `entities` remains the Chroma-indexable flat string. An adapter that produces entity_hints MUST also populate `entities` as the flat name-only projection, so existing filter queries keep working.
 
 ### 5.5 Knowledge-graph triples (optional)
 
-Adapters with `supports_kg_triples` write directly to the SQLite knowledge graph via `mempalace/knowledge_graph.py` — **not** to drawer metadata. Chroma cannot store structured triples; the KG already exists for this purpose.
+Adapters with `supports_kg_triples` write directly to the SQLite knowledge graph via `cognitive-castle/knowledge_graph.py` — **not** to drawer metadata. Chroma cannot store structured triples; the KG already exists for this purpose.
 
-The adapter calls the existing `KnowledgeGraph.add_triple()` (signature verified against `mempalace/knowledge_graph.py:130`):
+The adapter calls the existing `KnowledgeGraph.add_triple()` (signature verified against `cognitive-castle/knowledge_graph.py:130`):
 
 ```python
 palace.kg.add_triple(
@@ -596,12 +596,12 @@ An adapter declares a default on `BaseSourceAdapter.default_privacy_class`. User
 ### 6.2 Enforcement
 
 - Each palace declares a `privacy_floor`. Drawers above the floor (equal to or laxer) are admitted; drawers below are rejected at write time and surfaced in a `rejected` list on the CLI and MCP tool.
-- **Default floor: none** — v1 accepts all levels unless the palace explicitly configures a floor. This keeps the single-user local default low-friction (users who run `mempalace mine` on a git repo expect `secrets_possible` drawers to land). Enterprise deployments MUST set a floor; docs for regulated-domain setup will recommend starting strict and relaxing as needed.
+- **Default floor: none** — v1 accepts all levels unless the palace explicitly configures a floor. This keeps the single-user local default low-friction (users who run `castle mine` on a git repo expect `secrets_possible` drawers to land). Enterprise deployments MUST set a floor; docs for regulated-domain setup will recommend starting strict and relaxing as needed.
 - Search results surface `privacy_class` in result metadata. MCP tool wrappers MAY redact results above a caller-declared ceiling.
 - `secrets_possible` drawers SHOULD pass through a secrets-scan pre-index hook when one is available. PR #389 (sensitive content scanner) is the expected enforcement mechanism for v1; until it lands, `secrets_possible` is a label without automated scanning. The label is still useful — it enables floor-based rejection and alerts downstream consumers.
 - The privacy class is recorded in drawer metadata and cannot be downgraded without a migration log entry, matching RFC 001's embedder-identity pattern.
 
-Privacy class is how a regulated-domain deployment (medical, legal, financial) can use MemPalace safely. Without it, flexible ingest becomes a liability; with it, ingest is scoped by policy.
+Privacy class is how a regulated-domain deployment (medical, legal, financial) can use Cognitive Castle safely. Without it, flexible ingest becomes a liability; with it, ingest is scoped by policy.
 
 ---
 
@@ -609,10 +609,10 @@ Privacy class is how a regulated-domain deployment (medical, legal, financial) c
 
 ### 7.1 The abstract suite
 
-MemPalace ships `mempalace.sources.testing.AbstractSourceAdapterContractSuite` — a pytest mixin. Every adapter package ships a concrete subclass:
+Cognitive Castle ships `cognitive_castle.sources.testing.AbstractSourceAdapterContractSuite` — a pytest mixin. Every adapter package ships a concrete subclass:
 
 ```python
-from mempalace.sources.testing import AbstractSourceAdapterContractSuite
+from cognitive_castle.sources.testing import AbstractSourceAdapterContractSuite
 
 class TestCursorAdapter(AbstractSourceAdapterContractSuite):
     @pytest.fixture
@@ -679,14 +679,14 @@ def test_declared_transformation_round_trip(self, adapter, fixture_source, canon
     1. For each source_file, read canonical_source_bytes.
     2. Apply each declared transformation in declared_transformations to the bytes,
        in the order declared by the adapter, using the reference implementations
-       in mempalace.sources.transforms.
+       in cognitive_castle.sources.transforms.
     3. Compare the result to the concatenated record.content values.
     4. If they differ, the adapter has applied a transformation it did not declare.
        Raise TransformationViolationError.
     """
 ```
 
-For transformations not in the reserved list (§1.4) — adapter-custom names — the adapter MUST provide a reference implementation callable under `mempalace.sources.transforms.<adapter_name>_<transform_name>`. The conformance suite imports and applies it. Undiscoverable custom transforms fail the test.
+For transformations not in the reserved list (§1.4) — adapter-custom names — the adapter MUST provide a reference implementation callable under `cognitive_castle.sources.transforms.<adapter_name>_<transform_name>`. The conformance suite imports and applies it. Undiscoverable custom transforms fail the test.
 
 ### 7.4 Schema conformance
 
@@ -701,7 +701,7 @@ No existing test in `tests/` asserts byte-preservation or declared-transformatio
 ## 8. Versioning and compatibility
 
 - `BaseSourceAdapter.spec_version` declares which spec version an adapter implements.
-- MemPalace refuses to load an adapter declaring a different major spec version.
+- Cognitive Castle refuses to load an adapter declaring a different major spec version.
 - Minor spec versions are additive: new optional methods, new capability tokens, new reserved transformation names, new universal metadata fields with sensible defaults.
 - Adapters MAY declare their own `adapter_version` independent of the spec version; this is recorded on every drawer (§5.1) and enables "this drawer was extracted by cursor-adapter 0.3; 0.4 fixed a parsing bug; re-extract affected drawers" workflows.
 - This is spec v1.0.
@@ -712,14 +712,14 @@ No existing test in `tests/` asserts byte-preservation or declared-transformatio
 
 The existing in-tree ingesters are not adapter-shaped. Before RFC 002 can be enforced, the following refactor lands in a separate PR:
 
-- Introduce `mempalace/sources/base.py` defining `BaseSourceAdapter`, the typed records, and the registry.
-- Introduce `mempalace/sources/transforms.py` with reference implementations of every reserved transformation in §1.4. Adapters and the conformance suite both consume these.
-- `mempalace/miner.py` → `mempalace/sources/filesystem.py` implementing `BaseSourceAdapter`. Current behavior preserved: 800-char chunking becomes the adapter's default; `READABLE_EXTENSIONS` moves to the adapter; `detect_room()` and `detect_hall()` move to the adapter per §2.5. `declared_transformations = frozenset({"utf8_replace_invalid", "whitespace_trim"})`.
-- `mempalace/convo_miner.py` → `mempalace/sources/conversations.py`. Exchange-pair chunking stays. The format-detection logic in `normalize.py` becomes per-format plugins the conversations adapter composes (one for Claude Code JSONL, one for Codex JSONL, one for ChatGPT mapping trees, one for Claude.ai JSON, one for Slack JSON) — each small and independently testable, eliminating the `if source_type` chain. `declared_transformations` enumerates every transformation `normalize.py` and `convo_miner._chunk_by_exchange` actually perform (see §1.4 "Existing code mapping").
+- Introduce `cognitive-castle/sources/base.py` defining `BaseSourceAdapter`, the typed records, and the registry.
+- Introduce `cognitive-castle/sources/transforms.py` with reference implementations of every reserved transformation in §1.4. Adapters and the conformance suite both consume these.
+- `cognitive-castle/miner.py` → `cognitive-castle/sources/filesystem.py` implementing `BaseSourceAdapter`. Current behavior preserved: 800-char chunking becomes the adapter's default; `READABLE_EXTENSIONS` moves to the adapter; `detect_room()` and `detect_hall()` move to the adapter per §2.5. `declared_transformations = frozenset({"utf8_replace_invalid", "whitespace_trim"})`.
+- `cognitive-castle/convo_miner.py` → `cognitive-castle/sources/conversations.py`. Exchange-pair chunking stays. The format-detection logic in `normalize.py` becomes per-format plugins the conversations adapter composes (one for Claude Code JSONL, one for Codex JSONL, one for ChatGPT mapping trees, one for Claude.ai JSON, one for Slack JSON) — each small and independently testable, eliminating the `if source_type` chain. `declared_transformations` enumerates every transformation `normalize.py` and `convo_miner._chunk_by_exchange` actually perform (see §1.4 "Existing code mapping").
 - Closet-building wired into the conversations adapter's post-step (currently missing, per §1.7) — side effect of routing through the unified core post-step.
-- `mempalace/cli.py` subcommand `mine` routes through the `mempalace.sources` registry. `--mode {projects,convos}` becomes a deprecated alias for `--source {filesystem,conversations}`.
-- `mempalace/mcp_server.py` `mempalace_mine` tool accepts a `source` parameter.
-- `mempalace/palace.py` exposes `PalaceContext` — a per-mine-invocation facade that bundles the drawer collection, closet collection, knowledge graph, palace config, and progress hooks. Adapters receive this; they do not import `palace.py` directly.
+- `cognitive-castle/cli.py` subcommand `mine` routes through the `cognitive_castle.sources` registry. `--mode {projects,convos}` becomes a deprecated alias for `--source {filesystem,conversations}`.
+- `cognitive-castle/mcp_server.py` `castle_mine` tool accepts a `source` parameter.
+- `cognitive-castle/palace.py` exposes `PalaceContext` — a per-mine-invocation facade that bundles the drawer collection, closet collection, knowledge graph, palace config, and progress hooks. Adapters receive this; they do not import `palace.py` directly.
 - `NORMALIZE_VERSION` (currently a module-level constant in `palace.py:50`) stays. It is the palace-wide schema version, orthogonal to per-adapter `adapter_version`.
 - `KnowledgeGraph.add_triple()` (`knowledge_graph.py:130`) gains two optional parameters: `source_drawer_id: str = None` and `adapter_name: str = None`. Existing callers are unaffected; adapters advertising `supports_kg_triples` (§5.5) populate both. Backwards-compatible change.
 
@@ -731,15 +731,15 @@ This cleanup is substantial — comparable to RFC 001 §10's chroma-import remov
 
 | PR / Issue | Effort to align |
 |---|---|
-| [#274](https://github.com/MemPalace/mempalace/issues/274) Cursor SQLite | Becomes `mempalace-source-cursor` third-party package. Author has a working prototype on Windows; needs `describe_schema()`, `declared_transformations`, and the conformance suite. Prior #287 (closed unmerged) is predecessor work. |
-| [#23](https://github.com/MemPalace/mempalace/pull/23) OpenCode SQLite | Becomes `mempalace-source-opencode`. Same shape as Cursor. |
-| [#169](https://github.com/MemPalace/mempalace/pull/169) Pi agent | Becomes `mempalace-source-pi` or a format plugin under the conversations adapter (depending on format similarity). |
-| [#232](https://github.com/MemPalace/mempalace/pull/232) Cursor JSONL | Deprecated in favor of #274's SQLite path; or a second mode of `mempalace-source-cursor`. |
-| [#567](https://github.com/MemPalace/mempalace/pull/567), [#98](https://github.com/MemPalace/mempalace/pull/98) git-mine | Closest existing work to what the spec envisions. Becomes first-party `mempalace/sources/git.py`. Exercises `whole_record` mode, `supports_structured_metadata`, `supports_closet_hints` (decision-signal quotes), `supports_kg_triples` (commit authorship, PR review relationships). |
+| [#274](https://github.com/MemPalace/mempalace/issues/274) Cursor SQLite | Becomes `cognitive-castle-source-cursor` third-party package. Author has a working prototype on Windows; needs `describe_schema()`, `declared_transformations`, and the conformance suite. Prior #287 (closed unmerged) is predecessor work. |
+| [#23](https://github.com/MemPalace/mempalace/pull/23) OpenCode SQLite | Becomes `cognitive-castle-source-opencode`. Same shape as Cursor. |
+| [#169](https://github.com/MemPalace/mempalace/pull/169) Pi agent | Becomes `cognitive-castle-source-pi` or a format plugin under the conversations adapter (depending on format similarity). |
+| [#232](https://github.com/MemPalace/mempalace/pull/232) Cursor JSONL | Deprecated in favor of #274's SQLite path; or a second mode of `cognitive-castle-source-cursor`. |
+| [#567](https://github.com/MemPalace/mempalace/pull/567), [#98](https://github.com/MemPalace/mempalace/pull/98) git-mine | Closest existing work to what the spec envisions. Becomes first-party `cognitive-castle/sources/git.py`. Exercises `whole_record` mode, `supports_structured_metadata`, `supports_closet_hints` (decision-signal quotes), `supports_kg_triples` (commit authorship, PR review relationships). |
 | [#591](https://github.com/MemPalace/mempalace/pull/591), [#592](https://github.com/MemPalace/mempalace/pull/592) Delphi Oracle | Deferred. The live-stream pattern is out of scope for v1 (§Non-goals). A v1.1 addition will specify webhook/stream adapters. |
 | [#702](https://github.com/MemPalace/mempalace/pull/702) Cursor + factory.ai | Splits into two adapter packages. |
 | [#981](https://github.com/MemPalace/mempalace/issues/981) path-level descriptions | Absorbed by §1.5 `metadata_only` mode + §5.1 `ingest_mode`. A new first-party `descriptions` adapter or a second mode on `filesystem`. |
-| [#244](https://github.com/MemPalace/mempalace/pull/244) Cursor memory-first MCP workflow docs | Points at `mempalace-source-cursor` once the adapter lands. |
+| [#244](https://github.com/MemPalace/mempalace/pull/244) Cursor memory-first MCP workflow docs | Points at `cognitive-castle-source-cursor` once the adapter lands. |
 | [#419](https://github.com/MemPalace/mempalace/pull/419), [#300](https://github.com/MemPalace/mempalace/pull/300), [#952](https://github.com/MemPalace/mempalace/pull/952) language-extension additions to `READABLE_EXTENSIONS` | Becomes per-language config on the filesystem adapter. Contributors can publish domain-specific adapters without touching core. |
 | [#389](https://github.com/MemPalace/mempalace/pull/389) sensitive content scanner | Expected enforcement mechanism for the `secrets_possible` privacy class (§6.2). Not a blocker for this spec, but a natural consumer. |
 | [#434](https://github.com/MemPalace/mempalace/pull/434) auto-populate KG from drawers | Complementary: post-hoc derivation of KG triples from drawer content. Adapters with `supports_kg_triples` provide the up-front path; #434 handles everything else. |
@@ -760,9 +760,9 @@ This cleanup is substantial — comparable to RFC 001 §10's chroma-import remov
 
 ## 12. Rollout
 
-1. Land the cleanup PR (§9): introduce `mempalace/sources/`, refactor `miner.py` → filesystem adapter, `convo_miner.py` → conversations adapter, route CLI and MCP through the sources registry. Behavior preserved end-to-end. Closets get built for conversation drawers as a side effect.
-2. Land this spec as-is. Add `AbstractSourceAdapterContractSuite`, entry-point discovery, `AdapterSchema` validation, privacy-class enforcement (floor-gated writes), declared-transformation reference implementations in `mempalace/sources/transforms.py`.
-3. Land `mempalace/sources/git.py` as the first-party adapter absorbing #567. Exercises `whole_record`, `supports_structured_metadata`, `supports_closet_hints`, `supports_kg_triples` together.
-4. Encourage the Cursor (#274), OpenCode (#23), and Pi (#169) authors to publish as third-party packages under `mempalace-source-*`. Offer review help against the spec.
-5. Publish adapter-authoring docs at [mempalaceofficial.com/guide/authoring-sources](https://mempalaceofficial.com/guide/authoring-sources.html).
+1. Land the cleanup PR (§9): introduce `cognitive-castle/sources/`, refactor `miner.py` → filesystem adapter, `convo_miner.py` → conversations adapter, route CLI and MCP through the sources registry. Behavior preserved end-to-end. Closets get built for conversation drawers as a side effect.
+2. Land this spec as-is. Add `AbstractSourceAdapterContractSuite`, entry-point discovery, `AdapterSchema` validation, privacy-class enforcement (floor-gated writes), declared-transformation reference implementations in `cognitive-castle/sources/transforms.py`.
+3. Land `cognitive-castle/sources/git.py` as the first-party adapter absorbing #567. Exercises `whole_record`, `supports_structured_metadata`, `supports_closet_hints`, `supports_kg_triples` together.
+4. Encourage the Cursor (#274), OpenCode (#23), and Pi (#169) authors to publish as third-party packages under `cognitive-castle-source-*`. Offer review help against the spec.
+5. Publish adapter-authoring docs at [cognitive-castle.com/guide/authoring-sources](https://cognitive-castle.com/guide/authoring-sources.html).
 6. Update [ROADMAP.md](../../ROADMAP.md) with spec v1.0 adoption under v4.0.0-alpha.

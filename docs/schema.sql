@@ -1,5 +1,5 @@
--- MemPalace Knowledge Graph Schema
--- SQLite database at ~/.mempalace/knowledge_graph.db
+-- Cognitive Castle Knowledge Graph Schema
+-- SQLite database at ~/.castle/knowledge_graph.db (legacy fallback: ~/.mempalace/knowledge_graph.db)
 
 CREATE TABLE IF NOT EXISTS entities (
     id TEXT PRIMARY KEY,

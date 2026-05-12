@@ -1,4 +1,4 @@
-# MemPalace Roadmap
+# Cognitive Castle Roadmap
 
 ## v3.1.1 — Stability Patch (this week)
 
@@ -10,7 +10,7 @@ Bug fixes and hardening merged to `develop`, releasing soon.
 - Backend storage seam: ChromaDB abstraction layer enabling swappable backends (#413)
 - MCP ping health check for AnythingLLM compatibility (#600)
 - Windows reparse point crash fix (#558)
-- `mempalace compress` KeyError crash fix (#569)
+- `castle compress` KeyError crash fix (#569)
 - Token count estimate fix (#609)
 - Mtime float precision fix preventing unnecessary re-mines (#610)
 
@@ -32,7 +32,7 @@ ChromaDB remains the default, but v4 introduces a backend abstraction (shipped i
 
 - **PostgreSQL backend** with pg_sorted_heap support (#665) — for production deployments needing ACID guarantees, concurrent access, and standard backup/restore
 - **LanceDB backend** (#574) — for local-first deployments wanting multi-device sync without a database server
-- **PalaceStore** (#643) — bespoke storage layer purpose-built for MemPalace's access patterns (draft, evaluating)
+- **PalaceStore** (#643) — bespoke storage layer purpose-built for Cognitive Castle's access patterns (draft, evaluating)
 
 Users choose their backend at init time. Existing ChromaDB palaces continue to work unchanged.
 
