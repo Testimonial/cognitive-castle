@@ -34,11 +34,62 @@ def test_embedding_respects_config_override():
 
 def _make_default_cfg():
     """Return an instance of the project's config class with all defaults."""
-    # The actual config class name may be CognitiveCastleConfig (legacy) or CognitiveCastleConfig.
-    # Try CognitiveCastleConfig first, fall back to CognitiveCastleConfig.
+    from cognitive_castle.config import CognitiveCastleConfig
+    return CognitiveCastleConfig()
+
+
+def test_is_cuda_oom_detects_oom_by_message():
+    """CUDA OOM should be detected via exception message even without torch."""
+    from cognitive_castle.embedding import _is_cuda_oom
+    assert _is_cuda_oom(RuntimeError("CUDA error: out of memory"))
+    assert _is_cuda_oom(Exception("cudaErrorMemoryAllocation occurred"))
+
+
+def test_is_cuda_oom_returns_false_for_other_errors():
+    """Non-OOM exceptions should not trigger the CPU fallback path."""
+    from cognitive_castle.embedding import _is_cuda_oom
+    assert not _is_cuda_oom(RuntimeError("some other error"))
+    assert not _is_cuda_oom(ValueError("bad input"))
+
+
+def test_get_model_falls_back_to_cpu_on_cuda_oom(monkeypatch):
+    """When the GPU embedder can't load (OOM), gracefully use the CPU embedder."""
+    from unittest.mock import MagicMock
+
+    fake_cpu_model = MagicMock()
+    calls = []
+
+    class FakeST:
+        def __new__(cls, name, device):
+            calls.append((name, device))
+            if device == "cuda":
+                raise RuntimeError("CUDA error: out of memory")
+            return fake_cpu_model
+
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", FakeST)
+    monkeypatch.setattr(embedding, "_resolve_device", lambda d: "cuda")
+
+    result = embedding._get_model(device="auto", cfg=_make_default_cfg())
+
+    assert result is fake_cpu_model
+    assert calls == [
+        ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "cuda"),
+        ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "cpu"),
+    ]
+
+
+def test_get_model_does_not_fall_back_on_non_oom_cuda_error(monkeypatch):
+    """A non-OOM exception on cuda should propagate, not silently switch to cpu."""
+
+    class FakeST:
+        def __new__(cls, name, device):
+            raise RuntimeError("unrelated error")
+
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", FakeST)
+    monkeypatch.setattr(embedding, "_resolve_device", lambda d: "cuda")
+
     try:
-        from cognitive_castle.config import CognitiveCastleConfig
-        return CognitiveCastleConfig()
-    except ImportError:
-        from cognitive_castle.config import CognitiveCastleConfig
-        return CognitiveCastleConfig()
+        embedding._get_model(device="auto", cfg=_make_default_cfg())
+        raise AssertionError("expected RuntimeError")
+    except RuntimeError as e:
+        assert "unrelated error" in str(e)
