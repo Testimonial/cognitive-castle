@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "=== MemPalace Dev Container Setup ==="
+echo "=== Cognitive Castle Dev Container Setup ==="
 
 pip install -e ".[dev]"
 

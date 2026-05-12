@@ -1,14 +1,14 @@
-# Contributing to MemPalace
+# Contributing to Cognitive Castle
 
-Thanks for wanting to help. MemPalace is open source and we welcome contributions of all sizes — from typo fixes to new features.
+Thanks for wanting to help. Cognitive Castle is open source and we welcome contributions of all sizes — from typo fixes to new features.
 
 ## Getting Started
 
 ```bash
 # Fork the repo on GitHub first, then clone your fork
-git clone https://github.com/<your-username>/mempalace.git
-cd mempalace
-git remote add upstream https://github.com/MemPalace/mempalace.git
+git clone https://github.com/<your-username>/cognitive-castle.git
+cd cognitive-castle
+git remote add upstream https://github.com/Testimonial/cognitive-castle.git
 
 pip install -e ".[dev]"    # installs with dev dependencies (pytest, build, twine)
 ```
@@ -36,7 +36,7 @@ See [benchmarks/README.md](benchmarks/README.md) for data download instructions 
 ## Project Structure
 
 ```
-mempalace/          ← core package (see mempalace/README.md for module guide)
+cognitive-castle/          ← core package (see cognitive-castle/README.md for module guide)
 benchmarks/         ← reproducible benchmark runners
 hooks/              ← Claude Code auto-save hooks
 examples/           ← usage examples
@@ -67,7 +67,7 @@ assets/             ← logo + brand
 
 ## Good First Issues
 
-Check the [Issues](https://github.com/MemPalace/mempalace/issues) tab. Great starting points:
+Check the [Issues](https://github.com/Testimonial/cognitive-castle/issues) tab. Great starting points:
 
 - **New chat formats**: Add import support for Cursor, Copilot, or other AI tool exports
 - **Room detection**: Improve pattern matching in `room_detector_local.py`

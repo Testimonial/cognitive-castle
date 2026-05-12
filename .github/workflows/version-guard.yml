@@ -6,7 +6,7 @@ on:
   pull_request:
     paths:
       - 'pyproject.toml'
-      - 'mempalace/version.py'
+      - 'cognitive_castle/version.py'
       - '.claude-plugin/marketplace.json'
       - '.claude-plugin/plugin.json'
       - '.codex-plugin/plugin.json'
@@ -22,7 +22,7 @@ jobs:
         id: versions
         run: |
           set -euo pipefail
-          py_version=$(grep -E '^__version__' mempalace/version.py | cut -d'"' -f2)
+          py_version=$(grep -E '^__version__' cognitive_castle/version.py | cut -d'"' -f2)
           pyproject_version=$(grep -E '^version' pyproject.toml | head -1 | cut -d'"' -f2)
           marketplace_version=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
           plugin_version=$(jq -r '.version' .claude-plugin/plugin.json)
@@ -39,7 +39,7 @@ jobs:
             echo ""
             echo "| Source | Version |"
             echo "| --- | --- |"
-            echo "| mempalace/version.py | \`$py_version\` |"
+            echo "| cognitive_castle/version.py | \`$py_version\` |"
             echo "| pyproject.toml | \`$pyproject_version\` |"
             echo "| .claude-plugin/marketplace.json | \`$marketplace_version\` |"
             echo "| .claude-plugin/plugin.json | \`$plugin_version\` |"
@@ -94,7 +94,7 @@ jobs:
 
           if [[ "$tag_version" != "$PY" ]]; then
             echo "::error::tag $GITHUB_REF_NAME does not match manifest version $PY"
-            echo "Bump mempalace/version.py, pyproject.toml, and all plugin manifests before tagging a stable release."
+            echo "Bump cognitive_castle/version.py, pyproject.toml, and all plugin manifests before tagging a stable release."
             echo "For an internal/staging tag, use a semver pre-release suffix (e.g. v${PY}-rc1)."
             exit 1
           fi
