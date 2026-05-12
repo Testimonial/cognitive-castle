@@ -30,7 +30,7 @@
     "init_exists": "Já existe um palácio em {path}",
     "repair_complete": "Reparo completo. {fixed} problemas corrigidos.",
     "migrate_complete": "Migração completa.",
-    "no_palace": "Nenhum palácio encontrado. Execute: mempalace init <diretório>"
+    "no_palace": "Nenhum palácio encontrado. Execute: castle init <diretório>"
   },
   "aaak": {
     "instruction": "Comprima em português. Hifens entre palavras, pipes entre conceitos. Remova artigos e palavras de preenchimento. Mantenha nomes próprios e números exatos."

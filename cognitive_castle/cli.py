@@ -43,7 +43,7 @@ from .version import __version__
 MempalaceConfig = CognitiveCastleConfig
 
 
-_MEMPALACE_PROJECT_FILES = ("castle.yaml", "entities.json")
+_CASTLE_PROJECT_FILES = ("castle.yaml", "entities.json")
 
 # Pass 0 corpus-origin sampling caps. Tier 1 reads FULL file content (no
 # front-bias sampling) but bounds total memory on enormous corpora. Tier 2
@@ -79,7 +79,7 @@ def _gather_origin_samples(project_dir) -> list:
     samples: list = []
     total_chars = 0
     for filepath in files:
-        if filepath.name in _MEMPALACE_PROJECT_FILES:
+        if filepath.name in _CASTLE_PROJECT_FILES:
             continue
         if total_chars >= _PASS_ZERO_TOTAL_CAP:
             break
@@ -218,7 +218,7 @@ def _ensure_castle_files_gitignored(project_dir) -> bool:
     gitignore = project_path / ".gitignore"
     existing = gitignore.read_text() if gitignore.exists() else ""
     existing_lines = {line.strip() for line in existing.splitlines()}
-    missing = [p for p in _MEMPALACE_PROJECT_FILES if p not in existing_lines]
+    missing = [p for p in _CASTLE_PROJECT_FILES if p not in existing_lines]
     if not missing:
         return False
     prefix = "" if not existing or existing.endswith("\n") else "\n"

@@ -30,7 +30,7 @@
     "init_exists": "{path}에 궁전이 이미 존재합니다",
     "repair_complete": "수리 완료. {fixed}개 문제 해결.",
     "migrate_complete": "마이그레이션 완료.",
-    "no_palace": "궁전을 찾을 수 없습니다. 실행: mempalace init <폴더>"
+    "no_palace": "궁전을 찾을 수 없습니다. 실행: castle init <폴더>"
   },
   "aaak": {
     "instruction": "한국어로 압축하세요. 개념 사이에 파이프(|), 단어 연결에 하이픈(-). 조사와 접속사는 생략. 고유명사와 숫자는 정확히 유지."

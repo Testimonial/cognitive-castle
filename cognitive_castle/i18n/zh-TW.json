@@ -30,7 +30,7 @@
     "init_exists": "{path} 中已存在宮殿",
     "repair_complete": "修復完成。已修正 {fixed} 個問題。",
     "migrate_complete": "遷移完成。",
-    "no_palace": "未找到宮殿。請執行: mempalace init <目錄>"
+    "no_palace": "未找到宮殿。請執行: castle init <目錄>"
   },
   "aaak": {
     "instruction": "用中文壓縮。概念之間用管道符(|)，詞語之間用連字符(-)。省略虛詞和連接詞。保留專有名詞和數字的準確性。"

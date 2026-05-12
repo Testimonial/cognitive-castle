@@ -30,7 +30,7 @@
     "init_exists": "Palace already exists at {path}",
     "repair_complete": "Repair complete. {fixed} issues fixed.",
     "migrate_complete": "Migration complete.",
-    "no_palace": "No palace found. Run: mempalace init <dir>"
+    "no_palace": "No palace found. Run: castle init <dir>"
   },
   "aaak": {
     "instruction": "Compress to index format. Hyphens between words, pipes between concepts. Drop articles and filler. Keep names and numbers exact."

@@ -30,7 +30,7 @@
     "init_exists": "{path} に宮殿は既に存在します",
     "repair_complete": "修復完了。{fixed}件の問題を修正。",
     "migrate_complete": "移行完了。",
-    "no_palace": "宮殿が見つかりません。実行: mempalace init <ディレクトリ>"
+    "no_palace": "宮殿が見つかりません。実行: castle init <ディレクトリ>"
   },
   "aaak": {
     "instruction": "日本語で圧縮してください。概念間はパイプ(|)、単語間はハイフン(-)。助詞と接続詞は省略。固有名詞と数値は正確に保持。"

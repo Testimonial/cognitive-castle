@@ -30,7 +30,7 @@
     "init_exists": "Ya existe un palacio en {path}",
     "repair_complete": "Reparación completa. {fixed} problemas corregidos.",
     "migrate_complete": "Migración completa.",
-    "no_palace": "No se encontró palacio. Ejecute: mempalace init <carpeta>"
+    "no_palace": "No se encontró palacio. Ejecute: castle init <carpeta>"
   },
   "aaak": {
     "instruction": "Comprima en español. Guiones entre palabras, pipes entre conceptos. Elimine artículos y palabras de relleno. Mantenga nombres propios y números exactos."

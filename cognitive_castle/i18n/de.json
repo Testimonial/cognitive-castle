@@ -30,7 +30,7 @@
     "init_exists": "Palast existiert bereits in {path}",
     "repair_complete": "Reparatur abgeschlossen. {fixed} Probleme behoben.",
     "migrate_complete": "Migration abgeschlossen.",
-    "no_palace": "Kein Palast gefunden. Ausführen: mempalace init <Ordner>"
+    "no_palace": "Kein Palast gefunden. Ausführen: castle init <Ordner>"
   },
   "aaak": {
     "instruction": "Auf Deutsch komprimieren. Bindestriche zwischen Wörtern, Pipes zwischen Konzepten. Artikel und Füllwörter weglassen. Eigennamen und Zahlen exakt beibehalten."
