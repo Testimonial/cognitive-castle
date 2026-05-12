@@ -408,54 +408,9 @@ def tool_search(
     if context:
         result["context_received"] = True
 
-    # ── SOAR re-ranking ────────────────────────────────────────────────────
-    # Apply production-rule boosts (correction > procedural > stale, etc.).
-    # Runs only when results are present and SOAR bindings are available.
+    # Strip internal metadata field before returning to the caller.
     hits = result.get("results")
     if hits:
-        try:
-            from .soar_bridge import apply_soar_boosts as _soar_boost
-            project_id = os.environ.get("CASTLE_PROJECT", "default")
-            # Composite id avoids collisions when two hits share the same
-            # basename from different directories (e.g. project-a/auth.md
-            # and project-b/auth.md both appear as "auth.md" after stripping).
-            def _soar_id(h: dict) -> str:
-                return f"{h.get('wing','')}/{h.get('room','')}/{h.get('source_file','?')}"
-
-            soar_mems = []
-            for h in hits:
-                meta = h.get("metadata") or {}
-                wing_name = h.get("wing", "")
-                if "user" in wing_name:
-                    mem_type = "user"
-                elif wing_name in ("wing_agent", "wing_ai_research"):
-                    mem_type = "procedural"
-                else:
-                    mem_type = meta.get("type", "semantic")
-                soar_mems.append({
-                    "id": _soar_id(h),
-                    "type": mem_type,
-                    "subtype": meta.get("subtype", ""),
-                    "project_id": meta.get("project_id", ""),
-                    "_score": float(h.get("similarity") or 0.0),
-                    "decay_score": meta.get("decay_score", 1.0),
-                    "access_count": meta.get("access_count", 0),
-                    "last_accessed_at": meta.get("last_accessed_at"),
-                })
-            soar_mems = _soar_boost(soar_mems, sanitized["clean_query"], project_id)
-            soar_boost_val = {m["id"]: m.get("_soar_boost", 1.0) for m in soar_mems}
-            for h in hits:
-                boost = float(soar_boost_val.get(_soar_id(h), 1.0))
-                h["soar_boost"] = round(boost, 3)
-                # soar_score = similarity × boost — used for ranking only.
-                # similarity is preserved unchanged so callers see the raw
-                # cosine value; soar_score reflects SOAR re-ranking priority.
-                h["soar_score"] = round(float(h.get("similarity") or 0.0) * boost, 4)
-            hits.sort(key=lambda h: h.get("soar_score", float(h.get("similarity") or 0.0)), reverse=True)
-            result["soar_boosted"] = True
-        except Exception as _soar_err:
-            logger.debug("SOAR boost skipped: %s", _soar_err)
-        # Strip internal metadata field before returning to the caller.
         for h in hits:
             h.pop("metadata", None)
         result["results"] = hits
