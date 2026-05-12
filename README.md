@@ -94,6 +94,8 @@
 [![][python-shield]][python-link]
 [![][license-shield]][license-link]
 
+![Cognitive Castle 40-second demo — install, init, mine, status, search, wake-up](assets/demos/01-hero.gif)
+
 </div>
 
 ---
@@ -122,6 +124,8 @@ castle search "why did we switch to graphql"
 castle search "auth flow" --wing myapp --room backend
 ```
 
+![Quickstart demo — install, init, search](assets/demos/02-quickstart.gif)
+
 → See [How it works](#how-it-works) or [Connect to Claude Code](#connect-to-claude-code)
 
 ---
@@ -143,6 +147,10 @@ graph LR
     class M,S proc
     class P store
 ```
+
+**See verbatim retrieval in action:**
+
+![Verbatim recall demo — search returns the exact text from a real architecture decision](assets/demos/03-verbatim.gif)
 
 Three input streams (project files, conversation exports, auto-save hooks) feed a single miner that chunks them into verbatim **drawers** and files them into **rooms** (topics) inside **wings** (people or projects). Search runs a 3-stage pipeline — dense embeddings + Tantivy full-text + knowledge-graph traversal, fused with weighted RRF and recency, then cross-encoder reranked. The retrieved drawers come back as the original text, never a summary.
 
