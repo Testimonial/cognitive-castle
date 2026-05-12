@@ -1,7 +1,7 @@
 # bge-m3 Unblock + Migration — Design Spec
 
 **Date:** 2026-05-12
-**Status:** Revised after review (2026-05-12) — ready for implementation plan
+**Status:** Revised 3× after review (2026-05-12) — ready for implementation plan
 **Umbrella:** SOTA retrieval upgrade — PR #1 of 4 (see Sequencing below)
 
 ## Revision history
@@ -16,6 +16,10 @@
   5. Error-handling table had the same wrong claim. Reworded.
   6. Test 2 implicitly required `cmd_reindex` to return an exit code — now stated explicitly as a signature change.
   7. Footgun severity verified: LanceDB raises clear errors on dim mismatch at both query and write time. The actual problem is error-message UX (cryptic "Cast error: Cannot cast to FixedSizeList(384)") not silent data corruption. Wording softened across the spec.
+- **2026-05-12 (post-review #3):** Two bugs + cosmetic cleanup:
+  8. `return 2` in `cmd_reindex` would be a no-op — `main()` at `cli.py:1184` discards return values. Switched to `sys.exit(2)` and updated Test 2 to catch `SystemExit`.
+  9. The "wrong results" framing survived in two places (Components row + Acceptance #5) after revision #2 corrected the rest of the spec. Both now match the corrected "cryptic LanceDB error" framing.
+  10. Cosmetic: line-ref inconsistency (`cli.py:629` vs `cli.py:629-672`), Non-goals 4 wording ("documented in config.py" was inaccurate), section-heading parenthetical ("now concrete"), structural placement of the pre-existing-reindex-behavior block.
 
 ---
 
@@ -77,14 +81,15 @@ flags) and running `castle reindex`.
   encouraged in the PR description as informational, not a blocker.
 - Touching the reranker, fusion, or LLM-as-judge — those are PRs #2-#4.
 - **Wiring up `EmbedderIdentityMismatchError` enforcement in the LanceDB
-  backend.** This safety mechanism is defined in `backends/base.py:53` and
-  documented in `config.py:347-364` as raising on stale palaces, but
-  `lancedb_backend.py` does not currently enforce it (zero call sites). Wiring
-  it up is a separate ~30 LOC PR worth doing soon — but expanding this PR's
+  backend.** The error class is defined in `backends/base.py:53` and
+  referenced by the `embedder_identity` config-property docstring at
+  `config.py:347-364`, but `lancedb_backend.py` has zero call sites that
+  raise it — so the safety mechanism is documented but not enforced. Wiring
+  it up is a separate ~30 LOC PR worth doing soon, but expanding this PR's
   scope to include it would mix "documentation + migration enablement" with
-  "backend safety net." This spec calls the gap out explicitly in the README
-  ("forget-to-reindex footgun") and acceptance criteria so the migration story
-  is honest, then leaves the wiring as a follow-up.
+  "backend friendlier-error work." This spec calls the gap out explicitly in
+  the README ("forget-to-reindex footgun") so the migration story is honest,
+  then leaves the wiring as a follow-up.
 
 ## Architecture
 
@@ -113,7 +118,7 @@ documentation surfaces (README migration section + CLAUDE.md update).
 
 | File | Change | Approx LOC |
 |---|---|---|
-| `README.md` | Add **"Going further: better recall with bge-m3"** subsection immediately after the existing Quickstart section (so it appears right after install/first-run, where users will look). Includes: config snippet (BOTH `embedder_model` AND `embedder_dim` — see Critical migration note below), the two-step + one-shot migration commands, hardware requirements (≈2.3 GB VRAM with GPU, CPU fallback supported but slow), and an explicit ⚠️ note that editing config without running reindex will produce wrong results (the identity-check stub is not yet wired up). | +35, -0 |
+| `README.md` | Add **"Going further: better recall with bge-m3"** subsection immediately after the existing Quickstart section (so it appears right after install/first-run, where users will look). Includes: config snippet (BOTH `embedder_model` AND `embedder_dim` — see Critical migration note below), the two-step + one-shot migration commands, hardware requirements (≈2.3 GB VRAM with GPU, CPU fallback supported but slow), and an explicit ⚠️ note that editing config without running reindex will cause subsequent searches to fail with cryptic LanceDB dim-mismatch errors (the identity-check friendlier-error stub is not yet wired up). | +35, -0 |
 | `CLAUDE.md` | Update the embedder reference in the retrieval-pipeline diagram (currently names `paraphrase-multilingual-MiniLM-L12-v2` as the model) to note that bge-m3 is a supported alternative via config. | +3, -1 |
 | `cognitive_castle/cli.py` | Add `--embedder MODEL_NAME` AND `--embedder-dim N` flags to `castle reindex`. Both must be passed together when used (the argparse validation enforces this); either both or neither — passing only one is a usage error. When passed, they set `CASTLE_EMBEDDER_MODEL` and `CASTLE_EMBEDDER_DIM` in the process env before calling `miner.mine`. No config-file write. Help text on each flag points users at the README for known model→dim pairs. | +25 |
 | `tests/test_embedding.py` (existing) | Extend with one new `@pytest.mark.slow` test (`test_bge_m3_loads_and_embeds_at_1024_dim`) — does not create a new test file (convention in this repo is one test file per module). | +30 |
@@ -212,8 +217,8 @@ spec calls this out so the migration story is honest; addressing it
 
 ```
 castle reindex --embedder BAAI/bge-m3 --embedder-dim 1024 [...]
-  → cmd_reindex (cli.py:629)
-  → argparse validates --embedder and --embedder-dim came as a pair
+  → cmd_reindex (cli.py:629-672)
+  → validates --embedder and --embedder-dim came as a pair (sys.exit(2) on usage error)
   → sets os.environ["CASTLE_EMBEDDER_MODEL"] and os.environ["CASTLE_EMBEDDER_DIM"]
     (process-scoped; CognitiveCastleConfig reads env first per config.py:313 + :330)
   → moves <palace>/ to <palace>.legacy/
@@ -225,17 +230,22 @@ castle reindex --embedder BAAI/bge-m3 --embedder-dim 1024 [...]
       → 1024-dim embeddings written
 ```
 
-### Implementation note for the flags (now concrete)
+### Implementation note for the flags
 
 `CASTLE_EMBEDDER_MODEL` and `CASTLE_EMBEDDER_DIM` are already wired through
 `CognitiveCastleConfig` (`config.py:313` and `config.py:330`). The CLI flag
-implementation is purely a process-env override at the top of `cmd_reindex`:
+implementation is purely a process-env override at the top of `cmd_reindex`.
+
+**Important:** the dispatcher at `cli.py:1184` is
+`dispatch[args.command](args)` — it discards return values. So usage errors
+must use `sys.exit(2)`, not `return 2`. Implementation pattern:
 
 ```python
+import sys
 # Final implementation pattern (plan will use exactly this):
 if (args.embedder is None) != (args.embedder_dim is None):
     print("--embedder and --embedder-dim must be passed together", file=sys.stderr)
-    return 2
+    sys.exit(2)
 if args.embedder is not None:
     os.environ["CASTLE_EMBEDDER_MODEL"] = args.embedder
     os.environ["CASTLE_EMBEDDER_DIM"] = str(args.embedder_dim)
@@ -310,13 +320,14 @@ This is a backward-compatible change for the existing dispatcher at
 `cli.py:1181` (Python treats implicit `None` as exit 0).
 
 **Test:** construct an argparse `Namespace` with `embedder="BAAI/bge-m3"` and
-`embedder_dim=None` (or the reverse), call `cmd_reindex(ns)` directly,
-capture stderr via `capsys`, assert:
-- `cmd_reindex(ns)` returns `2`
+`embedder_dim=None` (or the reverse), call `cmd_reindex(ns)` directly inside
+`pytest.raises(SystemExit) as exc_info`, capture stderr via `capsys`, assert:
+- `exc_info.value.code == 2`
 - stderr contains `"--embedder and --embedder-dim must be passed together"`
 
 No model load, no filesystem touch (palace move is gated by the validation
-check) — purely argparse + process-env logic.
+check — `sys.exit` aborts before reaching the move) — purely argparse +
+process-env logic.
 
 ### Default suite
 
@@ -343,8 +354,9 @@ The PR is mergeable when ALL of these hold:
      `--embedder ... --embedder-dim ...` variant
    - Hardware note (≈2.3 GB VRAM with GPU; falls back to CPU)
    - ⚠️ explicit warning that editing config without running reindex will
-     produce wrong results until `EmbedderIdentityMismatchError` enforcement
-     lands in a follow-up PR
+     cause subsequent searches to fail with cryptic LanceDB dim-mismatch
+     errors (no silent corruption); a friendlier error message is tracked as
+     a follow-up `EmbedderIdentityMismatchError` wiring PR
 6. README documents the known model→dim pairs table (MiniLM 384, bge-m3 1024,
    bge-large-en-v1.5 1024) so users don't have to look up dim themselves.
 7. CLAUDE.md no longer claims `paraphrase-multilingual-MiniLM-L12-v2` is the
@@ -370,12 +382,13 @@ The PR is mergeable when ALL of these hold:
 10. Default behavior unchanged: users with no config edits and no CLI flag
     get exactly the same MiniLM-384 experience as before the PR.
 
-### Pre-existing reindex behavior acknowledged (informational, not a gate)
+## PR description content (informational, not a gate)
 
 The PR description should note that `castle reindex` rebuilds the LanceDB
 vectors and closets but does not rebuild the knowledge graph or entity
-registry. This is pre-existing behavior (see "What reindex rebuilds and
-what it doesn't" above), not something this PR introduces or fixes.
+registry. This is pre-existing reindex behavior (see "What reindex rebuilds
+and what it doesn't" above), not something this PR introduces or fixes.
+Users with rich KG / entity-registry state should be aware before migrating.
 
 ## Out of scope (explicit non-goals revisited)
 
@@ -385,34 +398,38 @@ what it doesn't" above), not something this PR introduces or fixes.
 - Auto dim-mismatch detection on palace open
 - VRAM pre-flight check
 
-## Spec self-review (post-revision #2, 2026-05-12)
+## Spec self-review (post-revision #3, 2026-05-12)
 
-1. **Placeholders:** None. The implementation snippet for `--embedder` /
-   `--embedder-dim` is concrete (verified `CASTLE_EMBEDDER_MODEL` and
-   `CASTLE_EMBEDDER_DIM` exist at `config.py:313, :330`).
-2. **Internal consistency:** Architecture, Components, Data Flow, Critical
-   Migration Note, Error Handling table, and Acceptance Criteria now all tell
-   the same story: dim mismatch raises clear LanceDB errors, paired CLI flags
-   prevent the misconfiguration at the entry point. The earlier
-   "structurally impossible" contradictions have been removed.
+1. **Placeholders:** None. The implementation snippet uses `sys.exit(2)` (not
+   `return 2`), which actually causes the process to exit with code 2 —
+   verified that `main()` at `cli.py:1184` discards return values.
+2. **Internal consistency:** Architecture, Components row, Critical Migration
+   Note, Data Flow, Footgun warning, Error Handling table, and Acceptance #5
+   all now use the same framing: "cryptic LanceDB dim-mismatch errors, no
+   silent corruption." The earlier "wrong results" / "structurally
+   impossible" stragglers have been removed.
 3. **Scope:** Single sub-project (bge-m3 unblock + migration). The
    `EmbedderIdentityMismatchError` wiring (which would convert cryptic
    LanceDB errors into friendly "please reindex" messages) is explicitly
    carved out as a follow-up PR. The KG / entity-registry rebuild gap is
-   acknowledged as pre-existing reindex behavior, not in scope.
+   acknowledged as pre-existing reindex behavior, moved to its own
+   "PR description content" section out of Acceptance.
 4. **Ambiguity:** Paired-flag semantics ("both or neither") stated in
-   Components, Critical Migration Note, Data Flow, and Acceptance #3. The
-   `--embedder` flag is process-scoped (does not persist to `castle.yaml`).
-   `cmd_reindex` signature change to `int` return type is stated explicitly
-   in Testing.
-5. **Empirical verification baked in:** The footgun severity and dim-mismatch
-   behavior are grounded in actual LanceDB test output, not assumed.
-6. **Review-#2 findings addressed:**
-   - ✅ Architecture's "structurally impossible" claim reworded with verified
-     LanceDB behavior.
-   - ✅ Error-handling table reworded with the same verified behavior.
-   - ✅ Test 2 now states the `cmd_reindex` return-type signature change
-     explicitly, with concrete test recipe.
-   - ✅ Footgun wording softened to match empirical truth (cryptic error, not
-     silent corruption).
-   - ✅ `cli.py:702` line reference corrected to `cli.py:629-672`.
+   Components, Critical Migration Note, Data Flow, and Acceptance #3.
+   `cmd_reindex` change to use `sys.exit(2)` stated explicitly in
+   Implementation Note AND Test 2 (with `pytest.raises(SystemExit)` recipe).
+5. **Empirical verification baked in:**
+   - bge-m3 load + first-encode behavior (Background section)
+   - LanceDB dim-mismatch error messages (Critical Migration Note, Error
+     Handling, Footgun warning)
+   - `main()` dispatcher behavior (Implementation Note)
+6. **Review-#3 findings addressed:**
+   - ✅ `return 2` → `sys.exit(2)`, with Test 2 updated to
+     `pytest.raises(SystemExit)`.
+   - ✅ "Wrong results" framing removed from Components row and Acceptance #5.
+   - ✅ Line refs unified to `cli.py:629-672`.
+   - ✅ Non-goals 4 wording corrected (`backends/base.py:53` defines the error;
+     `config.py:347-364` is the property docstring that references it).
+   - ✅ "(now concrete)" parenthetical removed from heading.
+   - ✅ Pre-existing-reindex-behavior block moved out of Acceptance into its
+     own "PR description content" section.
