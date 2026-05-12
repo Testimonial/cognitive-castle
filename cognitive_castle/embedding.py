@@ -31,6 +31,24 @@ def _resolve_model_name(cfg=None) -> str:
     return cfg.embedder_model
 
 
+def _is_cuda_oom(exc: BaseException) -> bool:
+    """Detect CUDA out-of-memory errors by exception type or message.
+
+    On shared dev machines the GPU may not have enough free VRAM when Castle
+    loads the embedder. Without a fallback the entire mining pipeline fails.
+    Match torch.cuda.OutOfMemoryError when available, then fall back to
+    substring matching for environments where torch isn't importable.
+    """
+    try:
+        import torch  # type: ignore
+        if isinstance(exc, torch.cuda.OutOfMemoryError):
+            return True
+    except (ImportError, AttributeError):
+        pass
+    msg = str(exc).lower()
+    return "out of memory" in msg or "cudaerrormemoryallocation" in msg
+
+
 def _get_model(device: str = "auto", cfg=None):
     name = _resolve_model_name(cfg)
     resolved = _resolve_device(device)
@@ -45,7 +63,23 @@ def _get_model(device: str = "auto", cfg=None):
             "sentence-transformers is required: pip install sentence-transformers"
         )
 
-    model = SentenceTransformer(name, device=resolved)
+    try:
+        model = SentenceTransformer(name, device=resolved)
+    except Exception as e:
+        if resolved == "cuda" and _is_cuda_oom(e):
+            import sys
+            print(
+                f"[embedding] CUDA load failed ({type(e).__name__}: {e}); "
+                f"falling back to CPU embedder",
+                file=sys.stderr,
+            )
+            resolved = "cpu"
+            cache_key = f"{name}@{resolved}"
+            if cache_key in _model_cache:
+                return _model_cache[cache_key]
+            model = SentenceTransformer(name, device=resolved)
+        else:
+            raise
 
     # bge-m3 with CUDA triggers a >3-minute flash-attention CUDA kernel
     # compilation on first use (PyTorch 2.x SDPA).  The compiled kernel is
