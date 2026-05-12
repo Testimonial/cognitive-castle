@@ -35,12 +35,14 @@ def test_embedding_respects_config_override():
 def _make_default_cfg():
     """Return an instance of the project's config class with all defaults."""
     from cognitive_castle.config import CognitiveCastleConfig
+
     return CognitiveCastleConfig()
 
 
 def test_is_cuda_oom_detects_oom_by_message():
     """CUDA OOM should be detected via exception message even without torch."""
     from cognitive_castle.embedding import _is_cuda_oom
+
     assert _is_cuda_oom(RuntimeError("CUDA error: out of memory"))
     assert _is_cuda_oom(Exception("cudaErrorMemoryAllocation occurred"))
 
@@ -48,6 +50,7 @@ def test_is_cuda_oom_detects_oom_by_message():
 def test_is_cuda_oom_returns_false_for_other_errors():
     """Non-OOM exceptions should not trigger the CPU fallback path."""
     from cognitive_castle.embedding import _is_cuda_oom
+
     assert not _is_cuda_oom(RuntimeError("some other error"))
     assert not _is_cuda_oom(ValueError("bad input"))
 
@@ -93,3 +96,34 @@ def test_get_model_does_not_fall_back_on_non_oom_cuda_error(monkeypatch):
         raise AssertionError("expected RuntimeError")
     except RuntimeError as e:
         assert "unrelated error" in str(e)
+
+
+@pytest.mark.slow
+def test_bge_m3_loads_and_embeds_at_1024_dim():
+    """Regression: bge-m3 must load + first-encode without hanging.
+
+    The SDP-disable workaround in embedding._get_model is what makes this
+    possible — without it, the first CUDA encode triggers a 3+ minute
+    flash-attention JIT compilation. If a future torch upgrade breaks the
+    workaround, this test catches it before users hit the hang in production
+    reindex.
+
+    Marked @pytest.mark.slow because:
+    - First run downloads ~2 GB of model weights
+    - Even cached, model load takes ~8s
+    Default pytest config excludes -m slow tests.
+    """
+    from unittest.mock import MagicMock
+    import cognitive_castle.embedding as emb
+
+    cfg = MagicMock()
+    cfg.embedder_model = "BAAI/bge-m3"
+    model = emb._get_model(device="auto", cfg=cfg)
+    vecs = model.encode(
+        ["hello world", "ahoj jak se mas", "cognitive castle"],
+        normalize_embeddings=True,
+        show_progress_bar=False,
+    )
+    assert vecs.shape == (3, 1024)
+    # L2-normalized: first vector should have unit norm
+    assert abs(float((vecs[0] ** 2).sum()) ** 0.5 - 1.0) < 1e-4
