@@ -44,21 +44,42 @@ PR #C is the third of a 4-PR cleanup series:
 
 ## Source of truth
 
-Brainstorm-time inventory locked the following file list:
+Brainstorm-time inventory (corrected at spec-review time):
 
-**Files with `MempalaceConfig` usage:**
-1. `tests/conftest.py` (1 import + 1 instantiation in fixture)
-2. `tests/test_config.py` (~20 instantiations + the alias-self-test which is PRESERVED)
-3. `tests/test_config_extra.py` (~12 occurrences)
-4. `tests/test_embedding.py` (~4 occurrences)
-5. `tests/test_entity_detector.py` (~6 `MempalaceConfig` + 4 `MEMPALACE_ENTITY_LANGUAGES`)
-6. `tests/test_hall_detection.py` (~2 occurrences via fixture)
-7. `tests/test_mcp_server.py` (~1 occurrence)
-8. `tests/benchmarks/test_mcp_bench.py` (~1-2 occurrences)
-9. `tests/benchmarks/test_memory_profile.py` (~1-2 occurrences)
+**Files with `MempalaceConfig` usage (16 files):**
 
-**Other files to touch:**
-- `tests/conftest.py:2,8,17` — three docstring/comment lines mentioning "MemPalace" / "mempalace imports"
+| File | Refs |
+|---|---|
+| `tests/test_config.py` | 19 (includes the alias-self-test, PRESERVED) |
+| `tests/test_config_extra.py` | 11 |
+| `tests/test_entity_detector.py` | 10 + 4 `MEMPALACE_ENTITY_LANGUAGES` env var |
+| `tests/test_embedding.py` | 4 |
+| `tests/conftest.py` | 3 |
+| `tests/test_mcp_server.py` | 2 |
+| `tests/benchmarks/test_mcp_bench.py` | 2 |
+| `tests/benchmarks/test_memory_profile.py` | 2 |
+| `tests/benchmarks/conftest.py` | (count unverified — sed sweep catches it) |
+| `tests/test_hall_detection.py` | 1 (docstring comment only) |
+| `tests/test_layers.py` | (unverified — sed sweep catches it) |
+| `tests/test_cli.py` | (unverified — sed sweep catches it) |
+| `tests/test_repair.py` | (unverified — sed sweep catches it) |
+| `tests/test_hooks_cli.py` | (unverified — sed sweep catches it) |
+| `tests/test_miner.py` | (unverified — sed sweep catches it) |
+| `tests/test_corpus_origin_integration.py` | (unverified — sed sweep catches it) |
+
+**Note:** the spec was originally drafted with a 9-file list; spec self-review found 7 more files. The implementation strategy below uses `git grep -l "MempalaceConfig" tests/` to drive the sed — robust to the exact file list and to any new files added between spec and implementation.
+
+**Production aliases that test patches may target:**
+1. `cognitive_castle/config.py:643` — `MempalaceConfig = CognitiveCastleConfig`
+2. `cognitive_castle/cli.py:43` — `MempalaceConfig = CognitiveCastleConfig`
+3. `cognitive_castle/layers.py:30` — `MempalaceConfig = CognitiveCastleConfig`
+4. `cognitive_castle/repair.py:34` — `MempalaceConfig = CognitiveCastleConfig`
+
+Tests doing `@patch("cognitive_castle.cli.MempalaceConfig")` etc. must migrate to `@patch("cognitive_castle.cli.CognitiveCastleConfig")` (the patch target follows the test usage).
+
+**Other tests/conftest.py docstring/comment lines:**
+- Module docstring lines 1-11 mention "MemPalace tests" and "mempalace imports" (multi-line — needs broader sweep, not just line 2/8)
+- Line 17 comment: `# ── Isolate HOME before any mempalace imports ──`
 
 ## File-by-file change list
 
@@ -66,68 +87,63 @@ Brainstorm-time inventory locked the following file list:
 
 Three categories of edits, all in one file:
 
-**a) Module docstring (line 2):**
+**a) Module docstring (multi-line, lines 1-11):**
+Replace `MemPalace tests` → `Cognitive Castle tests` (line 2) and `mempalace imports` → `cognitive_castle imports` (line 8). The docstring is multi-line — verify the exact line numbers at implementation time.
+
+**b) Comment line 17:**
 ```python
 # Before:
-conftest.py — Shared fixtures for MemPalace tests.
-# After:
-conftest.py — Shared fixtures for Cognitive Castle tests.
-```
-
-**b) Comment lines (lines 8 and 17):**
-```python
-# Before (line 8):
-mempalace imports — so that module-level initialisations (e.g.
-# After:
-cognitive_castle imports — so that module-level initialisations (e.g.
-
-# Before (line 17):
 # ── Isolate HOME before any mempalace imports ──────────────────────────
 # After:
 # ── Isolate HOME before any cognitive_castle imports ───────────────────
 ```
 
 **c) Import + fixture usage:**
-```python
-# Before (line 40):
-from cognitive_castle.config import MempalaceConfig  # noqa: E402
-# After:
-from cognitive_castle.config import CognitiveCastleConfig  # noqa: E402
+The bulk sed in the next section handles all `MempalaceConfig` → `CognitiveCastleConfig` substitutions including conftest.py's import and fixture body.
 
-# Then any usages of `MempalaceConfig(...)` in fixtures become `CognitiveCastleConfig(...)`.
+Concrete sed for the conftest-specific cosmetic changes (run BEFORE the bulk sed):
+
+```bash
+sed -i 's/MemPalace tests/Cognitive Castle tests/g; s/mempalace imports/cognitive_castle imports/g' tests/conftest.py
 ```
 
 ### `tests/test_config.py`
 
-The whole-file `MempalaceConfig` → `CognitiveCastleConfig` migration applies EXCEPT for the alias-self-test at lines 264-270:
+The whole-file `MempalaceConfig` → `CognitiveCastleConfig` migration applies EXCEPT for the alias-self-test (verified at lines 264-272):
 
 ```python
 def test_mempalace_config_is_backward_compat_alias():
     """MempalaceConfig still importable as an alias to CognitiveCastleConfig."""
     from cognitive_castle.config import MempalaceConfig, CognitiveCastleConfig
-
+    # Same class object (alias, not a separate class).
     assert MempalaceConfig is CognitiveCastleConfig
-
+    # Instances of one are instances of the other.
     cfg = MempalaceConfig()
+    assert isinstance(cfg, CognitiveCastleConfig)
 ```
 
-This test must continue to use `MempalaceConfig` (lower-case `mempalace` in its name too) — it's the whole point. The test name `test_mempalace_config_is_backward_compat_alias` stays as-is too.
+This test must continue to use `MempalaceConfig` (the test name retains lower-case `mempalace` too) — it's the whole point.
 
-Implementation strategy: do a global file `sed -i 's/MempalaceConfig/CognitiveCastleConfig/g'`, then manually re-revert lines 264-270 back to using `MempalaceConfig`.
+Implementation strategy: do `sed -i 's/MempalaceConfig/CognitiveCastleConfig/g' tests/test_config.py`, then surgically re-revert the alias-self-test function body (4 in-body `MempalaceConfig` references: 2 in the import line, 2 in the assertions/instantiation). The test function name `test_mempalace_config_is_backward_compat_alias` does NOT contain `MempalaceConfig` so it survives the sed unchanged.
 
-### `tests/test_config_extra.py`, `tests/test_embedding.py`, `tests/test_hall_detection.py`, `tests/test_mcp_server.py`, `tests/benchmarks/test_mcp_bench.py`, `tests/benchmarks/test_memory_profile.py`
+### All other test files with `MempalaceConfig` (rule-driven)
 
-Bulk `MempalaceConfig` → `CognitiveCastleConfig` substitution per file. No intentional uses of the alias remain in these files.
+Use `git grep` to enumerate the full file list at implementation time (catches drift between spec and implementation):
 
 ```bash
-sed -i 's/MempalaceConfig/CognitiveCastleConfig/g' \
-    tests/test_config_extra.py \
-    tests/test_embedding.py \
-    tests/test_hall_detection.py \
-    tests/test_mcp_server.py \
-    tests/benchmarks/test_mcp_bench.py \
-    tests/benchmarks/test_memory_profile.py
+# Enumerate files (excluding test_config.py which gets surgical handling above):
+git grep -l "MempalaceConfig" tests/ | grep -v "^tests/test_config\.py$" > /tmp/files-to-migrate.txt
+cat /tmp/files-to-migrate.txt
+
+# Apply bulk substitution:
+while read f; do
+    sed -i 's/MempalaceConfig/CognitiveCastleConfig/g' "$f"
+done < /tmp/files-to-migrate.txt
 ```
+
+Expected file list (16 files total, 15 after excluding test_config.py): `tests/conftest.py`, `tests/test_config_extra.py`, `tests/test_embedding.py`, `tests/test_entity_detector.py`, `tests/test_hall_detection.py`, `tests/test_mcp_server.py`, `tests/test_layers.py`, `tests/test_cli.py`, `tests/test_repair.py`, `tests/test_hooks_cli.py`, `tests/test_miner.py`, `tests/test_corpus_origin_integration.py`, `tests/benchmarks/test_mcp_bench.py`, `tests/benchmarks/test_memory_profile.py`, `tests/benchmarks/conftest.py`.
+
+The sed handles `@patch("cognitive_castle.cli.MempalaceConfig")` etc. correctly — those patch-target strings get migrated to `@patch("cognitive_castle.cli.CognitiveCastleConfig")` and the production aliases at `cli.py:43`, `layers.py:30`, `repair.py:34`, `config.py:643` make both names work, so the patches still find a real attribute.
 
 ### `tests/test_entity_detector.py`
 
