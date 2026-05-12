@@ -7,11 +7,15 @@
 ## Revision history
 
 - **2026-05-12 (initial):** First draft, approved section-by-section.
-- **2026-05-12 (post-review):** Three issues found:
-  1. Migration snippet missed `embedder_dim` — would have produced broken palaces.
+- **2026-05-12 (post-review #1):** Three issues found:
+  1. Migration snippet missed `embedder_dim` — UX bug (reindex would fail with cryptic LanceDB cast errors rather than a friendly "set both" message).
   2. Mislabeled "auto-detect dim mismatch" as non-existent when it's actually a defined-but-unwired stub (`EmbedderIdentityMismatchError`).
   3. Reindex rebuilds drawers + closets but not KG / entity registry — worth being explicit.
-  This revision fixes all three and tightens the `--embedder` flag semantics.
+- **2026-05-12 (post-review #2):** Two contradictions surfaced + footgun severity verified empirically:
+  4. Architecture "Mixing dims is structurally impossible" claim contradicted the Critical Migration Note. Reworded with the verified empirical behavior (LanceDB enforces dim at both write and query time with clear errors, but the error messages are cryptic).
+  5. Error-handling table had the same wrong claim. Reworded.
+  6. Test 2 implicitly required `cmd_reindex` to return an exit code — now stated explicitly as a signature change.
+  7. Footgun severity verified: LanceDB raises clear errors on dim mismatch at both query and write time. The actual problem is error-message UX (cryptic "Cast error: Cannot cast to FixedSizeList(384)") not silent data corruption. Wording softened across the spec.
 
 ---
 
@@ -91,14 +95,19 @@ Zero new modules. The infrastructure all exists:
   `tests/test_embedding.py:26-32`.
 - The SDP-disable workaround at `embedding.py:92-100` resolves the original
   JIT hang. Live verification confirms this on torch 2.11.
-- `castle reindex` (`cli.py:629`) already handles palace rebuild end-to-end:
+- `castle reindex` (`cli.py:629-672`) already handles palace rebuild end-to-end:
   moves the old palace to `.legacy/`, creates a fresh one, mines sources into
-  it. Documented at `cli.py:702`.
-- LanceDB tables are created at the embedder's native dim, so reindex always
-  produces a clean dim-consistent palace. Mixing dims is structurally
-  impossible.
+  it.
+- LanceDB tables are created at `cfg.embedder_dim`, which is a SEPARATE config
+  knob from `cfg.embedder_model`. LanceDB enforces dim at both write and query
+  time via PyArrow `FixedSizeList(dim)` (verified empirically — see
+  Migration Note below). The implication: `embedder_model` and `embedder_dim`
+  MUST be set consistently or the system raises clear LanceDB errors at the
+  first operation. There is no silent corruption, but the error messages are
+  cryptic and don't point users at the config fix.
 
-This PR adds **one** small convenience and **two** documentation surfaces.
+This PR adds **one** small convenience (paired CLI flags) and **two**
+documentation surfaces (README migration section + CLAUDE.md update).
 
 ## Components (file-level changes)
 
@@ -120,10 +129,21 @@ Total: ~95 LOC, 4 files, no new modules.
 | `embedder_model` | `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | `CASTLE_EMBEDDER_MODEL` |
 | `embedder_dim` | `384` | `CASTLE_EMBEDDER_DIM` |
 
-Switching to bge-m3 requires setting **both** — otherwise the LanceDB table is
-provisioned at 384 dims and tries to ingest 1024-dim vectors, producing a
-broken palace. The README must show both, and the `--embedder` / `--embedder-dim`
-flags must be passed together.
+Switching to bge-m3 requires setting **both**. Verified empirical behavior
+when only `embedder_model` is set:
+
+- Reindex starts, miner generates 1024-dim embeddings, LanceDB raises
+  `ValueError: Cast error: Cannot cast to FixedSizeList(384): value at index 0
+  has length 1024` at the first write.
+- The palace at `.legacy/` is preserved (move happens first).
+- No silent corruption, but the error message doesn't tell the user "set
+  embedder_dim too."
+
+The README must show both keys in every migration snippet, and the
+`--embedder` / `--embedder-dim` CLI flags must be passed together (argparse-
+validated in `cmd_reindex`). The intent is to make the misconfiguration
+impossible at the entry points users actually touch, since the underlying
+LanceDB error is cryptic.
 
 ### Known model→dim pairs documented in README
 
@@ -164,10 +184,12 @@ what they're setting).
 ```
 
 **⚠️ Footgun warning (called out in README):** Editing `castle.yaml` without
-running `castle reindex` will silently produce wrong results, because
-`EmbedderIdentityMismatchError` is defined but not yet enforced by the LanceDB
-backend. Always run reindex after changing embedder config. Wiring up the
-identity check is tracked as a follow-up PR.
+running `castle reindex` will cause the next search to fail with a cryptic
+LanceDB error like `query dim(1024) doesn't match the column vector vector
+dim(384)`. There is no silent corruption — the system errors loudly — but the
+error doesn't tell users they need to reindex. Always run `castle reindex`
+after changing embedder config. A friendlier error pointing users at the fix
+is tracked as the follow-up `EmbedderIdentityMismatchError` wiring PR.
 
 ### What reindex rebuilds and what it doesn't
 
@@ -232,7 +254,8 @@ foreseeable failure modes:
 | CUDA OOM on model load | CPU fallback with stderr warning (PR #18) | `embedding.py:66-82` |
 | Model download fails | `SentenceTransformer` raises a clear HF error; propagates to reindex stderr | sentence-transformers internal |
 | First-encode JIT hang | SDP-disable workaround | `embedding.py:92-100` |
-| Dim mismatch on existing palace | Structurally prevented — reindex always creates fresh table | by construction |
+| Dim mismatch on write (model/dim config out of sync) | LanceDB raises `ValueError: Cast error: Cannot cast to FixedSizeList(N)` at the first write — no silent corruption, but the error is cryptic. Paired CLI flags prevent this at the entry point users touch. | `lancedb_backend.py` via PyArrow |
+| Dim mismatch on query (config changed without reindex) | LanceDB raises `RuntimeError: query dim(N) doesn't match the column vector vector dim(M)`. Search fails loudly. | `lancedb_backend.py` via Lance |
 
 **Decision: no VRAM pre-flight check.** The existing CUDA OOM → CPU fallback
 already produces a clear stderr message. Pre-flight checks are noisy, fragile
@@ -276,10 +299,24 @@ so this test runs only on demand via `pytest -m slow`.
 
 ### New test (2) — argparse pair validation in `tests/test_cli.py`
 
-Add a small test that calls `cmd_reindex` with `--embedder` but no
-`--embedder-dim` (or vice versa) and asserts the usage error path. This
-catches future regression of the "both or neither" invariant. No model load
-required — purely argparse and process-env logic.
+Two pieces, both small:
+
+**Implementation note (function signature change):** the current
+`cmd_reindex` at `cli.py:629` has implicit `None` returns (`return` with no
+value on the legacy-backup-exists path, falls through on success). The
+paired-flag validation needs to short-circuit with a usage error code, so
+`cmd_reindex` now explicitly returns `int` (0 on success, 2 on usage error).
+This is a backward-compatible change for the existing dispatcher at
+`cli.py:1181` (Python treats implicit `None` as exit 0).
+
+**Test:** construct an argparse `Namespace` with `embedder="BAAI/bge-m3"` and
+`embedder_dim=None` (or the reverse), call `cmd_reindex(ns)` directly,
+capture stderr via `capsys`, assert:
+- `cmd_reindex(ns)` returns `2`
+- stderr contains `"--embedder and --embedder-dim must be passed together"`
+
+No model load, no filesystem touch (palace move is gated by the validation
+check) — purely argparse + process-env logic.
 
 ### Default suite
 
@@ -348,31 +385,34 @@ what it doesn't" above), not something this PR introduces or fixes.
 - Auto dim-mismatch detection on palace open
 - VRAM pre-flight check
 
-## Spec self-review (post-revision, 2026-05-12)
+## Spec self-review (post-revision #2, 2026-05-12)
 
 1. **Placeholders:** None. The implementation snippet for `--embedder` /
-   `--embedder-dim` is concrete (verified that `CASTLE_EMBEDDER_MODEL` and
+   `--embedder-dim` is concrete (verified `CASTLE_EMBEDDER_MODEL` and
    `CASTLE_EMBEDDER_DIM` exist at `config.py:313, :330`).
-2. **Internal consistency:** Architecture, Components, Data Flow,
-   Migration Note, and Acceptance Criteria all reference the same 4 files,
-   the same paired-flag semantics, and the same `embedder_model` +
-   `embedder_dim` migration. The "what reindex rebuilds" table matches the
-   acceptance-criteria note about pre-existing reindex behavior.
+2. **Internal consistency:** Architecture, Components, Data Flow, Critical
+   Migration Note, Error Handling table, and Acceptance Criteria now all tell
+   the same story: dim mismatch raises clear LanceDB errors, paired CLI flags
+   prevent the misconfiguration at the entry point. The earlier
+   "structurally impossible" contradictions have been removed.
 3. **Scope:** Single sub-project (bge-m3 unblock + migration). The
-   `EmbedderIdentityMismatchError` wiring is explicitly carved out as a
-   follow-up PR with one-line justification (don't mix migration enablement
-   with backend safety net). The KG / entity-registry rebuild gap is
+   `EmbedderIdentityMismatchError` wiring (which would convert cryptic
+   LanceDB errors into friendly "please reindex" messages) is explicitly
+   carved out as a follow-up PR. The KG / entity-registry rebuild gap is
    acknowledged as pre-existing reindex behavior, not in scope.
 4. **Ambiguity:** Paired-flag semantics ("both or neither") stated in
-   Components, Data Flow, and Acceptance #3. The `--embedder` flag is
-   process-scoped (does not persist to `castle.yaml`) — stated in Components
-   and Data Flow. README placement is concrete ("immediately after Quickstart").
-5. **Review findings addressed:**
-   - ✅ Migration snippet now includes `embedder_dim`.
-   - ✅ `EmbedderIdentityMismatchError` stub explicitly named as a non-goal
-     with the footgun called out in the README.
-   - ✅ KG / entity-registry rebuild gap acknowledged as pre-existing.
-   - ✅ Env-var hedge removed; concrete implementation pattern shown.
-   - ✅ Test moved into existing `test_embedding.py`.
-   - ✅ README placement specified ("immediately after Quickstart").
-   - ✅ Acceptance smoke test is now a reproducible recipe.
+   Components, Critical Migration Note, Data Flow, and Acceptance #3. The
+   `--embedder` flag is process-scoped (does not persist to `castle.yaml`).
+   `cmd_reindex` signature change to `int` return type is stated explicitly
+   in Testing.
+5. **Empirical verification baked in:** The footgun severity and dim-mismatch
+   behavior are grounded in actual LanceDB test output, not assumed.
+6. **Review-#2 findings addressed:**
+   - ✅ Architecture's "structurally impossible" claim reworded with verified
+     LanceDB behavior.
+   - ✅ Error-handling table reworded with the same verified behavior.
+   - ✅ Test 2 now states the `cmd_reindex` return-type signature change
+     explicitly, with concrete test recipe.
+   - ✅ Footgun wording softened to match empirical truth (cryptic error, not
+     silent corruption).
+   - ✅ `cli.py:702` line reference corrected to `cli.py:629-672`.
