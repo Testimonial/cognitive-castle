@@ -691,7 +691,15 @@ def test_main_hook_run_dispatches():
     with (
         patch(
             "sys.argv",
-            ["cognitive-castle", "hook", "run", "--hook", "session-start", "--harness", "claude-code"],
+            [
+                "cognitive-castle",
+                "hook",
+                "run",
+                "--hook",
+                "session-start",
+                "--harness",
+                "claude-code",
+            ],
         ),
         patch("cognitive_castle.cli.cmd_hook") as mock_cmd,
     ):
@@ -808,3 +816,59 @@ def test_reindex_creates_new_palace_dir(tmp_path, monkeypatch):
     assert palace.exists()
     # The new palace should NOT have the old marker (it's a fresh build).
     assert not (palace / "marker").exists()
+
+
+def test_reindex_rejects_unpaired_embedder_flags(monkeypatch, capsys, tmp_path):
+    """`castle reindex --embedder X` without --embedder-dim must be a usage error.
+
+    The CLI exposes two paired flags so users can't accidentally set the model
+    without the dim (which would later fail with a cryptic LanceDB cast error
+    deep in the miner). Validation runs at the top of cmd_reindex BEFORE any
+    filesystem work happens.
+    """
+    import argparse
+    import pytest
+    from cognitive_castle.cli import cmd_reindex
+
+    args = argparse.Namespace(
+        palace=str(tmp_path / "palace"),
+        sources=[str(tmp_path / "src")],
+        yes=True,
+        embedder="BAAI/bge-m3",
+        embedder_dim=None,
+    )
+
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_reindex(args)
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "--embedder and --embedder-dim must be passed together" in captured.err
+
+
+def test_reindex_rejects_unpaired_dim_flag(monkeypatch, capsys, tmp_path):
+    """Reverse case: --embedder-dim without --embedder is also a usage error."""
+    import argparse
+    import pytest
+    from cognitive_castle.cli import cmd_reindex
+
+    args = argparse.Namespace(
+        palace=str(tmp_path / "palace"),
+        sources=[str(tmp_path / "src")],
+        yes=True,
+        embedder=None,
+        embedder_dim=1024,
+    )
+
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+
+    with pytest.raises(SystemExit) as exc_info:
+        cmd_reindex(args)
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "--embedder and --embedder-dim must be passed together" in captured.err

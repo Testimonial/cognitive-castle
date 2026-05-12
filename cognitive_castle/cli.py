@@ -222,7 +222,9 @@ def _ensure_castle_files_gitignored(project_dir) -> bool:
     if not missing:
         return False
     prefix = "" if not existing or existing.endswith("\n") else "\n"
-    block = prefix + "\n# Cognitive Castle per-project files (issue #185)\n" + "\n".join(missing) + "\n"
+    block = (
+        prefix + "\n# Cognitive Castle per-project files (issue #185)\n" + "\n".join(missing) + "\n"
+    )
     with open(gitignore, "a") as f:
         f.write(block)
     print(f"  Added {', '.join(missing)} to {gitignore.name}")
@@ -489,7 +491,9 @@ def _maybe_run_mine_after_init(args, cfg) -> None:
 
 
 def cmd_mine(args):
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     include_ignored = []
     for raw in args.include_ignored or []:
         include_ignored.extend(part.strip() for part in raw.split(",") if part.strip())
@@ -543,7 +547,9 @@ def cmd_sweep(args):
     """
     from .sweeper import sweep, sweep_directory
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     target = os.path.expanduser(args.target)
 
     if os.path.isfile(target):
@@ -576,7 +582,9 @@ def cmd_sweep(args):
 def cmd_search(args):
     from .searcher import search, SearchError
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     try:
         search(
             query=args.query,
@@ -593,7 +601,9 @@ def cmd_wakeup(args):
     """Show L0 (identity) + L1 (essential story) — the wake-up context."""
     from .layers import MemoryStack
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     stack = MemoryStack(palace_path=palace_path)
 
     text = stack.wake_up(wing=args.wing)
@@ -636,6 +646,21 @@ def cmd_reindex(args) -> None:
        to populate the new palace.
     4. Leave <palace>.legacy/ in place for user verification.
     """
+    # Paired CLI overrides — must be both or neither.
+    # Setting only one would later fail with a cryptic LanceDB cast error deep
+    # in the miner. Validate up front and exit cleanly on misuse.
+    embedder = getattr(args, "embedder", None)
+    embedder_dim = getattr(args, "embedder_dim", None)
+    if (embedder is None) != (embedder_dim is None):
+        print(
+            "--embedder and --embedder-dim must be passed together",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    if embedder is not None:
+        os.environ["CASTLE_EMBEDDER_MODEL"] = embedder
+        os.environ["CASTLE_EMBEDDER_DIM"] = str(embedder_dim)
+
     import shutil
     from pathlib import Path
 
@@ -675,7 +700,9 @@ def cmd_reindex(args) -> None:
 def cmd_status(args):
     from .miner import status
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     status(palace_path=palace_path)
 
 
@@ -683,7 +710,9 @@ def cmd_repair_status(args):
     """Read-only HNSW capacity health check (#1222)."""
     from .repair import status as repair_status
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
     repair_status(palace_path=palace_path)
 
 
@@ -691,6 +720,7 @@ def cmd_repair(args):
     """Clean stale palace lock files."""
     if getattr(args, "clean_locks", False):
         from .palace import clean_stale_locks, get_lock_dir
+
         lock_dir = get_lock_dir()
         removed, kept = clean_stale_locks(lock_dir)
         print(f"Removed {removed} stale lock(s). Kept {kept} active lock(s).")
@@ -743,7 +773,9 @@ def cmd_compress(args):
     from .backends.lancedb_backend import LanceDBBackend
     from .dialect import Dialect
 
-    palace_path = os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    palace_path = (
+        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
+    )
 
     # Load dialect (with optional entity config)
     config_path = args.config
@@ -1140,6 +1172,25 @@ def main():
         "--yes",
         action="store_true",
         help="Overwrite an existing <palace>.legacy backup without prompting.",
+    )
+    p_reindex.add_argument(
+        "--embedder",
+        default=None,
+        help=(
+            "Override embedder model for this reindex run only (sets "
+            "CASTLE_EMBEDDER_MODEL). MUST be passed together with --embedder-dim. "
+            "See README 'Going further: better recall with bge-m3' for known "
+            "model→dim pairs."
+        ),
+    )
+    p_reindex.add_argument(
+        "--embedder-dim",
+        type=int,
+        default=None,
+        help=(
+            "Override embedder output dim for this reindex run only (sets "
+            "CASTLE_EMBEDDER_DIM). MUST be passed together with --embedder."
+        ),
     )
 
     sub.add_parser("status", help="Show what's been filed")
