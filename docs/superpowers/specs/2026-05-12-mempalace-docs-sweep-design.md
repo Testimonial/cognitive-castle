@@ -67,11 +67,12 @@ The repo uses two different rebrand replacements depending on context:
 | Old | Context | Replacement |
 |---|---|---|
 | `mempalace` (in URL like `mempalace.git` or `MemPalace/mempalace`) | GitHub repo name | `cognitive-castle` (HYPHEN — matches `Testimonial/cognitive-castle` and the PyPI distribution name) |
-| `mempalace` (Python import or in-repo file path like `mempalace/searcher.py`) | Module / package directory | `cognitive_castle` (UNDERSCORE — matches the actual Python package name) |
+| `mempalace/` (in-repo path in prose docs, e.g. `mempalace/searcher.py`) | File path reference shown to readers | `cognitive-castle/` (HYPHEN — brand-friendly per user decision). NOTE: this is technically NOT a real on-disk path (the actual filesystem dir is `cognitive_castle/` because Python requires underscores). Readers will need to know that the real disk path swaps `cognitive-castle/` for `cognitive_castle/` when used as a Python module — but doc prose stays brand-consistent. |
+| `from mempalace import X` / `import mempalace` (Python source code) | Python import statement | `from cognitive_castle import X` / `import cognitive_castle` (UNDERSCORE — Python language rule, not a style choice). Rare in docs but appears in `benchmarks/mine_bench.py` and any code blocks showing how to import. |
 | `mempalace` (CLI command like `mempalace mine`) | Console script | `castle` (the actual console script name from `pyproject.toml`) |
 | `MemPalace` (prose / branding) | Project name | `Cognitive Castle` |
 
-A naive `sed -i 's/mempalace/cognitive_castle/g'` would corrupt GitHub URLs (`mempalace.git` → `cognitive_castle.git` is WRONG; the real repo is `cognitive-castle.git`). The implementer should use context-aware sed patterns rather than one bulk substitution. Example safe pattern set:
+A naive `sed -i 's/mempalace/cognitive_castle/g'` would corrupt both GitHub URLs and the docs style (`mempalace.git` → `cognitive_castle.git` is wrong; user wants hyphen for brand consistency). Implementer should use context-aware sed patterns:
 
 ```bash
 # For each prose/doc file, apply these in order:
@@ -79,7 +80,7 @@ sed -i \
   -e 's|https://github.com/MemPalace/mempalace|https://github.com/Testimonial/cognitive-castle|g' \
   -e 's|mempalace\.git|cognitive-castle.git|g' \
   -e 's|cd mempalace$|cd cognitive-castle|g' \
-  -e 's|\bmempalace/|cognitive_castle/|g' \
+  -e 's|\bmempalace/|cognitive-castle/|g' \
   -e 's|`mempalace`|`castle`|g' \
   -e 's|mempalace mine|castle mine|g' \
   -e 's|mempalace init|castle init|g' \
@@ -87,6 +88,15 @@ sed -i \
   -e 's|mempalace-mcp|castle-mcp|g' \
   -e 's|MemPalace|Cognitive Castle|g' \
   "$file"
+```
+
+**Exception for code-block Python imports**: when docs include Python source code (e.g. ` ```python ` blocks showing `from mempalace import miner`), the import statement MUST use underscore — Python syntactic rule. Affected files: `benchmarks/mine_bench.py` (it IS Python, not just docs) and any `.md` files with embedded code blocks. After the bulk sed above, the implementer should grep for `from cognitive-castle import` / `import cognitive-castle` (HYPHEN inside an import statement = Python SyntaxError) and fix to underscore:
+
+```bash
+# Defensive cleanup: re-fix Python imports that the bulk sed wrongly hyphenated
+grep -rln "from cognitive-castle import\|import cognitive-castle" . --include="*.py" --include="*.md" 2>/dev/null | xargs -r sed -i \
+  -e 's|from cognitive-castle import|from cognitive_castle import|g' \
+  -e 's|import cognitive-castle|import cognitive_castle|g'
 ```
 
 Implementer should grep each file after sed to catch anything that slipped through, and visually inspect for prose where `Cognitive Castle` reads awkwardly (e.g., possessive forms that need a comma adjustment).
@@ -210,7 +220,7 @@ from mempalace import miner
 
 Fixes:
 - Line 60: `mempalace.yaml` → `castle.yaml` (matches the production filename — see PR #B's i18n + miner work). Also note `cognitive_castle/miner.py:61` lists `mempalace.yml` as a legacy fallback, so writing `castle.yaml` is correct for new fixtures.
-- Lines 75, 142: `from mempalace import miner` → `from cognitive_castle import miner`. The `mempalace` package doesn't exist — this import currently raises `ModuleNotFoundError` if anyone runs the benchmark.
+- Lines 75, 142: `from mempalace import miner` → `from cognitive_castle import miner` (UNDERSCORE — Python import statement requires the underscored module name; the hyphenated form `from cognitive-castle import miner` is a SyntaxError). The `mempalace` package doesn't exist — this import currently raises `ModuleNotFoundError` if anyone runs the benchmark.
 
 #### `.agents/plugins/marketplace.json` — **points to deleted `.codex-plugin/`**
 
@@ -263,7 +273,7 @@ Stale brand + outdated file paths. Each line uses a DIFFERENT replacement target
 - `git clone https://github.com/<your-username>/mempalace.git` → `git clone https://github.com/<your-username>/cognitive-castle.git` (GitHub URL — HYPHEN)
 - `cd mempalace` → `cd cognitive-castle` (dir after clone — HYPHEN since that's what git clone creates)
 - `git remote add upstream https://github.com/MemPalace/mempalace.git` → `git remote add upstream https://github.com/Testimonial/cognitive-castle.git` (note org changed too: `MemPalace` → `Testimonial`)
-- `mempalace/` (file structure description: "core package (see mempalace/README.md for module guide)") → `cognitive_castle/` (Python module — UNDERSCORE)
+- `mempalace/` (file structure description: "core package (see mempalace/README.md for module guide)") → `cognitive-castle/` (HYPHEN per brand-consistency decision — note this is doc prose, not an actual on-disk path; the real filesystem dir is `cognitive_castle/`)
 - `https://github.com/MemPalace/mempalace/issues` → `https://github.com/Testimonial/cognitive-castle/issues` (GitHub URL — HYPHEN)
 
 The context-aware sed pattern set in the "Critical: hyphen vs underscore distinction" section handles all 7 correctly. Apply that pattern, then verify zero residue with `grep -nE "mempalace|MemPalace" CONTRIBUTING.md`.
