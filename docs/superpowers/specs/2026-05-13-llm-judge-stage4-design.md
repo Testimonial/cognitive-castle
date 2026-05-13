@@ -1,8 +1,18 @@
 # LLM-as-judge Stage 4 (opt-in) — Design Spec
 
 **Date:** 2026-05-13
-**Status:** Approved, ready for implementation plan
+**Status:** Revised after review (2026-05-13) — ready for implementation plan
 **Umbrella:** SOTA retrieval upgrade — PR #3 of 4 (PR #1 bge-m3 merged at `2118d1df`; PR #2 mxbai-rerank-large-v2 deferred for multilingual reasons)
+
+## Revision history
+
+- **2026-05-13 (initial):** First draft, approved section-by-section.
+- **2026-05-13 (post-review):** Two real issues + three minor improvements:
+  1. 400-char truncation was tighter than the cross-encoder's window (~2000 chars) — Stage 4 was being asked to make a better judgement with strictly less context than Stage 3 already had. Bumped to 600 chars.
+  2. `(acceptance #X)` cross-reference on the privacy note was unresolved. Now `(acceptance #10)`.
+  3. Added explicit `_get_provider(cfg)` private helper to the Components row so the test mocks have a contract to reference.
+  4. Portable Ollama-down smoke recipe (was Linux+systemd only).
+  5. Acknowledged `gemma3:e4b` as Castle's documented LLM default is a **pre-existing bug** — the tag doesn't exist in Ollama's registry (verified `ollama show gemma3:e4b` → not found). Spec now references "the configured LLM provider" rather than promoting a broken model name.
 
 ## Background
 
@@ -10,7 +20,7 @@ Castle's current retrieval pipeline ends at Stage 3 (cross-encoder rerank). The 
 
 For the last few percent — and especially for queries where lexical / semantic similarity isn't enough (subtle intent, implicit references, multi-hop reasoning) — an LLM-as-judge step can re-rank Stage 3's top candidates using actual language understanding. This is well-studied in the RAG literature: LLM rerankers consistently win on hard examples at the cost of 1-2s latency per query.
 
-Castle already has the infrastructure: `cognitive_castle/llm_client.py` exposes a provider abstraction (`OllamaProvider`, `OpenAICompatProvider`, `AnthropicProvider`) with a uniform `classify(system, user, json_mode=True) -> LLMResponse` interface. The default provider is Ollama with `gemma3:e4b` — local-first, no API key required, runs on consumer GPU. BYOK Anthropic/OpenAI/Google work transparently for users who configure them.
+Castle already has the infrastructure: `cognitive_castle/llm_client.py` exposes a provider abstraction (`OllamaProvider`, `OpenAICompatProvider`, `AnthropicProvider`) with a uniform `classify(system, user, json_mode=True) -> LLMResponse` interface. The default provider is Ollama; **the documented default model is `gemma3:e4b` but that tag does not exist in Ollama's registry** (verified 2026-05-13 with `ollama show gemma3:e4b` → "model not found"). This is a pre-existing default-LLM bug in Castle (introduced by PR #20 and never caught), independent of this spec. This PR ships against "whatever LLM the user has configured" rather than promoting the broken default; fixing the default tag is tracked as a separate follow-up. BYOK Anthropic/OpenAI/Google work transparently for users who configure them.
 
 This spec adds an optional Stage 4 to the pipeline. **Opt-in only.** Default behavior is identical to today's. The capability exists for users who want to spend 1-2s for higher precision on high-stakes queries.
 
@@ -66,7 +76,7 @@ Query → Stage 1 (recall) → Stage 2 (fusion) → Stage 3 (cross-encoder reran
 
 | File | Change | LOC |
 |---|---|---|
-| `cognitive_castle/judge.py` (new) | Public `judge(query, candidates, cfg) -> list[int]`. Builds prompt, calls llm_client, parses + validates JSON. Identity-order fallback with stderr warning on any failure. Mirrors `reranker.py`. | +80 |
+| `cognitive_castle/judge.py` (new) | Public `judge(query, candidates, cfg) -> list[int]`. Builds prompt, calls llm_client, parses + validates JSON. Identity-order fallback with stderr warning on any failure. Mirrors `reranker.py`. Includes a private `_get_provider(cfg) -> LLMProvider` helper that constructs the right provider from config — analogous to `reranker._get_reranker(model_name, device)`. Tests mock this helper to inject behaviour. | +80 |
 | `cognitive_castle/searcher.py` | Add `llm_rerank: bool = False` param to both `search()` and `search_memories()`. Thread through internal pipeline. After current line 422 (Stage 3 sort), if enabled: take top-`cfg.llm_judge_top_n` from reranked, call `judge.judge`, reorder, slice. | +20 |
 | `cognitive_castle/config.py` | New `llm_judge_top_n` property (default 10, env `CASTLE_LLM_JUDGE_TOP_N`). Pattern matches `reranker_k_interactive` at `config.py:392-413`. | +20 |
 | `cognitive_castle/cli.py` | Add `--llm-rerank` flag (store_true, default False) to the `castle search` subparser. Pass through to `search(..., llm_rerank=args.llm_rerank)`. Help text mentions 1-2s latency cost + uses configured LLM provider (default gemma3:e4b via Ollama). | +10 |
@@ -97,7 +107,7 @@ search_memories(query, ..., llm_rerank=False, n_results=5)
 search_memories(query, ..., llm_rerank=True, n_results=5)
   → Stage 1-2-3 identical to default
   → top_k_rows = top-10 from Stage 3 (cfg.llm_judge_top_n = 10)
-  → docs = [first 400 chars of each row's text]  # truncation keeps prompt tight
+  → docs = [first 600 chars of each row's text]  # truncation keeps prompt tight; ≥ cross-encoder's window
   → judge.judge(query, docs, cfg)
       → build prompts (see "LLM contract" below)
       → llm_client.classify(system, user, json_mode=True) → LLMResponse
@@ -124,10 +134,10 @@ You are a retrieval re-ranking assistant. Given a user query and 10 candidate do
 Query: <query>
 
 Candidates:
-[0] <text 0 truncated to 400 chars>
-[1] <text 1 truncated to 400 chars>
+[0] <text 0 truncated to 600 chars>
+[1] <text 1 truncated to 600 chars>
 ...
-[9] <text 9 truncated to 400 chars>
+[9] <text 9 truncated to 600 chars>
 ```
 
 ### Response validation (all must hold or fallback fires)
@@ -144,9 +154,11 @@ Any failure → identity-order fallback with stderr message `[judge] <specific r
 
 ### Truncation
 
-Each candidate snippet is truncated to **400 characters** before being inserted into the user prompt. Hardcoded constant in `judge.py`; not a config knob (YAGNI — promote to config only if benchmarks show it matters).
+Each candidate snippet is truncated to **600 characters** before being inserted into the user prompt. Hardcoded constant in `judge.py`; not a config knob (YAGNI — promote to config only if benchmarks show it matters).
 
-Rationale: 10 candidates × 400 chars = 4000 chars of candidate context + ~200 char query + ~300 char system prompt = ~4500 chars total. Comfortably fits in any local LLM context window (gemma3:e4b is 8K).
+Rationale: the cross-encoder at Stage 3 already truncates to ~512 tokens (~2000 chars) per candidate, so Stage 4 should see **at least** what Stage 3 saw. Setting truncation lower than the cross-encoder's window would force the LLM to make a better judgement with strictly less context — an unfair handicap. 600 chars is a conservative floor that captures the lead paragraph of typical drawers without blowing the LLM's context budget.
+
+Total prompt size: 10 candidates × 600 chars = 6000 chars + ~200 char query + ~300 char system prompt ≈ 6500 chars. Comfortably fits in any modern local LLM context window (8K is typical for ~4B-class models).
 
 ## Error handling
 
@@ -162,7 +174,7 @@ Rationale: 10 candidates × 400 chars = 4000 chars of candidate context + ~200 c
 | `len(candidates) == 1` | Returns `[0]` immediately without LLM call. (Single candidate has nothing to rerank.) |
 | BYOK provider configured (Anthropic/OpenAI/Google) | Candidate snippets are sent to that provider. No per-call warning. `castle init` already printed the privacy notice when BYOK was configured. |
 
-**Privacy note (acceptance #X):** When `--llm-rerank` is enabled AND the configured LLM provider is external (per `LLMProvider.is_external_service` at `llm_client.py:150-162`), candidate snippets DO leave the local machine. The user opted into BYOK at `castle init` time; reprinting privacy notices per-search is noise. The README's "Going further: --llm-rerank" subsection states this explicitly so the behavior is discoverable in docs, not just in code.
+**Privacy note (acceptance #10):** When `--llm-rerank` is enabled AND the configured LLM provider is external (per `LLMProvider.is_external_service` at `llm_client.py:150-162`), candidate snippets DO leave the local machine. The user opted into BYOK at `castle init` time; reprinting privacy notices per-search is noise. The README's "Going further: --llm-rerank" subsection states this explicitly so the behavior is discoverable in docs, not just in code.
 
 ## Testing
 
@@ -299,7 +311,7 @@ The PR is mergeable when ALL hold:
 4. Default test suite: `pytest tests/ -v --ignore=tests/benchmarks` — no NEW regressions (pre-existing CI-UNSTABLE failures acceptable)
 5. `castle search --help` shows `--llm-rerank` flag with help text that includes:
    - "1-2s extra latency" (the cost)
-   - "uses configured LLM provider (default: gemma3:e4b via Ollama)" (the mechanism)
+   - "uses the LLM provider configured at `castle init`" (the mechanism — neutral framing because the documented `gemma3:e4b` default is a known pre-existing broken tag)
 6. MCP `search_memories` tool schema (via `castle-mcp` `tools/list` JSON-RPC) shows `llm_rerank` as optional `boolean` property with `default: false`
 7. `ruff check .` and `ruff format --check .` clean on all 8 touched files
 8. **Live smoke (happy path):**
@@ -310,12 +322,14 @@ The PR is mergeable when ALL hold:
    Completes in <5s, returns ranked results, no stderr warnings.
 9. **Live smoke (Ollama-down fallback):**
    ```bash
-   # Stop Ollama
-   sudo systemctl stop ollama
+   # Stop Ollama by any means available on your platform:
+   #   Linux: sudo systemctl stop ollama
+   #   macOS: brew services stop ollama  (or quit the menu-bar app)
+   #   Universal fallback: pkill -f "ollama serve"
    castle search "test query" --llm-rerank --palace ~/.castle/palace
    ```
    Completes successfully, returns Stage 3 ordering, stderr contains `[judge] ... falling back to cross-encoder ordering`.
-10. README has `--llm-rerank` subsection inside the existing "Going further" block, including: when to use, 1-2s latency cost, mention of configured LLM provider, mention that BYOK external providers receive snippets (privacy note).
+10. README has `--llm-rerank` subsection inside the existing "Going further" block, including: when to use, 1-2s latency cost, mention that it uses the LLM provider configured at `castle init` (no specific model name promoted — the documented `gemma3:e4b` default is a known pre-existing bug tracked separately), mention that BYOK external providers receive snippets (privacy note).
 11. CLAUDE.md retrieval pipeline diagram shows the optional Stage 4 path.
 12. **Default behavior unchanged:** `castle search "x"` and MCP `search_memories({"query": "x"})` (both without `--llm-rerank` / `llm_rerank`) produce byte-identical output before and after this PR.
 
@@ -328,18 +342,27 @@ The PR is mergeable when ALL hold:
 - Changes to reranker (PR #2 — deferred for multilingual reasons)
 - Changes to fusion (PR #4 — future)
 
-## Spec self-review (2026-05-13)
+## Spec self-review (post-revision, 2026-05-13)
 
-1. **Placeholders:** None. All test code is concrete (mock setup + assertions shown). Pipeline integration point is `searcher.py:422-ish`; exact line will be discovered at plan-writing time.
+1. **Placeholders:** None. All test code is concrete (mock setup + assertions shown). Pipeline integration point is `searcher.py:422-ish`; exact line will be discovered at plan-writing time. `_get_provider(cfg)` private helper now explicitly named in Components row so tests have a stable contract.
 2. **Internal consistency:** Architecture, Components, Data Flow, Error Handling, Testing, and Acceptance all reference the same:
-   - `cognitive_castle/judge.py` new module
-   - `judge(query, candidates, cfg) -> list[int]` signature
+   - `cognitive_castle/judge.py` new module with `judge(query, candidates, cfg) -> list[int]` public entry + `_get_provider(cfg)` private helper
    - 10-candidate input default (`cfg.llm_judge_top_n`)
-   - 400-char hardcoded truncation
+   - **600-char** hardcoded truncation (revised from 400 after review caught the cross-encoder context-window asymmetry)
    - JSON contract with `ranked_indices` key
    - Identity-order fallback on every failure mode
    - No new env-var for snippet length
-3. **Scope:** Single sub-project (LLM-as-judge as opt-in Stage 4). The defer/skip decisions for PR #2 (mxbai swap) and PR #4 (fusion rules) are restated in the umbrella table and Out-of-Scope.
-4. **Ambiguity:** Opt-in semantics ("default=False, never silently invoked") stated in Goal, Architecture, Data Flow, Error Handling, and Acceptance #12. Privacy stance ("no per-search warning; documented at init + README") stated in Non-goals AND Error Handling AND Acceptance #10.
-5. **Empirical grounding:** Existing infrastructure verified: `llm_client.py` provides `classify(system, user, json_mode=True)`; `reranker.py` is the structural template for `judge.py`; `config.py:392-433` has the pattern for the new `llm_judge_top_n` property.
+3. **Scope:** Single sub-project (LLM-as-judge as opt-in Stage 4). The defer/skip decisions for PR #2 (mxbai swap) and PR #4 (fusion rules) are restated in the umbrella table and Out-of-Scope. The `gemma3:e4b` default-LLM-tag bug is explicitly carved out as pre-existing, with a separate follow-up.
+4. **Ambiguity:** Opt-in semantics ("default=False, never silently invoked") stated in Goal, Architecture, Data Flow, Error Handling, and Acceptance #12. Privacy stance ("no per-search warning; documented at init + README") stated in Non-goals AND Error Handling AND Acceptance #10. LLM-default phrasing now neutral ("the configured LLM provider") rather than promoting the broken `gemma3:e4b` tag.
+5. **Empirical grounding:**
+   - `llm_client.py` provides `classify(system, user, json_mode=True)` — verified at `llm_client.py:143`
+   - `reranker.py` is the structural template — verified, including `_get_reranker` private helper
+   - `config.py:392-433` has the pattern for the new `llm_judge_top_n` property
+   - `gemma3:e4b` does NOT exist in Ollama's registry — verified live (`ollama show gemma3:e4b` → not found). Spec adjusted to not depend on it.
 6. **Privacy explicit:** BYOK external-provider concern called out in Non-goals, Error Handling table, and Acceptance #10 — three places, consistent framing.
+7. **Post-review findings addressed:**
+   - ✅ Truncation bumped 400 → 600 chars (Stage 4 ≥ Stage 3 context).
+   - ✅ `(acceptance #X)` cross-reference resolved to `(acceptance #10)`.
+   - ✅ `_get_provider(cfg)` private helper named explicitly in Components row.
+   - ✅ Acceptance #9 smoke recipe now portable across Linux/macOS/universal fallback.
+   - ✅ `gemma3:e4b` is a pre-existing broken default — spec no longer promotes it.
