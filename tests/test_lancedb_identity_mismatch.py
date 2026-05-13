@@ -11,10 +11,10 @@ Covers the LanceDB backend's per-palace identity verification:
 
 from __future__ import annotations
 
-import multiprocessing
-import pytest
+import multiprocessing  # noqa: F401  # used in Task 7 (test_concurrent_grandfather_is_race_safe)
+import pytest  # noqa: F401  # used in test function decorators
 
-from cognitive_castle.backends import EmbedderIdentityMismatchError
+from cognitive_castle.backends import EmbedderIdentityMismatchError  # noqa: F401  # used in Tasks 5 & 6
 from cognitive_castle.backends.base import PalaceRef
 from cognitive_castle.backends.lancedb_backend import LanceDBBackend
 from cognitive_castle.config import CognitiveCastleConfig

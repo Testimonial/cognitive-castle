@@ -662,7 +662,7 @@ class LanceDBBackend(BaseBackend):
             table.add([{"key": "embedder_identity", "value": self._cfg.embedder_identity}])
         except Exception as e:
             msg = str(e).lower()
-            if "already exists" in msg or "duplicate" in msg or "exists" in msg:
+            if "exists" in msg or "duplicate" in msg:
                 # Race: another process won. Re-verify against winning identity.
                 stored = self._read_stored_identity(db)
                 if stored is not None and stored != self._cfg.embedder_identity:
