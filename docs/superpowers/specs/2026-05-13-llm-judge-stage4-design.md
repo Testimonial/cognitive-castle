@@ -7,12 +7,16 @@
 ## Revision history
 
 - **2026-05-13 (initial):** First draft, approved section-by-section.
-- **2026-05-13 (post-review):** Two real issues + three minor improvements:
+- **2026-05-13 (post-review #1):** Two real issues + three minor improvements:
   1. 400-char truncation was tighter than the cross-encoder's window (~2000 chars) — Stage 4 was being asked to make a better judgement with strictly less context than Stage 3 already had. Bumped to 600 chars.
   2. `(acceptance #X)` cross-reference on the privacy note was unresolved. Now `(acceptance #10)`.
   3. Added explicit `_get_provider(cfg)` private helper to the Components row so the test mocks have a contract to reference.
   4. Portable Ollama-down smoke recipe (was Linux+systemd only).
   5. Acknowledged `gemma3:e4b` as Castle's documented LLM default is a **pre-existing bug** — the tag doesn't exist in Ollama's registry (verified `ollama show gemma3:e4b` → not found). Spec now references "the configured LLM provider" rather than promoting a broken model name.
+- **2026-05-13 (post-review #2):** Internal-consistency survivals after review-1 cleanup:
+  6. `gemma3:e4b` framing fix from review-1 missed two Components rows (cli.py + README) — they still said "default gemma3:e4b via Ollama", contradicting Acceptance #5 + #10. Both rows now use neutral framing.
+  7. Cosmetic survivals of the broken tag in the test mock and Acceptance #8 comment — replaced with `"test-model"` placeholder + neutral comment respectively.
+  8. Error-handling table promised a `len(candidates) == 1` short-circuit but the test suite didn't cover it. Added `test_judge_single_candidate_returns_zero_without_llm_call` (test #8).
 
 ## Background
 
@@ -79,15 +83,15 @@ Query → Stage 1 (recall) → Stage 2 (fusion) → Stage 3 (cross-encoder reran
 | `cognitive_castle/judge.py` (new) | Public `judge(query, candidates, cfg) -> list[int]`. Builds prompt, calls llm_client, parses + validates JSON. Identity-order fallback with stderr warning on any failure. Mirrors `reranker.py`. Includes a private `_get_provider(cfg) -> LLMProvider` helper that constructs the right provider from config — analogous to `reranker._get_reranker(model_name, device)`. Tests mock this helper to inject behaviour. | +80 |
 | `cognitive_castle/searcher.py` | Add `llm_rerank: bool = False` param to both `search()` and `search_memories()`. Thread through internal pipeline. After current line 422 (Stage 3 sort), if enabled: take top-`cfg.llm_judge_top_n` from reranked, call `judge.judge`, reorder, slice. | +20 |
 | `cognitive_castle/config.py` | New `llm_judge_top_n` property (default 10, env `CASTLE_LLM_JUDGE_TOP_N`). Pattern matches `reranker_k_interactive` at `config.py:392-413`. | +20 |
-| `cognitive_castle/cli.py` | Add `--llm-rerank` flag (store_true, default False) to the `castle search` subparser. Pass through to `search(..., llm_rerank=args.llm_rerank)`. Help text mentions 1-2s latency cost + uses configured LLM provider (default gemma3:e4b via Ollama). | +10 |
+| `cognitive_castle/cli.py` | Add `--llm-rerank` flag (store_true, default False) to the `castle search` subparser. Pass through to `search(..., llm_rerank=args.llm_rerank)`. Help text mentions 1-2s latency cost + says "uses the LLM provider configured at `castle init`" (neutral framing — no specific model promoted, since `gemma3:e4b` default is a pre-existing broken tag tracked separately). | +10 |
 | `cognitive_castle/mcp_server.py` | Add optional `llm_rerank: bool = False` param to the `search_memories` MCP tool handler. Update the JSON schema in the `TOOLS` dict. Pass through to `search_memories(..., llm_rerank=...)`. | +15 |
-| `tests/test_judge.py` (new) | 7 unit tests for `judge.judge()`: happy path, malformed JSON, missing key, wrong count, duplicate indices, LLM error, empty candidates. All use a mock LLM. | +120 |
+| `tests/test_judge.py` (new) | 8 unit tests for `judge.judge()`: happy path, malformed JSON, missing key, wrong count, duplicate indices, LLM error, empty candidates, single candidate (short-circuit). All use a mock LLM. | +130 |
 | `tests/test_searcher.py` (existing) | 3 integration tests: stage 4 NOT called when `llm_rerank=False`; stage 4 called once with top-`llm_judge_top_n` when True; identity fallback preserves Stage 3 order. | +60 |
 | `tests/test_cli.py` (existing) | 1 test: `--llm-rerank` flag propagates to `search(llm_rerank=True)`. | +20 |
-| `README.md` | Append `--llm-rerank` subsection inside the existing "Going further" block (added by PR #1). Include: when to use, 1-2s latency cost, "uses configured LLM (gemma3:e4b via Ollama by default; BYOK Anthropic/OpenAI/Google supported)". | +20 |
+| `README.md` | Append `--llm-rerank` subsection inside the existing "Going further" block (added by PR #1). Include: when to use, 1-2s latency cost, "uses the LLM provider configured at `castle init` (Ollama by default; BYOK Anthropic/OpenAI/Google supported)" — no specific model name promoted, since the documented `gemma3:e4b` default is a pre-existing broken tag tracked separately. | +20 |
 | `CLAUDE.md` | Update the retrieval pipeline diagram (line 179 area) to show optional Stage 4. | +5 |
 
-**Total:** ~370 LOC across 1 new module, 1 new test file, 8 existing files.
+**Total:** ~380 LOC across 1 new module, 1 new test file, 8 existing files.
 
 ## Data flow
 
@@ -198,7 +202,7 @@ def _mock_provider(text):
     """Return a provider that returns the given text from classify()."""
     provider = MagicMock()
     provider.classify.return_value = LLMResponse(
-        text=text, model="gemma3:e4b", provider="ollama", raw={}
+        text=text, model="test-model", provider="test", raw={}
     )
     return provider
 
@@ -258,6 +262,14 @@ def test_judge_empty_candidates_returns_empty_without_llm_call(monkeypatch):
     monkeypatch.setattr("cognitive_castle.judge._get_provider", lambda cfg: provider)
     assert judge("q", [], _mock_cfg()) == []
     provider.classify.assert_not_called()
+
+
+def test_judge_single_candidate_returns_zero_without_llm_call(monkeypatch):
+    """Single candidate has nothing to rerank — short-circuit before LLM call."""
+    provider = MagicMock()
+    monkeypatch.setattr("cognitive_castle.judge._get_provider", lambda cfg: provider)
+    assert judge("q", ["only doc"], _mock_cfg()) == [0]
+    provider.classify.assert_not_called()
 ```
 
 ### Extension to `tests/test_searcher.py`
@@ -305,7 +317,7 @@ No existing tests change. All current tests pass unchanged.
 
 The PR is mergeable when ALL hold:
 
-1. `pytest tests/test_judge.py -v` — all 7 unit tests pass
+1. `pytest tests/test_judge.py -v` — all 8 unit tests pass
 2. `pytest tests/test_searcher.py -v -k llm_rerank` — 3 integration tests pass
 3. `pytest tests/test_cli.py -v -k llm_rerank` — CLI flag test passes
 4. Default test suite: `pytest tests/ -v --ignore=tests/benchmarks` — no NEW regressions (pre-existing CI-UNSTABLE failures acceptable)
@@ -316,7 +328,7 @@ The PR is mergeable when ALL hold:
 7. `ruff check .` and `ruff format --check .` clean on all 8 touched files
 8. **Live smoke (happy path):**
    ```bash
-   # Ollama running with gemma3:e4b
+   # Ollama (or other configured LLM provider) running with a model that exists in its registry
    castle search "test query" --llm-rerank --palace ~/.castle/palace
    ```
    Completes in <5s, returns ranked results, no stderr warnings.
@@ -342,7 +354,7 @@ The PR is mergeable when ALL hold:
 - Changes to reranker (PR #2 — deferred for multilingual reasons)
 - Changes to fusion (PR #4 — future)
 
-## Spec self-review (post-revision, 2026-05-13)
+## Spec self-review (post-revision #2, 2026-05-13)
 
 1. **Placeholders:** None. All test code is concrete (mock setup + assertions shown). Pipeline integration point is `searcher.py:422-ish`; exact line will be discovered at plan-writing time. `_get_provider(cfg)` private helper now explicitly named in Components row so tests have a stable contract.
 2. **Internal consistency:** Architecture, Components, Data Flow, Error Handling, Testing, and Acceptance all reference the same:
@@ -360,9 +372,15 @@ The PR is mergeable when ALL hold:
    - `config.py:392-433` has the pattern for the new `llm_judge_top_n` property
    - `gemma3:e4b` does NOT exist in Ollama's registry — verified live (`ollama show gemma3:e4b` → not found). Spec adjusted to not depend on it.
 6. **Privacy explicit:** BYOK external-provider concern called out in Non-goals, Error Handling table, and Acceptance #10 — three places, consistent framing.
-7. **Post-review findings addressed:**
+7. **Post-review #1 findings addressed:**
    - ✅ Truncation bumped 400 → 600 chars (Stage 4 ≥ Stage 3 context).
    - ✅ `(acceptance #X)` cross-reference resolved to `(acceptance #10)`.
    - ✅ `_get_provider(cfg)` private helper named explicitly in Components row.
    - ✅ Acceptance #9 smoke recipe now portable across Linux/macOS/universal fallback.
    - ✅ `gemma3:e4b` is a pre-existing broken default — spec no longer promotes it.
+8. **Post-review #2 findings addressed:**
+   - ✅ Components rows for cli.py + README — both no longer mention `gemma3:e4b`; use neutral "the LLM provider configured at `castle init`" framing matching Acceptance #5 + #10.
+   - ✅ Test mock model field changed `"gemma3:e4b"` → `"test-model"` (mock doesn't validate but stops propagating the broken name).
+   - ✅ Acceptance #8 smoke-recipe comment reworded to not depend on a specific model tag.
+   - ✅ Added `test_judge_single_candidate_returns_zero_without_llm_call` (test #8 of 8) — closes the gap where the error-handling table promised a short-circuit the tests didn't verify.
+   - ✅ Test count + LOC updated consistently: Components row (8 tests, +130 LOC), Acceptance #1 (8 unit tests), total (~380 LOC).
