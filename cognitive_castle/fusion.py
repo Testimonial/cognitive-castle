@@ -24,6 +24,7 @@ class ScoredCandidate:
     drawer_id: str
     timestamp_unix: float
     score: float
+    contributing_signals: frozenset[str] = frozenset()
 
 
 def weighted_rrf(
@@ -55,6 +56,7 @@ def weighted_rrf(
     """
     scores: dict[str, float] = {}
     timestamps: dict[str, float] = {}
+    contributing_signals_acc: dict[str, set[str]] = {}
 
     for signal_name, candidates in rank_lists.items():
         weight = weights.get(signal_name, 0.0)
@@ -67,6 +69,7 @@ def weighted_rrf(
             contribution = weight / (k_rrf + rank)
             scores[cand.drawer_id] = scores.get(cand.drawer_id, 0.0) + contribution
             timestamps.setdefault(cand.drawer_id, cand.timestamp_unix)
+            contributing_signals_acc.setdefault(cand.drawer_id, set()).add(signal_name)
 
     return sorted(
         (
@@ -74,6 +77,7 @@ def weighted_rrf(
                 drawer_id=did,
                 timestamp_unix=timestamps[did],
                 score=score,
+                contributing_signals=frozenset(contributing_signals_acc.get(did, set())),
             )
             for did, score in scores.items()
         ),

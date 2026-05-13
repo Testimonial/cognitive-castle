@@ -127,3 +127,18 @@ class TestApplyRecency:
     def test_empty_input_returns_empty(self):
         now = datetime(2026, 5, 10, tzinfo=timezone.utc)
         assert apply_recency([], now=now, tau_days=90.0, max_boost=1.5) == []
+
+
+def test_weighted_rrf_populates_contributing_signals():
+    """contributing_signals reflects which signals had non-zero weight + the candidate appeared in their rank list."""
+    rank_lists = {
+        "dense": [_ref("a"), _ref("b")],
+        "sparse": [_ref("a")],
+        "kg": [_ref("b")],
+    }
+    weights = {"dense": 1.0, "sparse": 1.0, "kg": 0.5}
+
+    result = weighted_rrf(rank_lists, weights, k_rrf=60)
+    by_id = {sc.drawer_id: sc for sc in result}
+    assert by_id["a"].contributing_signals == frozenset({"dense", "sparse"})
+    assert by_id["b"].contributing_signals == frozenset({"dense", "kg"})
