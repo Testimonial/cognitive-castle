@@ -8,7 +8,7 @@
 ## Revision history
 
 - **2026-05-13 (initial):** First draft, approved section-by-section.
-- **2026-05-13 (post-review):** Substantive findings about scope vs. current data:
+- **2026-05-13 (post-review #1):** Substantive findings about scope vs. current data:
   1. **Internal contradiction fixed:** boost-tags are emitted by productions elaborating input-link `^memory` WMEs (i-supported attributes); Python reads them back from input-link, NOT output-link. Data-flow section updated.
   2. **`^entity-match`, `^type`, `^subtype` removed from WM schema:** these would require hit-provenance tracking (`fusion.py` signal aggregation discards which signal contributed) AND drawer-type metadata (not in current closet/drawer fields). Adding them is scope expansion; deferred. Rules that depended on them (`entity-match`, `correction-priority`) dropped from initial `BOOST_MULTIPLIERS`.
   3. **`stale-penalty` rule dropped from initial set:** depends on `access-count` (EpMem-driven, placeholder=0 in #4a) and `decay` (placeholder=1.0). Would never fire (or always fire on every drawer) until #4c wires EpMem. Cleaner to add later.
@@ -18,6 +18,13 @@
   7. **Acceptance #11 smoke fixed:** `PYTHONPATH=/tmp` doesn't hide already-installed packages. Added `CASTLE_SML_DISABLED=1` testability knob to `_load_sml()` so the fallback path is testable.
   8. **`pyproject.toml` row dropped:** empty extras group doesn't surface useful pip behavior; README documents the install prereq.
   9. **Specified re-sort location:** `apply_soar_boosts` mutates `hit["score"]` and adds audit fields but does NOT re-sort. Callers (CLI / MCP handler) re-sort by adjusted score before returning to user.
+- **2026-05-13 (post-review #2):** Survivals of the old 5-rule framing + medium concerns:
+  10. **Three 5-rule survivals fixed.** Architecture section still said "5-7 rules" (now "2 rules"). Audit-trail example showed `entity-match` tag + 1.30 multiplier (now uses `same-project` + 1.15). Compound-tags test description said `1.25 × 1.30` (now `1.25 × 1.15`). Same pattern as PR #1 + #3 first-review survivals.
+  11. **MCP kill-switch error format softened.** Initial spec showed `{"error": {"code": "kill_switch_active"}}` — not valid JSON-RPC (code must be integer) and not the MCP tool-error mechanism. Now points at "per Castle's existing mcp_server.py error-surfacing convention" with implementation-time resolution.
+  12. **Cross-test SOAR isolation called out.** Singleton kernel + palace-keyed agent cache leaks state across tests. Added recommended `reset_soar_state` autouse fixture to test file outline.
+  13. **`score_pre_soar` presence clarified:** audit fields ONLY present when `--soar-boost` was applied. Default-path responses don't include them. MCP clients shouldn't assume.
+  14. **`pytestmark_soar` renamed to `_requires_sml`** for clarity (avoid confusion with pytest's special `pytestmark` module-level variable).
+  15. **2 production names spelled out explicitly:** `castle-boost*recency-boost`, `castle-boost*same-project`.
 
 ## Background
 
@@ -105,7 +112,7 @@ Stage 1 → Stage 2 (fusion) → Stage 3 (cross-encoder rerank)
 - `apply_soar_boosts(hits, cfg) -> list[dict]` — public entry. Builds working memory from hits, runs decision cycle, reads back boost-tags, applies multipliers, returns hits with `score` adjusted + `soar_boost` + `soar_tags` audit fields.
 - `BOOST_MULTIPLIERS: dict[str, float]` — module-level tag → multiplier map.
 
-**New rule file: `cognitive_castle/rules/castle-boost.soar`** — initial production set (5-7 rules). Match candidate metadata, emit `^boost-tag <tag>` attributes. Reference material: prior 144-line version in git history (commit `b49ebe83`); this PR ships a *minimal subset* and adds more in follow-ups.
+**New rule file: `cognitive_castle/rules/castle-boost.soar`** — initial production set (**2 rules** for #4a: `castle-boost*recency-boost`, `castle-boost*same-project`). Match candidate metadata, emit `^boost-tag <tag>` attributes via i-support on the matching `<m>`. Reference material: prior 144-line version in git history (commit `b49ebe83`); this PR ships a *minimal subset* and adds more in follow-ups as supporting data fields land (hit-provenance for `entity-match`, drawer-type metadata for `correction-priority`, EpMem access-counts for `stale-penalty`).
 
 **Pipeline integration:** Post-pipeline boost runs in TWO places — CLI (`cli.py:cmd_search`) and MCP (`mcp_server.py` `castle_search` handler). Both consult the opt-in flag and call `apply_soar_boosts(hits, cfg)` AFTER `search_memories()` returns (and after Stage 4 LLM-judge if enabled).
 
@@ -113,11 +120,11 @@ Stage 1 → Stage 2 (fusion) → Stage 3 (cross-encoder rerank)
 
 | File | Change | LOC |
 |---|---|---|
-| `cognitive_castle/soar_bridge.py` (new) | Public `apply_soar_boosts(hits, cfg) -> list[dict]`. Lazy SML import via `_load_sml()` — also respects `CASTLE_SML_DISABLED=1` env var (returns None even if SML importable, for testability). Singleton kernel via `_get_kernel()`. Per-palace agent via `_get_agent(palace_path)`. Builds working memory from hits using the input-link schema (`^context` + `^memory[]`), clears prior WM via `agent.GetInputLink().DestroyAllWMEs()`, runs decision cycle via `agent.RunSelf(50)`, reads back `^boost-tag` attributes by iterating input-link memory WME children, maps tags to multipliers via `BOOST_MULTIPLIERS`, applies to `hit["score"]`. Augments hits with `soar_boost` (float compound multiplier) + `soar_tags` (list[str]) + `score_pre_soar` (original score). Does NOT re-sort (caller's responsibility). EpMem + SMem configured via `agent.ExecuteCommandLine("epmem/smem --set learning on")` at first agent creation. Stderr-warning-+-return-unchanged fallback on any Soar failure. Boost clamped to range `[0.1, 10.0]`. One-time-per-process warning via module-level `_WARNED: set`. | +250 |
+| `cognitive_castle/soar_bridge.py` (new) | Public `apply_soar_boosts(hits, cfg) -> list[dict]`. Lazy SML import via `_load_sml()` — also respects `CASTLE_SML_DISABLED=1` env var (returns None even if SML importable, for testability). Singleton kernel via `_get_kernel()`. Per-palace agent via `_get_agent(palace_path)`. Builds working memory from hits using the input-link schema (`^context` + `^memory[]`), clears prior WM via `agent.GetInputLink().DestroyAllWMEs()`, runs decision cycle via `agent.RunSelf(50)`, reads back `^boost-tag` attributes by iterating input-link memory WME children, maps tags to multipliers via `BOOST_MULTIPLIERS`, applies to `hit["score"]`. Augments hits with `soar_boost` (float compound multiplier) + `soar_tags` (list[str]) + `score_pre_soar` (original score). Does NOT re-sort (caller's responsibility). EpMem + SMem configured via `agent.ExecuteCommandLine("epmem/smem --set learning on")` at first agent creation. Stderr-warning-+-return-unchanged fallback on any Soar failure. Boost clamped to range `[0.1, 10.0]`. One-time-per-process warning via module-level `_WARNED: set`. **Includes `_reset_for_test()` helper** that clears `_KERNEL`, `_AGENTS`, and `_WARNED` — used by the autouse pytest fixture to prevent cross-test state leakage. | +260 |
 | `cognitive_castle/rules/castle-boost.soar` (new) | Initial production set (**2 rules** for #4a). Each matches on memory attributes and adds `^boost-tag <tag>` via i-support on the matching `<m>`. Initial tags: `recency-boost` (matches `^recently-accessed "true"`), `same-project` (matches when `<m>.project` equals `<context>.project`). Includes the standard Soar header (`sp {castle-boost*<name>` syntax). Follow-up PRs add `entity-match`, `correction-priority`, `stale-penalty` rules when the data they need exists. | +35 |
 | `cognitive_castle/config.py` | Add 2 new properties (env-first → file-config → default, matching `embedder_model` pattern at `config.py:305-321`): `soar_enabled` (default `False`, env `CASTLE_SOAR_ENABLED`) — kill switch. `soar_rules_path` (default `<package>/rules/castle-boost.soar`, env `CASTLE_SOAR_RULES_PATH`) — lets users point at custom rule files. | +30 |
 | `cognitive_castle/cli.py` | Add `--soar-boost` flag (store_true, default False) to `castle search` subparser. Pass through to `search()` (which then propagates to the search dict). Help text: `"Apply SOAR symbolic-rule boost-tags to final scores (experimental; requires Soar 9.6+ + SML Python bindings installed; activate via CASTLE_SOAR_ENABLED=1)"`. ALSO: if `--soar-boost` is passed AND `cfg.soar_enabled` is False, `sys.exit(2)` with clear stderr `"CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost"` before any palace work happens. | +25 |
-| `cognitive_castle/mcp_server.py` | Add `soar_boost: boolean (default false)` to `castle_search` tool schema. Handler reads `arguments.get("soar_boost", False)`; if True AND `cfg.soar_enabled`, call `soar_bridge.apply_soar_boosts(hits, cfg)` BEFORE returning. Runs AFTER llm-rerank (already applied earlier in handler from PR #3). Same kill-switch behavior: if soar_boost requested but soar_enabled False, raise a clear error in the response (MCP can't sys.exit). | +30 |
+| `cognitive_castle/mcp_server.py` | Add `soar_boost: boolean (default false)` to `castle_search` tool schema. Handler reads `arguments.get("soar_boost", False)`; if True AND `cfg.soar_enabled`, call `soar_bridge.apply_soar_boosts(hits, cfg)` BEFORE returning. Runs AFTER llm-rerank (already applied earlier in handler from PR #3). Same kill-switch behavior: if soar_boost requested but soar_enabled False, surface a clear error in the response **per Castle's existing mcp_server.py error-surfacing convention** (plan-writer inspects how other handler errors are returned and matches style — initial sketch of JSON-RPC-style `{"error": {"code": "kill_switch_active"}}` was wrong: JSON-RPC requires integer code, and MCP tool errors typically use `isError: true` + content). | +30 |
 | `tests/test_soar_bridge.py` (new) | 8 Soar tests gated by `@pytest.mark.soar` marker (auto-skip if SML import fails). Plus 2 non-Soar tests (kill switch, SML-unavailable fallback) that always run. | +200 |
 | `tests/test_cli.py` (existing) | 2 tests: `--soar-boost` flag propagation; kill-switch exit code. | +30 |
 | `tests/test_mcp_server.py` (existing) | 1 test: `soar_boost:true` MCP param threading. | +20 |
@@ -186,7 +193,7 @@ castle search "..." --soar-boost   (with CASTLE_SOAR_ENABLED=0)
   ← no palace work performed
 ```
 
-For MCP, since handlers can't `sys.exit`, return an error response: `{"error": {"code": "kill_switch_active", "message": "..."}}`.
+For MCP, since handlers can't `sys.exit`, surface a clear error in the response. **Exact response shape: per Castle's existing `mcp_server.py` error-surfacing convention** (look at how `castle_search` already returns errors for other failures — `tool_search()` or whatever the active handler-error pattern is). The plan-writer will inspect mcp_server.py and match the existing style. Initial spec drafts of `{"error": {"code": "kill_switch_active"}}` were wrong on two counts: JSON-RPC requires integer `code`, and MCP tool-call errors typically use the `isError: true` + content mechanism rather than JSON-RPC `error` field.
 
 ### SOAR working memory schema (revised for #4a — only fields the current data supports)
 
@@ -233,16 +240,18 @@ Additional rules (`entity-match`, `correction-priority`, `stale-penalty`) are qu
 
 ### Per-hit audit trail in output
 
+Audit fields are present ONLY when `--soar-boost` was applied. Default-path responses (no flag, or kill-switch-disabled) do NOT include these fields — MCP clients should not assume their presence.
+
 ```json
 {
   "id": "abc-123",
   "text": "...",
   "wing": "...",
   "room": "...",
-  "score": 1.38,                  // post-boost
+  "score": 1.22,                  // post-boost
   "score_pre_soar": 0.85,         // pre-boost
-  "soar_boost": 1.625,            // compound multiplier (1.25 × 1.30)
-  "soar_tags": ["recency-boost", "entity-match"]
+  "soar_boost": 1.4375,           // compound multiplier (1.25 × 1.15)
+  "soar_tags": ["recency-boost", "same-project"]
 }
 ```
 
@@ -254,7 +263,7 @@ All Soar failures degrade gracefully — search ALWAYS returns hits, never error
 
 | Failure | Behavior |
 |---|---|
-| `--soar-boost` passed AND `CASTLE_SOAR_ENABLED=0` | CLI: `sys.exit(2)` + stderr `CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost`. MCP: error response `{"error": {"code": "kill_switch_active"}}`. |
+| `--soar-boost` passed AND `CASTLE_SOAR_ENABLED=0` | CLI: `sys.exit(2)` + stderr `CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost`. MCP: surface a clear error in the response per Castle's existing mcp_server.py error-surfacing convention (exact response shape resolved at plan time by inspecting how other errors are returned). |
 | SML Python bindings not installed (`import Python_sml_ClientInterface` fails) | `_load_sml()` catches ImportError, stderr `[soar] SML Python bindings not available — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0` ONCE per process, returns hits unchanged. |
 | `CASTLE_SML_DISABLED=1` env var set | `_load_sml()` returns None even if SML is importable. Same downstream behavior as "SML not installed" — stderr warning + hits unchanged. Used only for testing the fallback path; not documented in user-facing README. |
 | `cfg.soar_enabled = False` AND no `--soar-boost` flag | `apply_soar_boosts` not invoked. Default path. |
@@ -285,14 +294,28 @@ try:
 except ImportError:
     pass
 
-pytestmark_soar = pytest.mark.skipif(not _SML_AVAILABLE, reason="Soar 9.6+ SML not installed")
+_requires_sml = pytest.mark.skipif(not _SML_AVAILABLE, reason="Soar 9.6+ SML not installed")
+
+
+@pytest.fixture(autouse=True)
+def reset_soar_state():
+    """Clear singleton kernel + agent cache between tests so they don't share state.
+
+    The bridge uses a module-level kernel singleton and palace-keyed agent cache for
+    efficiency in production. In tests, sequential tests using the same palace would
+    hit a cached agent with stale productions/WM from the prior test. Reset after
+    each test.
+    """
+    yield
+    from cognitive_castle import soar_bridge
+    soar_bridge._reset_for_test()  # clears _KERNEL, _AGENTS, _WARNED
 
 
 # ── Soar-required tests (skip if SML unavailable) ──────────────────────
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_loads_rules_and_runs_decision_cycle(tmp_path):
     """Smoke: SOAR kernel + agent + rule file load + decision cycle completes."""
     # ... test body builds a minimal cfg pointing at the shipped rule file,
@@ -300,43 +323,43 @@ def test_apply_soar_boosts_loads_rules_and_runs_decision_cycle(tmp_path):
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_returns_hits_unchanged_when_no_tags_fire(tmp_path):
     """Empty rule file → hits returned with soar_boost=1.0, soar_tags=[]."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_multiplies_score_for_recency_tag(tmp_path):
     """A hit with recently-accessed=true → recency-boost tag → score × 1.25."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_compounds_multiple_tags(tmp_path):
-    """A hit matching 2 rules → both tags fire → multipliers compound (1.25 × 1.30)."""
+    """A hit matching both rules → both tags fire → multipliers compound (1.25 × 1.15 = 1.4375)."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_clamps_to_range(tmp_path):
     """Compounded multipliers > 10.0 or < 0.1 → clamped to bounds."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_truncates_to_50_hits(tmp_path, capsys):
     """Input of 100 hits → WM populated with first 50; remaining 50 returned unboosted + stderr warning."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_clears_wm_between_calls(tmp_path):
     """Two sequential calls don't leak boost-tags from the first call into the second."""
 
 
 @pytest.mark.soar
-@pytestmark_soar
+@_requires_sml
 def test_apply_soar_boosts_unknown_tag_ignored_with_warning(tmp_path, capsys):
     """A rule that emits an unrecognized boost-tag → tag ignored, stderr warning once."""
 
@@ -436,7 +459,7 @@ The PR is mergeable when ALL hold:
 - ❌ Feedback signal — no signal collected from LLM-judge / user clicks / drawer access patterns
 - ❌ Bundled Soar binary — user must build Soar 9.6+ + SML from source
 
-## Spec self-review (post-revision, 2026-05-13)
+## Spec self-review (post-revision #2, 2026-05-13)
 
 1. **Placeholders:** None. Test code is concrete (mock setup + assertions shown for always-run tests; Soar-gated tests describe intent + structure; rule-file structure shown for the new `.soar` file with both 2 initial productions described in enough detail for plan-writing).
 2. **Internal consistency:** Architecture, Components, Data Flow, Error Handling, Testing, and Acceptance all reference:
@@ -466,3 +489,10 @@ The PR is mergeable when ALL hold:
    - ✅ `pyproject.toml` row dropped (empty extras group adds nothing).
    - ✅ Re-sort location specified: callers (CLI/MCP) re-sort, not `apply_soar_boosts`.
    - ✅ Filename misnomer noted in revision history; preserve git history rather than rename.
+9. **Post-review #2 findings addressed:**
+   - ✅ Three 5-rule survivals fixed (Architecture row, audit-trail example, test description). Same pattern as PR #1/#3 first-revision survivals — the spec body was updated but examples/cross-references weren't swept.
+   - ✅ MCP kill-switch error format softened to "per Castle's existing mcp_server.py convention" — initial sketches of `{"error": {"code": "kill_switch_active"}}` were wrong on two counts.
+   - ✅ Cross-test SOAR isolation: added `_reset_for_test()` helper to `soar_bridge.py` (Components row updated to +260 LOC) + autouse `reset_soar_state` pytest fixture in `tests/test_soar_bridge.py` outline.
+   - ✅ `score_pre_soar` audit-field presence: explicit one-line note that fields are present ONLY when `--soar-boost` was applied; MCP clients shouldn't assume.
+   - ✅ `pytestmark_soar` renamed to `_requires_sml` (avoid confusion with pytest's `pytestmark` module-level variable).
+   - ✅ 2 production names spelled out: `castle-boost*recency-boost`, `castle-boost*same-project`.
