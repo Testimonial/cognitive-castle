@@ -91,3 +91,17 @@ def test_judge_single_candidate_returns_zero_without_llm_call(monkeypatch):
     monkeypatch.setattr("cognitive_castle.judge._get_provider", lambda cfg: provider)
     assert judge("q", ["only doc"], _mock_cfg()) == [0]
     provider.classify.assert_not_called()
+
+
+def test_judge_falls_back_on_bool_indices(monkeypatch, capsys):
+    """Booleans are not valid indices even though isinstance(True, int) is True.
+
+    Without an explicit bool guard, [True, False, 2, 3, 4, 5, 6, 7, 8, 9]
+    would pass the int check AND the set-equality check (True == 1, False == 0)
+    and silently corrupt the ordering. The validator must reject booleans.
+    """
+    provider = _mock_provider(json.dumps({"ranked_indices": [True, False, 2, 3, 4, 5, 6, 7, 8, 9]}))
+    monkeypatch.setattr("cognitive_castle.judge._get_provider", lambda cfg: provider)
+    result = judge("q", [f"doc {i}" for i in range(10)], _mock_cfg())
+    assert result == list(range(10))
+    assert "non-int" in capsys.readouterr().err.lower()

@@ -72,7 +72,9 @@ def _validate_ranked_indices(parsed, n: int) -> tuple[bool, str]:
         return False, f"'ranked_indices' is not a list (got {type(indices).__name__})"
     if len(indices) != n:
         return False, f"wrong count: got {len(indices)} indices, expected {n}"
-    if not all(isinstance(i, int) for i in indices):
+    # isinstance(True, int) is True in Python; bools must be excluded so the
+    # LLM can't smuggle [True, False, 2, ...] past the permutation check.
+    if not all(isinstance(i, int) and not isinstance(i, bool) for i in indices):
         return False, "indices contain non-int values"
     if set(indices) != set(range(n)):
         return False, "indices are not a permutation of range(n) (duplicates or out-of-range)"
