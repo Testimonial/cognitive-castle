@@ -165,17 +165,20 @@ def _get_agent(palace_path: str, rules_path: str):
         return None
 
     try:
-        agent.LoadProductions(rules_path)
-        # LoadProductions returns a bool in SML; also expose via GetLastCommandLineResult
-        if hasattr(agent, "GetLastCommandLineResult"):
-            result = agent.GetLastCommandLineResult()
-            if "error" in str(result).lower() and "syntax" in str(result).lower():
-                _warn_once(
-                    "rules-parse-failure",
-                    f"rule parse failure: {result}",
-                )
-                kernel.DestroyAgent(agent)
-                return None
+        # LoadProductions returns a Python bool in Soar 9.6.40: True on
+        # success, False on syntax / parse error. The actual error text
+        # is in GetLastCommandLineResult() when False.
+        ok = agent.LoadProductions(rules_path)
+        if not ok:
+            err_msg = ""
+            if hasattr(agent, "GetLastCommandLineResult"):
+                err_msg = str(agent.GetLastCommandLineResult())
+            _warn_once(
+                "rules-parse-failure",
+                f"rule parse failure ({rules_path}): {err_msg or 'unknown'}",
+            )
+            kernel.DestroyAgent(agent)
+            return None
     except Exception as e:
         _warn_once(
             "rules-load-failed",
@@ -251,12 +254,24 @@ def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
 
 
 def _compute_age_seconds(created_at_iso: Optional[str], now: float) -> float:
-    """Compute age in seconds from ISO timestamp. Returns large value if missing/invalid."""
+    """Compute age in seconds from ISO timestamp. Returns large value if missing/invalid.
+
+    Handles ``"2026-05-13T00:00:00Z"`` (UTC, "Z" suffix) and
+    ``"2026-05-13T00:00:00"`` (naive — assumed UTC for our purposes).
+    """
     if not created_at_iso:
         return float("inf")
     try:
-        # Handle both "2026-05-13T00:00:00" and "2026-05-13T00:00:00Z"
-        ts = created_at_iso.rstrip("Z")
+        # Convert "Z" suffix to "+00:00" so fromisoformat parses as
+        # timezone-aware UTC. `rstrip("Z")` is wrong because it would
+        # strip the Z but leave the datetime naive (interpreted as local
+        # time by .timestamp()) — fine for naive timestamps but breaks
+        # for UTC-suffixed ones on non-UTC systems.
+        ts = (
+            created_at_iso.replace("Z", "+00:00")
+            if created_at_iso.endswith("Z")
+            else created_at_iso
+        )
         dt = datetime.fromisoformat(ts)
         return max(0.0, now - dt.timestamp())
     except (ValueError, TypeError):
