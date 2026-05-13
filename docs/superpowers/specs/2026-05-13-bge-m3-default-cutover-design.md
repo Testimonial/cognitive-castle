@@ -60,14 +60,24 @@ AND wire `EmbedderIdentityMismatchError` at the LanceDB backend layer so existin
 
 ```python
 @property
-def embedder_identity(self) -> str:
-    """Short identity used to stamp palaces. Defaults to last `/` component of embedder_model."""
-    explicit = os.environ.get("CASTLE_EMBEDDER_IDENTITY") or self._yaml.get("embedder_identity")
-    if explicit:
-        return str(explicit).strip()
+def embedder_identity(self):
+    """Stable identity string for the embedder stack.
+
+    Reads from CASTLE_EMBEDDER_IDENTITY env var first, then config file.
+    If neither is set, auto-derives from embedder_model by stripping the
+    org prefix (last component after the final `/`).
+    """
+    env_val = os.environ.get("CASTLE_EMBEDDER_IDENTITY")
+    if env_val:
+        return env_val.strip()
+    cfg_val = self._file_config.get("embedder_identity")
+    if cfg_val:
+        return str(cfg_val).strip()
     model = self.embedder_model
     return model.rsplit("/", 1)[-1] if "/" in model else model
 ```
+
+Note: matches Castle's existing env/file_config/default property style (see `embedder_model` at `config.py:303-319` and `embedder_dim` at `config.py:321-343`). The yaml access attribute is `self._file_config`, not `self._yaml`.
 
 **Legacy MiniLM edge case.** The pre-cutover static default was `"paraphrase-ml-MiniLM-L12-v2"` — a custom abbreviation that doesn't match the model's path component (`"paraphrase-multilingual-MiniLM-L12-v2"`). Legacy MiniLM users running on the env-var-override path must now ALSO set `CASTLE_EMBEDDER_IDENTITY=paraphrase-ml-MiniLM-L12-v2` to match their existing palace stamp. The dim-mismatch error message (which fires FIRST for legacy MiniLM users — dim 384 vs 1024) names this exact identity string in its env-var-override block, so the documentation requirement is one-time and explicit.
 
@@ -100,7 +110,7 @@ table = db.open_table("castle_metadata")
 arrow_table = table.to_arrow()
 mask = pc.equal(arrow_table["key"], "embedder_identity")
 matched = arrow_table.filter(mask)
-stored_identity = matched["value"][0].as_py() if matched.num_rows > 0 else None
+stored_identity = matched.column("value").to_pylist()[0] if matched.num_rows > 0 else None
 if stored_identity is not None and stored_identity != cfg.embedder_identity:
     raise EmbedderIdentityMismatchError(_identity_mismatch_message(...))
 ```
@@ -137,8 +147,8 @@ Extensible — future keys (e.g., `created_at`, `castle_version`) can be added w
 For dim mismatch (most common case — legacy MiniLM users):
 ```
 This palace at <palace_path> was built with embedder dim <stored_dim>,
-but current config wants dim <cfg.embedder_dim> (BAAI/bge-m3 is the
-new default since 2026-05-13).
+but current config wants dim <cfg.embedder_dim> (BAAI/bge-m3 is now
+the default).
 
 If <stored_dim> is 384, your palace was built with the pre-cutover
 default (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2).
@@ -297,6 +307,7 @@ def test_dim_mismatch_raises_with_migration_prompt(tmp_path, monkeypatch):
     assert "castle reindex" in msg
     assert "--embedder-dim 1024" in msg
     assert "CASTLE_EMBEDDER_MODEL" in msg  # env-var override path
+    assert "paraphrase-ml-MiniLM-L12-v2" in msg  # legacy identity in opt-out block
 
 
 def test_identity_mismatch_raises_when_dim_matches(tmp_path, monkeypatch):
@@ -328,7 +339,11 @@ def test_legacy_palace_raises_when_dim_mismatches(tmp_path, monkeypatch):
 def test_concurrent_grandfather_is_race_safe(tmp_path, monkeypatch):
     """Two simultaneous backend inits on a legacy palace both succeed."""
     # Build palace via add(), DELETE castle_metadata to simulate legacy
-    # Spawn two threads, each instantiating LanceDBBackend(palace_path, cfg) concurrently
+    # Spawn two concurrent backend instances (multiprocessing.Process preferred to
+    # faithfully model the realistic scenario — separate Stop-hook subprocess vs.
+    # interactive search; threads sharing one lancedb.connect() may serialize on
+    # connection-level caching and not exercise the duplicate-table-error path).
+    # Each process calls LanceDBBackend(palace_path, cfg).
     # Assert: exactly one wins the create_table race; the other catches the duplicate-table
     #         exception and opens the existing table; both backends end up functional;
     #         castle_metadata exists with exactly one embedder_identity row.
@@ -419,3 +434,10 @@ Then run plain `castle search` (no env vars set → new bge-m3 defaults active).
 - **Concurrency hole:** original spec's grandfather write was not race-safe. Two processes (interactive search + Stop-hook fire) hitting the same legacy palace could both attempt `create_table("castle_metadata")`. Added race-safe creation: catch LanceDB's duplicate-table exception on the loser, open the existing table, re-run identity check.
 
 Also reflected as +2 tests (race-safety + auto-derive), +1 row each in Error Handling table and Components table, +50 LOC bump to total estimate (280 → 330).
+
+**Revision 3 (2026-05-13):** Third review pass surfaced 1 real bug + 4 polish items. Fixed inline:
+- **Real bug:** auto-derive property pseudocode referenced `self._yaml.get(...)` but Castle's config class uses `self._file_config` (verified in `config.py:315, 336, 361`). Rewrote the property body to match the existing env/file_config/default sequential-access style used by `embedder_model` and `embedder_dim`.
+- Race test description: "two threads" → "two concurrent backend instances (multiprocessing.Process preferred)" — threads sharing one `lancedb.connect()` may not faithfully exercise the duplicate-table-error path.
+- Dim-mismatch error message: dropped the brittle "since 2026-05-13" date to avoid drift if PR merges later than the spec date.
+- Dim-mismatch test: added assertion that the legacy identity string `paraphrase-ml-MiniLM-L12-v2` appears in the error message, preventing accidental removal of the documented opt-out path.
+- Layer-2 identity-read pseudocode: switched from version-sensitive `matched["value"][0].as_py()` to `matched.column("value").to_pylist()[0]` (universally supported across PyArrow versions).
