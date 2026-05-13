@@ -61,7 +61,6 @@ class TestSearchMemories:
         hit = result["results"][0]
         assert hit["created_at"] == "2026-01-01T00:00:00"
 
-
     def test_search_memories_missing_palace_returns_empty(self, tmp_path):
         """search_memories on a non-existent palace returns empty results dict."""
         result = search_memories("test", str(tmp_path / "no_palace_here"))
@@ -104,10 +103,16 @@ class TestTokenizeSafety:
 class TestSearchCLI:
     def test_search_prints_results(self, palace_path, capsys):
         """`search()` prints a header and per-result block when hits exist."""
-        fake_hits = [{
-            "id": "d1", "text": "drawer content", "score": 0.8,
-            "wing": "w", "room": "r", "source_file": "f.md",
-        }]
+        fake_hits = [
+            {
+                "id": "d1",
+                "text": "drawer content",
+                "score": 0.8,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f.md",
+            }
+        ]
         with patch("cognitive_castle.searcher._new_pipeline_search", return_value=fake_hits):
             search("query", palace_path)
         captured = capsys.readouterr()
@@ -168,10 +173,16 @@ class TestSearchCLI:
 
     def test_search_shows_score(self, capsys):
         """CLI output displays the reranker score with label `score=`, not `cosine=`."""
-        fake_hits = [{
-            "id": "d1", "text": "x", "score": 0.7,
-            "wing": "w", "room": "r", "source_file": "f.md",
-        }]
+        fake_hits = [
+            {
+                "id": "d1",
+                "text": "x",
+                "score": 0.7,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f.md",
+            }
+        ]
         with patch("cognitive_castle.searcher._new_pipeline_search", return_value=fake_hits):
             search("foo", "/fake/path")
         captured = capsys.readouterr()
@@ -180,14 +191,107 @@ class TestSearchCLI:
 
     def test_search_handles_none_metadata_without_crash(self, palace_path, capsys):
         """search() must not crash if a hit dict has missing keys."""
-        fake_hits = [{
-            "id": "d1", "text": "x", "score": 0.5,
-            # Missing: wing, room, source_file
-        }]
+        fake_hits = [
+            {
+                "id": "d1",
+                "text": "x",
+                "score": 0.5,
+                # Missing: wing, room, source_file
+            }
+        ]
         with patch("cognitive_castle.searcher._new_pipeline_search", return_value=fake_hits):
             search("q", palace_path)  # should not raise
         captured = capsys.readouterr()
         assert "?" in captured.out
+
+
+@pytest.fixture
+def large_seeded_collection(palace_path):
+    """Collection with 10 drawers so Stage 4 has a full llm_judge_top_n=10 pool."""
+    from cognitive_castle.palace import get_collection
+
+    col = get_collection(palace_path, collection_name="castle_drawers", create=True)
+    ids = [f"drawer_proj_room_{i:02d}" for i in range(10)]
+    documents = [
+        f"Memory entry {i}: authentication tokens session management JWT HTTP headers "
+        f"cache expiry refresh credentials bearer token endpoint security middleware "
+        f"encryption hash verify payload claim issuer audience subject."
+        for i in range(10)
+    ]
+    metadatas = [
+        {
+            "wing": "project",
+            "room": "backend",
+            "source_file": f"file_{i}.py",
+            "chunk_index": 0,
+            "added_by": "miner",
+            "filed_at": f"2026-01-{i + 1:02d}T00:00:00",
+        }
+        for i in range(10)
+    ]
+    col.add(ids=ids, documents=documents, metadatas=metadatas)
+    return col
+
+
+# ── LLM rerank (Stage 4) integration tests ────────────────────────────
+
+
+def test_search_memories_llm_rerank_false_skips_stage_4(
+    monkeypatch, palace_path, large_seeded_collection
+):
+    """When llm_rerank=False (default), judge.judge is never called."""
+    from unittest.mock import MagicMock
+
+    spy = MagicMock()
+    monkeypatch.setattr("cognitive_castle.judge.judge", spy)
+
+    result = search_memories(query="authentication tokens", palace_path=palace_path, n_results=5)
+
+    spy.assert_not_called()
+    assert isinstance(result, dict)
+    assert "results" in result
+
+
+def test_search_memories_llm_rerank_true_calls_judge(
+    monkeypatch, palace_path, large_seeded_collection
+):
+    """When llm_rerank=True, judge.judge is called with top-N candidates."""
+    from unittest.mock import MagicMock
+
+    spy = MagicMock(return_value=list(range(10)))
+    monkeypatch.setattr("cognitive_castle.judge.judge", spy)
+
+    result = search_memories(
+        query="authentication tokens",
+        palace_path=palace_path,
+        n_results=3,
+        llm_rerank=True,
+    )
+
+    spy.assert_called_once()
+    # First positional arg = query
+    assert spy.call_args[0][0] == "authentication tokens"
+    # Second positional arg = list of candidate doc strings (top cfg.llm_judge_top_n from Stage 3)
+    assert isinstance(spy.call_args[0][1], list)
+    assert len(spy.call_args[0][1]) == 10  # default llm_judge_top_n
+    # Result has 3 items per n_results
+    assert len(result["results"]) == 3
+
+
+def test_search_memories_llm_rerank_identity_fallback_preserves_stage3_order(
+    monkeypatch, palace_path, large_seeded_collection
+):
+    """Identity-ordering from judge means final result equals llm_rerank=False output."""
+    monkeypatch.setattr("cognitive_castle.judge.judge", lambda *a, **kw: list(range(10)))
+
+    no_llm = search_memories(
+        query="authentication tokens", palace_path=palace_path, n_results=5, llm_rerank=False
+    )
+    with_llm_identity = search_memories(
+        query="authentication tokens", palace_path=palace_path, n_results=5, llm_rerank=True
+    )
+    # Drawer IDs should match in the same order (identity = no reordering)
+    assert [r["id"] for r in no_llm["results"]] == [r["id"] for r in with_llm_identity["results"]]
 
 
 def test_cli_search_routes_through_new_pipeline(tmp_path, capsys):

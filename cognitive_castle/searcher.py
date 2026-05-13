@@ -52,7 +52,6 @@ def _tokenize(text: str) -> list:
     return _TOKEN_RE.findall(text.lower())
 
 
-
 def build_where_filter(wing: str = None, room: str = None) -> dict:
     """Build a metadata where-filter dict for wing/room filtering."""
     if wing and room:
@@ -142,7 +141,14 @@ def _expand_with_neighbors(drawers_col, matched_doc: str, matched_meta: dict, ra
     }
 
 
-def search(query: str, palace_path: str, wing: str = None, room: str = None, n_results: int = 5):
+def search(
+    query: str,
+    palace_path: str,
+    wing: str = None,
+    room: str = None,
+    n_results: int = 5,
+    llm_rerank: bool = False,
+):
     """CLI entry point.
 
     Routes through the 3-stage pipeline (dense + FTS + KG-hop → fuse → rerank),
@@ -150,15 +156,27 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
     so existing scraping tests keep working. Score shown is the cross-encoder
     reranker score, not cosine distance.
 
+    Args:
+        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
+            cross-encoder (Stage 3). Default False — no behavior change.
+
     Raises SearchError if the pipeline fails. Returns None either way (this is
     a print-only function — programmatic callers should use `search_memories`).
     """
     from .config import CognitiveCastleConfig
+
     cfg = CognitiveCastleConfig()
 
     try:
         hits = _new_pipeline_search(
-            query, palace_path, wing, room, n_results, cfg, is_hook_call=False
+            query,
+            palace_path,
+            wing,
+            room,
+            n_results,
+            cfg,
+            is_hook_call=False,
+            llm_rerank=llm_rerank,
         )
     except Exception as e:
         print(f"\n  Search error: {e}")
@@ -190,8 +208,6 @@ def search(query: str, palace_path: str, wing: str = None, room: str = None, n_r
         print(f"  {'─' * 56}")
 
 
-
-
 def search_memories(
     query: str,
     palace_path: str,
@@ -202,6 +218,7 @@ def search_memories(
     vector_disabled: bool = False,
     candidate_strategy: str = "vector",
     is_hook_call: bool = False,
+    llm_rerank: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -224,11 +241,15 @@ def search_memories(
         vector_disabled: Accepted for compatibility; ignored by new pipeline.
         candidate_strategy: Accepted for compatibility; ignored by new pipeline.
         is_hook_call: When True, uses a smaller reranker K cap (hook budget).
+        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
+            cross-encoder (Stage 3). Default False — no behavior change.
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
     cfg = _cfg_cls()
-    results = _new_pipeline_search(query, palace_path, wing, room, n_results, cfg, is_hook_call)
+    results = _new_pipeline_search(
+        query, palace_path, wing, room, n_results, cfg, is_hook_call, llm_rerank=llm_rerank
+    )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
     # shape so MCP-tool callers and tests that expect ``result["results"]`` /
@@ -304,6 +325,7 @@ def _new_pipeline_search(
     n_results: int,
     cfg,
     is_hook_call: bool = False,
+    llm_rerank: bool = False,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -420,6 +442,19 @@ def _new_pipeline_search(
     docs = [_extract_text(r) for r in top_k_rows]
     rerank_scores = rerank(query, docs, cfg=cfg)
     reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
+
+    # ── Stage 4 (optional): LLM-as-judge re-rank ───────────────────────────
+    if llm_rerank:
+        from .judge import judge
+
+        # Take top-N (cfg.llm_judge_top_n) from Stage 3 output for LLM judging.
+        # Stage 3 already returned a sorted list (most-relevant first).
+        top_n = cfg.llm_judge_top_n
+        judge_pool = reranked[:top_n]
+        judge_docs = [_extract_text(r) for _, r in judge_pool]
+        new_order = judge(query, judge_docs, cfg)
+        # Reorder judge_pool by the LLM's preferred indices.
+        reranked = [judge_pool[i] for i in new_order]
 
     return [
         {
