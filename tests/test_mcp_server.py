@@ -325,6 +325,7 @@ class TestReadTools:
         no_palace_config = CognitiveCastleConfig(config_dir=cfg_dir)
 
         from cognitive_castle import mcp_server as _mcp
+
         monkeypatch.setattr(_mcp, "_config", no_palace_config)
         monkeypatch.setattr(_mcp, "_kg", kg)
         monkeypatch.setattr(_mcp, "_collection_cache", None)
@@ -487,9 +488,9 @@ class TestWriteTools:
 
         assert result1["success"] is True
         assert result2["success"] is True
-        assert (
-            result1["drawer_id"] != result2["drawer_id"]
-        ), "Documents with shared header but different content must have distinct drawer IDs"
+        assert result1["drawer_id"] != result2["drawer_id"], (
+            "Documents with shared header but different content must have distinct drawer IDs"
+        )
 
     def test_delete_drawer(self, monkeypatch, config, palace_path, seeded_collection, kg):
         _patch_mcp_server(monkeypatch, config, kg)
@@ -956,6 +957,7 @@ class TestDiaryTools:
 
 # ── Cache Invalidation (inode/mtime) ──────────────────────────────────
 
+
 class TestCacheInvalidation:
     """Tests for _get_collection cache invalidation logic."""
 
@@ -984,3 +986,32 @@ class TestCacheInvalidation:
         assert "Reconnected" in result["message"]
         assert isinstance(result["drawers"], int)
 
+
+def test_mcp_castle_search_soar_boost_threads_through(monkeypatch):
+    """MCP castle_search with soar_boost:true reaches apply_soar_boosts handler."""
+    from unittest.mock import MagicMock, patch
+    from cognitive_castle.mcp_server import tool_search
+
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    fake_hits = [{"id": "a", "score": 0.5, "wing": "w", "room": "r", "source_file": "f"}]
+    fake_result = {"results": fake_hits, "query": "x", "filters": {}}
+    spy = MagicMock(
+        return_value=[
+            {
+                "id": "a",
+                "score": 0.625,
+                "soar_boost": 1.25,
+                "soar_tags": ["recency-boost"],
+                "score_pre_soar": 0.5,
+            }
+        ]
+    )
+
+    with (
+        patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result),
+        patch("cognitive_castle.soar_bridge.apply_soar_boosts", spy),
+    ):
+        result = tool_search(query="x", soar_boost=True)
+    spy.assert_called_once()
+    # Result has the boosted hit
+    assert result.get("results", [])[0]["soar_boost"] == 1.25

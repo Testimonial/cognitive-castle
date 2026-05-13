@@ -1,0 +1,480 @@
+"""soar_bridge.py — SOAR post-pipeline boost-tag layer (PR #4a, experimental).
+
+Opt-in via cfg.soar_enabled + --soar-boost CLI flag (or soar_boost:true MCP).
+Default behavior unchanged. Module is lazy-imported by callers so its load
+cost is zero for users who never use --soar-boost.
+
+Soar runs ELABORATION productions over the input-link memory WMEs, adding
+i-supported ^boost-tag attributes. Python reads tags back, maps via
+BOOST_MULTIPLIERS, applies as multiplicative score adjustments. Audit fields
+(soar_boost, soar_tags, score_pre_soar) are added to each hit so every score
+change has a name — the differentiating value over neural rerankers.
+
+EpMem + SMem subsystems are enabled at agent creation (preparation for #4c
+chunking) but not READ/WRITTEN in #4a — the placeholder fields they'd
+populate (^access-count, ^decay) are explicitly absent from the #4a WM
+schema rather than carry stub values that could fire bad rules.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+import time
+from datetime import datetime
+from typing import Optional
+
+
+# Module-level state. Cleared by _reset_for_test() in test runs.
+_KERNEL = None  # singleton kernel instance
+_AGENTS: dict = {}  # palace_path → agent instance
+_WARNED: set = set()  # one-time-per-process warning keys
+_SML = None  # cached SML module (or None if unavailable)
+_SML_LOAD_ATTEMPTED = False  # whether we've tried _load_sml() at least once
+_PREV_TOP_WMES: dict = {}  # palace_path → list of top-level WME handles from last call
+
+
+# Boost-tag → multiplier map. Compounded multiplicatively when multiple tags
+# fire on the same hit. Final boost clamped to [0.1, 10.0] (see apply_soar_boosts).
+BOOST_MULTIPLIERS: dict[str, float] = {
+    "recency-boost": 1.25,  # ^recently-accessed "true" (age < 7d default)
+    "same-project": 1.15,  # <m>.project == <context>.project
+}
+
+# Hardcoded operational limits (YAGNI on promoting to config knobs).
+MAX_WM_HITS = 50  # Truncate input WM if more hits than this
+DECISION_CYCLES = 50  # Upper bound on agent.RunSelf cycles
+RECENCY_THRESHOLD_SEC = 7 * 24 * 3600  # 7 days for "recently-accessed"
+BOOST_CLAMP = (0.1, 10.0)  # Min, max for final compound multiplier
+
+
+def _warn_once(key: str, message: str) -> None:
+    """Print a stderr warning ONCE per process for the given key."""
+    if key in _WARNED:
+        return
+    _WARNED.add(key)
+    print(f"[soar] {message}", file=sys.stderr)
+
+
+def _load_sml():
+    """Lazy import of Python_sml_ClientInterface. Returns the module or None.
+
+    Respects CASTLE_SML_DISABLED=1 (testability knob) — returns None even
+    when SML is importable. Caches the result in module-level _SML.
+    """
+    global _SML, _SML_LOAD_ATTEMPTED
+    if _SML_LOAD_ATTEMPTED:
+        return _SML
+    _SML_LOAD_ATTEMPTED = True
+
+    if os.environ.get("CASTLE_SML_DISABLED") == "1":
+        _warn_once(
+            "sml-disabled-env",
+            "SML Python bindings not available (CASTLE_SML_DISABLED=1) — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+        )
+        return None
+
+    try:
+        import Python_sml_ClientInterface as sml  # type: ignore
+
+        _SML = sml
+        return sml
+    except ImportError:
+        _warn_once(
+            "sml-import-failed",
+            "SML Python bindings not available — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+        )
+        return None
+
+
+def _reset_for_test() -> None:
+    """Test-only helper: clear all module-level state.
+
+    Used by the autouse `reset_soar_state` fixture in test_soar_bridge.py
+    so sequential tests don't share kernel/agent state. NOT for production use.
+    """
+    global _KERNEL, _SML, _SML_LOAD_ATTEMPTED
+    # Properly destroy any existing agents + kernel before nulling refs.
+    if _KERNEL is not None:
+        try:
+            for agent in _AGENTS.values():
+                _KERNEL.DestroyAgent(agent)
+        except Exception:
+            pass
+        try:
+            _KERNEL.Shutdown()
+        except Exception:
+            pass
+    _AGENTS.clear()
+    _PREV_TOP_WMES.clear()
+    _KERNEL = None
+    _SML = None
+    _SML_LOAD_ATTEMPTED = False
+    _WARNED.clear()
+
+
+def _get_kernel():
+    """Return the singleton Soar kernel, creating it on first call."""
+    global _KERNEL
+    if _KERNEL is None:
+        sml = _load_sml()
+        if sml is None:
+            return None
+        try:
+            _KERNEL = sml.Kernel.CreateKernelInNewThread()
+        except Exception as e:
+            _warn_once(
+                "kernel-create-failed",
+                f"kernel creation failed ({type(e).__name__}: {e}): boost-tags skipped",
+            )
+            return None
+    return _KERNEL
+
+
+def _get_agent(palace_path: str, rules_path: str):
+    """Return the per-palace agent. First-time creation loads productions
+    and enables EpMem + SMem subsystems.
+
+    Returns None on any failure (stderr warning emitted).
+    """
+    if palace_path in _AGENTS:
+        return _AGENTS[palace_path]
+
+    kernel = _get_kernel()
+    if kernel is None:
+        return None
+
+    # Agent name must be unique per kernel + safe characters
+    agent_name = f"castle-{abs(hash(palace_path)) % 100_000_000}"
+    try:
+        agent = kernel.CreateAgent(agent_name)
+    except Exception as e:
+        _warn_once(
+            "agent-create-failed",
+            f"agent creation failed ({type(e).__name__}: {e}): boost-tags skipped",
+        )
+        return None
+
+    # Load productions
+    if not os.path.exists(rules_path):
+        _warn_once(
+            f"rules-not-found-{rules_path}",
+            f"rule file not found: {rules_path}",
+        )
+        kernel.DestroyAgent(agent)
+        return None
+
+    try:
+        # LoadProductions returns a Python bool in Soar 9.6.40: True on
+        # success, False on syntax / parse error. The actual error text
+        # is in GetLastCommandLineResult() when False.
+        ok = agent.LoadProductions(rules_path)
+        if not ok:
+            err_msg = ""
+            if hasattr(agent, "GetLastCommandLineResult"):
+                err_msg = str(agent.GetLastCommandLineResult())
+            _warn_once(
+                "rules-parse-failure",
+                f"rule parse failure ({rules_path}): {err_msg or 'unknown'}",
+            )
+            kernel.DestroyAgent(agent)
+            return None
+    except Exception as e:
+        _warn_once(
+            "rules-load-failed",
+            f"rule load failed ({type(e).__name__}: {e})",
+        )
+        kernel.DestroyAgent(agent)
+        return None
+
+    # Enable EpMem + SMem subsystems (PR #4c will use them; #4a just configures)
+    try:
+        agent.ExecuteCommandLine("epmem --set learning on")
+        agent.ExecuteCommandLine("smem --set learning on")
+    except Exception:
+        # Non-fatal — log but don't fail
+        _warn_once(
+            "epmem-smem-config-failed",
+            "EpMem/SMem subsystem configuration failed (boost-tags still work)",
+        )
+
+    _AGENTS[palace_path] = agent
+    return agent
+
+
+def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
+    """Push input-link WMEs for the given hits.
+
+    Returns:
+        (memory_wmes, top_level_wmes) where:
+        - memory_wmes: composite_id → memory Identifier handle
+        - top_level_wmes: list of top-level input-link Identifier WMEs pushed
+          (context + memory roots), to be destroyed on the next call's cleanup.
+
+    Schema (matches castle-boost.soar):
+      ^io.input-link.context.{project, query}
+      ^io.input-link.memory[]  with id, project, score, age-seconds, recently-accessed
+    """
+    input_link = agent.GetInputLink()
+    project = os.environ.get("CASTLE_PROJECT", "default")
+
+    top_level_wmes = []
+
+    # Push context
+    context_wme = input_link.CreateIdWME("context")
+    context_wme.CreateStringWME("project", project)
+    # Skip the query string for #4a — rules don't read it. Add in future PRs.
+    top_level_wmes.append(context_wme)
+
+    # Push one ^memory WME per hit
+    memory_wmes = {}  # composite_id → WME handle
+    now = time.time()
+    for hit in hits:
+        m = input_link.CreateIdWME("memory")
+        composite_id = f"{hit.get('wing', '')}/{hit.get('room', '')}/{hit.get('source_file', '?')}"
+        m.CreateStringWME("id", composite_id)
+        m.CreateStringWME("project", hit.get("wing", ""))
+        m.CreateFloatWME("score", float(hit.get("score", 0.0)))
+
+        # Compute age-seconds from created_at if present
+        age_sec = _compute_age_seconds(hit.get("created_at"), now)
+        # Cap infinity (missing created_at) to a large int Soar can represent
+        age_sec_int = int(min(age_sec, 2**62)) if age_sec != float("inf") else 2**62
+        m.CreateIntWME("age-seconds", age_sec_int)
+
+        # ^recently-accessed: "true" (string symbol — Soar matches `^recently-accessed true`)
+        recent = "true" if age_sec < RECENCY_THRESHOLD_SEC else "false"
+        m.CreateStringWME("recently-accessed", recent)
+
+        memory_wmes[composite_id] = m
+        top_level_wmes.append(m)
+
+    agent.Commit()
+    return memory_wmes, top_level_wmes
+
+
+def _compute_age_seconds(created_at_iso: Optional[str], now: float) -> float:
+    """Compute age in seconds from ISO timestamp. Returns large value if missing/invalid.
+
+    Handles ``"2026-05-13T00:00:00Z"`` (UTC, "Z" suffix) and
+    ``"2026-05-13T00:00:00"`` (naive — assumed UTC for our purposes).
+    """
+    if not created_at_iso:
+        return float("inf")
+    try:
+        # Convert "Z" suffix to "+00:00" so fromisoformat parses as
+        # timezone-aware UTC. `rstrip("Z")` is wrong because it would
+        # strip the Z but leave the datetime naive (interpreted as local
+        # time by .timestamp()) — fine for naive timestamps but breaks
+        # for UTC-suffixed ones on non-UTC systems.
+        ts = (
+            created_at_iso.replace("Z", "+00:00")
+            if created_at_iso.endswith("Z")
+            else created_at_iso
+        )
+        dt = datetime.fromisoformat(ts)
+        return max(0.0, now - dt.timestamp())
+    except (ValueError, TypeError):
+        return float("inf")
+
+
+def _read_boost_tags(agent, _memory_wmes_unused: dict) -> dict:
+    """Read back ^boost-tag attributes from each ^memory WME. Returns composite_id → list[tag].
+
+    SML Python bindings only expose client-created WMEs via GetNumberChildren/GetChild;
+    server-side elaborated WMEs (like i-supported ^boost-tag) are invisible there.
+    We use ExecuteCommandLine("print --depth 4 i2") and parse its text output instead.
+    """
+    import re
+
+    raw = agent.ExecuteCommandLine("print --depth 4 i2")
+
+    # Merge continuation lines into single-line blocks
+    merged_lines = []
+    buf = ""
+    for line in raw.split("\n"):
+        stripped = line.strip()
+        if not stripped:
+            if buf:
+                merged_lines.append(buf)
+                buf = ""
+            continue
+        if stripped.startswith("("):
+            if buf:
+                merged_lines.append(buf)
+            buf = stripped
+        else:
+            buf = (buf + " " + stripped) if buf else stripped
+    if buf:
+        merged_lines.append(buf)
+
+    # Parse each line: (SYM ^attr val ^attr val ...)
+    blocks: dict[str, dict[str, list[str]]] = {}
+    for line in merged_lines:
+        m = re.match(r"\(([A-Z]\d+)\s*(.*)\)\s*$", line, re.DOTALL)
+        if not m:
+            continue
+        sym = m.group(1)
+        rest = m.group(2)
+        blocks[sym] = {}
+        # Match ^attr val pairs; val is either |quoted string| or bare word/identifier
+        for attr_match in re.finditer(r"\^(\S+)\s+(\|[^|]*\||\S+)", rest):
+            attr = attr_match.group(1)
+            val = attr_match.group(2).strip("|")
+            blocks[sym].setdefault(attr, []).append(val)
+
+    # Build composite_id → tags mapping using the ^id attribute
+    tags_by_id: dict[str, list[str]] = {}
+    for _sym, attrs in blocks.items():
+        if "id" in attrs:
+            composite_id = attrs["id"][0]
+            tags_by_id[composite_id] = attrs.get("boost-tag", [])
+
+    return tags_by_id
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def _annotate_unboosted(hits: list[dict]) -> list[dict]:
+    """Annotate hits with neutral audit fields (no boost applied)."""
+    for h in hits:
+        h.setdefault("score_pre_soar", h.get("score", 0.0))
+        h.setdefault("soar_boost", 1.0)
+        h.setdefault("soar_tags", [])
+    return hits
+
+
+def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
+    """Post-pipeline boost-tag application.
+
+    Args:
+        hits: Search hits (typically from search_memories() result["results"]).
+            Each hit must have at least: "id", "score", "wing", and optionally
+            "created_at" (used to derive recency).
+        cfg: Config object exposing .soar_enabled, .soar_rules_path, .palace_path.
+
+    Returns:
+        list[dict]: same hits with `score` adjusted by SOAR's compound multiplier
+        and 3 new audit-trail fields appended to each hit:
+        - soar_boost: float — the compound multiplier applied (1.0 if no tags fired)
+        - soar_tags: list[str] — names of boost-tag rules that fired
+        - score_pre_soar: float — original score before adjustment
+
+    Never raises. Search continues with degraded behavior on Soar failure.
+    On any failure (SML missing, kill switch, kernel/agent/rules error,
+    truncation, unknown tag, etc.) prints a one-time-per-process stderr
+    warning and returns hits unchanged (or partially boosted).
+    """
+    # Kill switch check (defensive — CLI/MCP layer should have caught this)
+    if not cfg.soar_enabled:
+        _warn_once(
+            "kill-switch-disabled",
+            "apply_soar_boosts called with cfg.soar_enabled=False — returning hits unchanged",
+        )
+        return hits
+
+    # Lazy SML import
+    sml = _load_sml()
+    if sml is None:
+        _warn_once(
+            "sml-unavailable",
+            "SML Python bindings not available — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+        )
+        return hits
+
+    # Empty input → fast path
+    if not hits:
+        return hits
+
+    # Truncate to MAX_WM_HITS if needed
+    truncated_remainder = []
+    if len(hits) > MAX_WM_HITS:
+        truncated_remainder = hits[MAX_WM_HITS:]
+        _warn_once(
+            "wm-truncated",
+            f"truncated WM to {MAX_WM_HITS} hits (input was {len(hits)}); remainder unboosted",
+        )
+        hits = hits[:MAX_WM_HITS]
+
+    # Get agent (lazy-init per palace)
+    agent = _get_agent(cfg.palace_path, cfg.soar_rules_path)
+    if agent is None:
+        # Failure already logged; return hits with neutral audit fields
+        return _annotate_unboosted(hits + truncated_remainder)
+
+    # Clear prior WM: destroy the top-level WMEs pushed by the previous call.
+    # SML tracks client-side WMEs across calls; destroying them (then Commit) removes
+    # them from Soar's WM so they don't leak into the next decision cycle.
+    palace_key = cfg.palace_path
+    prev_wmes = _PREV_TOP_WMES.get(palace_key, [])
+    if prev_wmes:
+        try:
+            for wme in prev_wmes:
+                agent.DestroyWME(wme)
+            agent.Commit()
+        except Exception as e:
+            _warn_once("wm-clear-failed", f"WM clear failed ({type(e).__name__}: {e})")
+            return _annotate_unboosted(hits + truncated_remainder)
+
+    # Build composite_id keys for hit lookup
+    composite_ids = [
+        f"{h.get('wing', '')}/{h.get('room', '')}/{h.get('source_file', '?')}" for h in hits
+    ]
+
+    # Push WM
+    try:
+        memory_wmes, top_level_wmes = _push_working_memory(agent, hits)
+    except Exception as e:
+        _warn_once("wm-push-failed", f"WM push failed ({type(e).__name__}: {e})")
+        return _annotate_unboosted(hits + truncated_remainder)
+
+    # Store top-level WMEs for cleanup on next call
+    _PREV_TOP_WMES[palace_key] = top_level_wmes
+
+    # Run decision cycle
+    try:
+        agent.RunSelf(DECISION_CYCLES)
+    except Exception as e:
+        _warn_once("decision-cycle-failed", f"decision cycle failed ({type(e).__name__}: {e})")
+        return _annotate_unboosted(hits + truncated_remainder)
+
+    # Read back tags
+    try:
+        tags_by_id = _read_boost_tags(agent, memory_wmes)
+    except Exception as e:
+        _warn_once("read-tags-failed", f"read-tags failed ({type(e).__name__}: {e})")
+        return _annotate_unboosted(hits + truncated_remainder)
+
+    # Apply multipliers + augment audit fields
+    any_tags_fired = False
+    for hit, cid in zip(hits, composite_ids):
+        tags = tags_by_id.get(cid, [])
+        recognized = []
+        compound = 1.0
+        for tag in tags:
+            mul = BOOST_MULTIPLIERS.get(tag)
+            if mul is None:
+                _warn_once(
+                    f"unknown-tag-{tag}",
+                    f"unknown boost-tag '{tag}' — add to BOOST_MULTIPLIERS or check rule output",
+                )
+                continue
+            compound *= mul
+            recognized.append(tag)
+        compound = _clamp(compound, *BOOST_CLAMP)
+        if recognized:
+            any_tags_fired = True
+        hit["score_pre_soar"] = hit["score"]
+        hit["soar_boost"] = compound
+        hit["soar_tags"] = recognized
+        hit["score"] = hit["score"] * compound
+
+    if not any_tags_fired:
+        # Not an error — just informational. Don't warn-once because empty rule
+        # files are a legitimate test case.
+        pass
+
+    # Combine boosted hits with truncated remainder
+    return hits + _annotate_unboosted(truncated_remainder)

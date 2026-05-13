@@ -181,9 +181,13 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │     └── KG-hop (entity registry lookup → KnowledgeGraph.find_drawers_by_entities)
     ├── Stage 2: weighted RRF + recency multiplier → top-K (K=20 interactive, K=10 hook)
     ├── Stage 3: cross-encoder rerank → top-N candidates
-    └── Stage 4 (optional, opt-in via --llm-rerank or llm_rerank:true MCP param):
-          LLM-as-judge re-ranks top-cfg.llm_judge_top_n (default 10) from Stage 3
-          → graceful identity-order fallback on any LLM failure
+    ├── Stage 4 (optional, opt-in via --llm-rerank or llm_rerank:true MCP param):
+    │     LLM-as-judge re-ranks top-cfg.llm_judge_top_n (default 10) from Stage 3
+    │     → graceful identity-order fallback on any LLM failure
+    └── Stage 5 (optional, opt-in via --soar-boost AND CASTLE_SOAR_ENABLED=1):
+          SOAR symbolic productions add boost-tags to final hits
+          → multiplicative score adjustment with audit-trail fields
+          → graceful pass-through on any Soar failure
 ```
 
 ## Key Files for Common Tasks

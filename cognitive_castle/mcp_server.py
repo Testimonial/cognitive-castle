@@ -376,6 +376,7 @@ def tool_search(
     min_similarity: float = None,
     context: str = None,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -416,6 +417,22 @@ def tool_search(
         for h in hits:
             h.pop("metadata", None)
         result["results"] = hits
+
+    # SOAR post-pipeline boost-tags (PR #4a, opt-in via soar_boost param)
+    if soar_boost:
+        if not _config.soar_enabled:
+            # Kill switch — surface error in MCP response
+            result["error"] = (
+                "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost"
+            )
+            result["soar_boost_skipped"] = True
+        elif hits:
+            # LAZY IMPORT (per spec acceptance #14)
+            from . import soar_bridge
+
+            adjusted = soar_bridge.apply_soar_boosts(hits, _config)
+            adjusted.sort(key=lambda h: -h.get("score", 0.0))
+            result["results"] = adjusted
 
     return result
 
@@ -1428,6 +1445,15 @@ TOOLS = {
                         "candidates. Adds 1-2s latency. Uses the LLM provider "
                         "configured via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL "
                         "or castle.yaml. Off by default."
+                    ),
+                },
+                "soar_boost": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Apply SOAR symbolic-rule boost-tags to final scores "
+                        "(experimental; requires Soar 9.6+ + SML Python bindings "
+                        "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
                     ),
                 },
             },

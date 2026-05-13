@@ -897,3 +897,66 @@ def test_reindex_rejects_unpaired_dim_flag(monkeypatch, capsys, tmp_path):
     assert exc_info.value.code == 2
     captured = capsys.readouterr()
     assert "--embedder and --embedder-dim must be passed together" in captured.err
+
+
+def test_search_cli_soar_boost_flag_propagates(monkeypatch):
+    """`castle search --soar-boost` calls apply_soar_boosts when soar_enabled=True."""
+    import argparse
+    from unittest.mock import MagicMock, patch
+    from cognitive_castle.cli import cmd_search
+
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    fake_result = {"results": [{"id": "a", "score": 0.5}], "query": "x", "filters": {}}
+    spy = MagicMock(
+        return_value=[
+            {
+                "id": "a",
+                "score": 0.625,
+                "soar_boost": 1.25,
+                "soar_tags": ["recency-boost"],
+                "score_pre_soar": 0.5,
+            }
+        ]
+    )
+
+    args = argparse.Namespace(
+        query="x",
+        palace=None,
+        wing=None,
+        room=None,
+        results=5,
+        llm_rerank=False,
+        soar_boost=True,
+    )
+
+    with (
+        patch("cognitive_castle.cli.search_memories", return_value=fake_result),
+        patch("cognitive_castle.soar_bridge.apply_soar_boosts", spy),
+    ):
+        cmd_search(args)
+    spy.assert_called_once()
+    # First positional arg is the hits list
+    assert spy.call_args.args[0] == fake_result["results"]
+
+
+def test_search_cli_soar_boost_with_kill_switch_exits_2(monkeypatch, capsys):
+    """`--soar-boost` + CASTLE_SOAR_ENABLED=0 → sys.exit(2) + clear stderr."""
+    import argparse
+    import pytest
+    from cognitive_castle.cli import cmd_search
+
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "0")
+    args = argparse.Namespace(
+        query="x",
+        palace=None,
+        wing=None,
+        room=None,
+        results=5,
+        llm_rerank=False,
+        soar_boost=True,
+    )
+    with pytest.raises(SystemExit) as exc:
+        cmd_search(args)
+    assert exc.value.code == 2
+    err = capsys.readouterr().err
+    assert "CASTLE_SOAR_ENABLED=0 kill switch is active" in err

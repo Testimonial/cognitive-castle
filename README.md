@@ -212,6 +212,45 @@ Or via env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT
 
 **Graceful fallback:** if the LLM is unreachable (Ollama not running, network timeout, malformed JSON), Castle prints a one-line stderr warning and returns Stage 3's ordering. Search ALWAYS returns results.
 
+### Experimental: SOAR symbolic re-ranking (`--soar-boost`)
+
+SOAR is a symbolic cognitive architecture from Carnegie Mellon (production rules + working memory + chunking-based learning). Castle uses it as an **optional, opt-in, post-pipeline boost-tag layer**: after Stage 3 (cross-encoder rerank) and optional Stage 4 (LLM-judge), SOAR productions can re-weight hits using hand-crafted rules.
+
+This is research-grade — default users should ignore. Real value lands in #4c when chunking is wired up so SOAR can learn rules from impasses over time.
+
+**Prerequisites:**
+1. Build Soar 9.6+ from source with SML Python bindings: https://github.com/SoarGroup/Soar
+2. Ensure `python -c "import Python_sml_ClientInterface"` succeeds in your environment
+3. Set `CASTLE_SOAR_ENABLED=1` (kill switch — must be explicitly enabled)
+
+**Usage:**
+```bash
+CASTLE_SOAR_ENABLED=1 castle search "your query" --soar-boost
+```
+
+The two initial production rules (in `cognitive_castle/rules/castle-boost.soar`):
+- `recency-boost`: drawer accessed within 7 days → `score × 1.25`
+- `same-project`: drawer's wing matches `CASTLE_PROJECT` env → `score × 1.15`
+
+These compound multiplicatively. Final boost is clamped to `[0.1, 10.0]`.
+
+**Audit trail:** every boosted hit gains 3 new fields so every score change has a name (the differentiating value over neural rerankers):
+
+```json
+{
+  "score": 1.4375,
+  "score_pre_soar": 1.0,
+  "soar_boost": 1.4375,
+  "soar_tags": ["recency-boost", "same-project"]
+}
+```
+
+**Kill switch:** if you set `CASTLE_SOAR_ENABLED=0` but pass `--soar-boost`, Castle exits with code 2 + a clear stderr message rather than silently degrading.
+
+**MCP:** Claude Code and other MCP clients can pass `soar_boost: true` to the `castle_search` tool. Same kill-switch rule applies.
+
+**Custom rules:** point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend or replace the production set.
+
 ---
 
 ## How it works
