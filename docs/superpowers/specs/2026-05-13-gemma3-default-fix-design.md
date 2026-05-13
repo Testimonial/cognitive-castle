@@ -125,8 +125,11 @@ assert cfg.llm_model == "gemma3:4b"
 The docstring above the test (line 327) currently says:
 > "Note: both are 'gemma3:e4b' which is a known pre-existing broken tag (the model doesn't exist in Ollama's registry). Tracking the same broken default keeps cmd_init and the judge consistent — both will be fixed together in a follow-up PR."
 
-After the fix, this docstring is obsolete and is rewritten to:
-> "Note: both `cfg.llm_model` and `cmd_init`'s `--llm-model` default point at `gemma3:4b` — a real Ollama tag. The original PR #20 introduced `gemma3:e4b` as a typo; this PR fixed it."
+After the fix, this docstring is obsolete and is rewritten to describe the current invariant (config-driven and CLI-driven defaults stay in sync) without naming the historical typo:
+
+> "Note: both `cfg.llm_model` and `cmd_init`'s `--llm-model` default point at `gemma3:4b` — a real Ollama tag. This test verifies the config-driven and CLI-driven paths stay in sync; if a future change drifts them apart, users would get different LLM defaults via `castle init` vs in-process config loading. Both must match."
+
+**Implementation note (added post-merge):** an earlier draft of this docstring included the historical phrase "PR #20 introduced `gemma3:e4b` as a typo; this PR fixed it" — but that phrase contains the literal broken tag, which would violate Acceptance #1's strict "grep returns zero matches" requirement. Caught at final verification in the actual implementation (commit `7852346a`), the docstring was polished to describe the current invariant only. Historical context lives in the commit message + this spec's Background section, not in a permanent in-code docstring where it'd both clutter the test's purpose AND keep tripping `grep` regression checks.
 
 The test name (`test_llm_model_default_matches_cmd_init_default`) stays accurate — both still match.
 
