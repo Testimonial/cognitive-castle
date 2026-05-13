@@ -1,8 +1,16 @@
 # Wire `created_at` + `source_file` + `similarity` through search hits — Design Spec
 
 **Date:** 2026-05-13
-**Status:** Approved, ready for implementation plan
+**Status:** Revised after review (2026-05-13) — ready for implementation plan
 **Scope:** small follow-up surfaced by PR #4a's Task 4 code review
+
+## Revision history
+
+- **2026-05-13 (initial):** First draft, approved.
+- **2026-05-13 (post-review):**
+  1. **`json` import claim corrected.** Initial spec said "json already imported at the top of searcher.py (used elsewhere)." Fresh-eyes review verified false: `grep -n "^import json" cognitive_castle/searcher.py` returns empty. The implementer must add `import json` to searcher.py's import block as part of this change.
+  2. **Acceptance #2 framing tightened.** Was "failure count drops from 20 → 18" — fragile to unrelated flakes. Now "the 2 named tests turn green; `pytest tests/ --ignore=tests/benchmarks` shows no NEW failures vs. the develop baseline at commit `35f2151a`."
+  3. **Added fixture-timestamp note.** `seeded_collection` `filed_at` values (January 2026) are 132+ days old as of 2026-05-13 — way past SOAR's 7-day recency threshold. So fixture-based tests don't verify the SOAR motivation; Acceptance #5 (live smoke on a fresh palace) is the only end-to-end verification of recency-boost firing.
 
 ## Background
 
@@ -65,9 +73,9 @@ The `_get_filed_at` helper is defensive: returns `""` if `metadata_json` is miss
 
 | File | Change | LOC |
 |---|---|---|
-| `cognitive_castle/searcher.py` | Add `_get_filed_at(r)` helper (~10 LOC including docstring + json.loads + defensive try/except). Add 3 new fields to the hit dict at lines 475-487. | +15 |
+| `cognitive_castle/searcher.py` | Add `import json` to the import block (`json` is NOT currently imported — verified). Add `_get_filed_at(r)` helper (~10 LOC including docstring + json.loads + defensive try/except). Add 3 new fields to the hit dict at lines 475-487. | +16 |
 
-**Total: ~15 LOC across 1 existing file.** No new modules, no new test files.
+**Total: ~16 LOC across 1 existing file.** No new modules, no new test files.
 
 ## Data flow
 
@@ -128,7 +136,7 @@ def _get_filed_at(r) -> str:
     return str(meta.get("filed_at", ""))
 ```
 
-`json` is already imported at the top of `searcher.py` (used elsewhere). No new imports needed.
+**`json` is NOT currently imported in `searcher.py`** (verified at review time via `grep -n "^import json" cognitive_castle/searcher.py` returning empty). The implementer must add `import json` to searcher.py's import block as part of this change (1 line, alongside the existing imports). The `_get_filed_at` helper's `json.loads` call depends on it.
 
 ## Error handling
 
@@ -174,6 +182,12 @@ The `seeded_collection` fixture at `tests/conftest.py:118` sets `filed_at: "2026
 
 The chronic failures were testing EXACTLY this behavior. They've been documenting the gap. Closing the gap makes them pass. Adding new tests for the same behavior would be redundant.
 
+### Important — fixture timestamps are too old for recency-boost
+
+The `seeded_collection` fixture's `filed_at` values are January 2026 — 132+ days old as of 2026-05-13. SOAR's `recency-boost` rule fires only when `^recently-accessed = "true"`, which requires age < 7 days (default `RECENCY_THRESHOLD_SEC = 7 * 24 * 3600`). So fixture-based tests **will NOT verify recency-boost firing** — they only verify the `created_at` FIELD is present and correctly mapped.
+
+Acceptance #5 (live smoke on a fresh palace) is the only end-to-end verification of the SOAR motivation (rule actually fires). Don't be surprised when fixture-driven tests pass but inspecting `soar_tags` shows `recency-boost` missing — that's correct given the fixture data is old.
+
 ### Optional smoke (verify SOAR motivation works end-to-end)
 
 ```bash
@@ -193,7 +207,7 @@ Expected: hit has `created_at` populated AND (if MCP/JSON output mode) `soar_tag
 ## Acceptance criteria
 
 1. `pytest tests/test_searcher.py -v -k "test_result_fields or test_created_at_contains_filed_at"` — **2 passed** (both currently fail).
-2. `pytest tests/ --ignore=tests/benchmarks` — total failure count drops from 20 → 18 (these 2 fixed; no new regressions).
+2. `pytest tests/ --ignore=tests/benchmarks` — the 2 named tests turn green; **no NEW failures** vs. the develop baseline at commit `35f2151a` (the spec commit). Phrasing avoids an absolute failure-count number, which is fragile to unrelated flakes that might develop between now and merge.
 3. `ruff check cognitive_castle/searcher.py` clean. `ruff format --check cognitive_castle/searcher.py` clean.
 4. **Default behavior unchanged for existing fields:** `id`, `text`, `document`, `score`, `wing`, `room` still present with the same values. Only the 3 new fields are added.
 5. **Live smoke (optional, for SOAR motivation):** small palace with newly-filed drawer → `castle search ... --soar-boost` → audit field `soar_tags` includes `"recency-boost"` (verifiable via MCP `castle_search` JSON output if CLI doesn't surface it).
@@ -208,7 +222,7 @@ Expected: hit has `created_at` populated AND (if MCP/JSON output mode) `soar_tag
 - Adding `filed_at` / `created_at` validation (timestamp format, range checks)
 - Changes to hit dicts elsewhere (e.g., layers.py, sweep handlers) — only `_new_pipeline_search` touched
 
-## Spec self-review (2026-05-13)
+## Spec self-review (post-revision, 2026-05-13)
 
 1. **Placeholders:** None. `_get_filed_at` body shown verbatim. Acceptance criteria are testable (one-liner commands).
 2. **Internal consistency:** Architecture, Components, Data Flow, Testing all reference:
@@ -216,11 +230,17 @@ Expected: hit has `created_at` populated AND (if MCP/JSON output mode) `soar_tag
    - 3 new fields with exact mapping (`source_file` from hoisted column; `created_at` from JSON-parsed `metadata_json.filed_at`; `similarity` aliased to `score`)
    - Helper `_get_filed_at(r) -> str` with defensive empty-string fallback
    - 2 pre-existing tests turn green; no new tests
-3. **Scope:** Single-file, ~15 LOC change. Not decomposable into sub-projects.
-4. **Ambiguity:** `similarity` semantics explicitly stated as alias to `score` (Non-goals). `created_at` source explicitly named as `filed_at` from `metadata_json` (Background + Data flow). Defensive empty-string behavior on missing/malformed data stated in 2 places (Error handling + helper docstring).
+   - `import json` must be added (Components row + helper-contract section both mention this)
+3. **Scope:** Single-file, ~16 LOC change. Not decomposable into sub-projects.
+4. **Ambiguity:** `similarity` semantics explicitly stated as alias to `score` (Non-goals). `created_at` source explicitly named as `filed_at` from `metadata_json` (Background + Data flow). Defensive empty-string behavior on missing/malformed data stated in 2 places (Error handling + helper docstring). Fixture-timestamp limitation stated explicitly in Testing (won't verify recency-boost firing; that's live smoke's job).
 5. **Empirical grounding:**
    - `filed_at` confirmed in `miner.py:754, 900` (filing-time set)
-   - `seeded_collection` fixture confirmed at `tests/conftest.py:118-168` with `filed_at: "2026-01-01T00:00:00"` etc.
+   - `seeded_collection` fixture confirmed at `tests/conftest.py:118-168` with `filed_at: "2026-01-01T00:00:00"` etc. (verified via Read)
    - `source_file` confirmed as a hoisted column at `backends/lancedb_backend.py:61` (`_HOISTED` set)
    - `metadata_json` confirmed as the storage substrate at `backends/lancedb_backend.py:89, 221`
    - Only `test_result_fields` reads `similarity`, type-only (verified via grep)
+   - `json` confirmed NOT yet imported in `searcher.py` (verified via grep — initial spec wrongly claimed it was, fixed in revision)
+6. **Post-review #1 findings addressed:**
+   - ✅ `json` import claim corrected (not currently imported — implementer must add).
+   - ✅ Acceptance #2 tightened to "no NEW failures vs. develop baseline" instead of absolute count.
+   - ✅ Fixture-timestamp limitation made explicit (won't fire recency-boost on fixture queries — only live smoke verifies SOAR motivation).
