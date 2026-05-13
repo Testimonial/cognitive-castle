@@ -303,10 +303,9 @@ class CognitiveCastleConfig:
     def embedder_model(self):
         """Name of the embedder model to use.
 
-        Default: ``"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"``
-        (384-dimensional, 50+ languages, verified ~0.1s on CUDA).
-        Reads from ``CASTLE_EMBEDDER_MODEL`` env var first, then config file,
-        then the default.
+        Default: ``"BAAI/bge-m3"`` (1024-dimensional, multilingual, strong MTEB
+        retrieval performance). Reads from ``CASTLE_EMBEDDER_MODEL`` env var
+        first, then config file, then the default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_MODEL")
         if env_val:
@@ -314,7 +313,7 @@ class CognitiveCastleConfig:
         return str(
             self._file_config.get(
                 "embedder_model",
-                "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+                "BAAI/bge-m3",
             )
         ).strip()
 
@@ -322,8 +321,8 @@ class CognitiveCastleConfig:
     def embedder_dim(self):
         """Dimensionality of the embedder model's output vectors.
 
-        Default: ``384`` (for paraphrase-multilingual-MiniLM-L12-v2). Reads from
-        ``CASTLE_EMBEDDER_DIM`` env var first, then config file, then default.
+        Default: ``1024`` (for BAAI/bge-m3). Reads from ``CASTLE_EMBEDDER_DIM``
+        env var first, then config file, then default.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_DIM")
         if env_val:
@@ -335,31 +334,35 @@ class CognitiveCastleConfig:
                 pass
         cfg_val = self._file_config.get("embedder_dim")
         try:
-            parsed = int(cfg_val) if cfg_val is not None else 384
+            parsed = int(cfg_val) if cfg_val is not None else 1024
             if parsed >= 1:
                 return parsed
         except (TypeError, ValueError):
             pass
-        return 384
+        return 1024
 
     @property
     def embedder_identity(self):
-        """Stable identity string for the embedder stack (model + dim).
+        """Stable identity string for the embedder stack.
 
         Used by ``EmbedderIdentityMismatchError`` to detect stale palaces built
-        with a different embedding configuration.  Changing this value will
+        with a different embedding configuration. Changing this value will
         cause any palace built under a prior identity to fail loudly on open,
         prompting the user to run ``castle reindex``.
 
-        Default: ``"paraphrase-ml-MiniLM-L12-v2"``. Reads from ``CASTLE_EMBEDDER_IDENTITY``
-        env var first, then config file, then the default.
+        Reads from ``CASTLE_EMBEDDER_IDENTITY`` env var first, then config file.
+        If neither is set, auto-derives from ``embedder_model`` by stripping the
+        org prefix (last component after the final ``/``). For example,
+        ``"BAAI/bge-m3"`` → ``"bge-m3"``.
         """
         env_val = os.environ.get("CASTLE_EMBEDDER_IDENTITY")
         if env_val:
             return env_val.strip()
-        return str(
-            self._file_config.get("embedder_identity", "paraphrase-ml-MiniLM-L12-v2")
-        ).strip()
+        cfg_val = self._file_config.get("embedder_identity")
+        if cfg_val:
+            return str(cfg_val).strip()
+        model = self.embedder_model
+        return model.rsplit("/", 1)[-1] if "/" in model else model
 
     @property
     def reranker_model_gpu(self):

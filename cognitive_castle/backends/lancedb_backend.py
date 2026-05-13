@@ -36,6 +36,7 @@ import pyarrow as pa
 from .base import (
     BaseBackend,
     BaseCollection,
+    EmbedderIdentityMismatchError,
     GetResult,
     HealthStatus,
     PalaceNotFoundError,
@@ -92,6 +93,16 @@ def _build_schema(cfg) -> pa.Schema:
             pa.field("source_file", pa.utf8()),
             pa.field("chunk_index", pa.int64()),
             pa.field("decay_score", pa.float64()),
+        ]
+    )
+
+
+def _build_metadata_schema() -> pa.Schema:
+    """Build the LanceDB Arrow schema for castle_metadata (key/value strings)."""
+    return pa.schema(
+        [
+            pa.field("key", pa.utf8()),
+            pa.field("value", pa.utf8()),
         ]
     )
 
@@ -291,11 +302,7 @@ class LanceCollection(BaseCollection):
         if not query.strip():
             return []
         try:
-            results = (
-                self._table.search(query, query_type="fts")
-                .limit(n_results)
-                .to_list()
-            )
+            results = self._table.search(query, query_type="fts").limit(n_results).to_list()
             return list(results)
         except Exception as exc:
             logger.debug("fts_search: FTS query failed (%s), returning []", exc)
@@ -330,12 +337,7 @@ class LanceCollection(BaseCollection):
             return []
         quoted = ", ".join(_quote_val(i) for i in ids)
         try:
-            return (
-                self._table.search(None)
-                .where(f"id IN ({quoted})")
-                .limit(len(ids))
-                .to_list()
-            )
+            return self._table.search(None).where(f"id IN ({quoted})").limit(len(ids)).to_list()
         except Exception as exc:
             logger.debug("get_by_ids: fetch failed (%s), returning []", exc)
             return []
@@ -379,7 +381,11 @@ class LanceCollection(BaseCollection):
             raise ValueError("update requires at least one of documents, metadatas, embeddings")
         existing = self.get(ids=ids, include=["documents", "metadatas", "embeddings"])
         by_id = {
-            eid: (existing.documents[i], existing.metadatas[i], existing.embeddings[i] if existing.embeddings else None)
+            eid: (
+                existing.documents[i],
+                existing.metadatas[i],
+                existing.embeddings[i] if existing.embeddings else None,
+            )
             for i, eid in enumerate(existing.ids)
         }
         merged_docs, merged_metas, merged_vecs = [], [], []
@@ -413,6 +419,7 @@ class LanceCollection(BaseCollection):
 
         if query_texts is not None:
             from ..embedding import embed_texts
+
             vecs = embed_texts(query_texts)
         else:
             vecs = query_embeddings
@@ -430,7 +437,11 @@ class LanceCollection(BaseCollection):
         all_embeds: list[list[list[float]]] = [] if spec.embeddings else None
 
         for vec in vecs:
-            q = self._table.search(vec, vector_column_name="vector").metric("cosine").limit(n_results)
+            q = (
+                self._table.search(vec, vector_column_name="vector")
+                .metric("cosine")
+                .limit(n_results)
+            )
             if combined_filter:
                 q = q.where(combined_filter, prefilter=True)
             rows = q.to_list()
@@ -537,6 +548,54 @@ class LanceCollection(BaseCollection):
 
 
 # ---------------------------------------------------------------------------
+# Identity message helpers
+# ---------------------------------------------------------------------------
+
+
+def _dim_mismatch_message(stored_dim, cfg, palace_path) -> str:
+    return (
+        f"This palace at {palace_path} was built with embedder dim {stored_dim},\n"
+        f"but current config wants dim {cfg.embedder_dim} (BAAI/bge-m3 is now\n"
+        f"the default).\n"
+        f"\n"
+        f"If {stored_dim} is 384, your palace was built with the pre-cutover\n"
+        f"default (sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2).\n"
+        f"\n"
+        f"Migrate to the new default by running:\n"
+        f"\n"
+        f"  castle reindex --palace {palace_path} --sources <your-sources> \\\n"
+        f"    --embedder BAAI/bge-m3 --embedder-dim 1024 --yes\n"
+        f"\n"
+        f"Or keep using MiniLM by setting these env vars (all three required):\n"
+        f"\n"
+        f"  export CASTLE_EMBEDDER_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2\n"
+        f"  export CASTLE_EMBEDDER_DIM=384\n"
+        f"  export CASTLE_EMBEDDER_IDENTITY=paraphrase-ml-MiniLM-L12-v2\n"
+    )
+
+
+def _identity_mismatch_message(stored_identity, cfg, palace_path) -> str:
+    return (
+        f"This palace at {palace_path} was built with embedder identity\n"
+        f"'{stored_identity}' (dim {cfg.embedder_dim}), but current config wants\n"
+        f"identity '{cfg.embedder_identity}' (same dim). The vectors may share\n"
+        f"dimensionality but they're in different semantic spaces — searches\n"
+        f"would return wrong results.\n"
+        f"\n"
+        f"Migrate to the new identity by running:\n"
+        f"\n"
+        f"  castle reindex --palace {palace_path} --sources <your-sources> \\\n"
+        f"    --embedder {cfg.embedder_model} --embedder-dim {cfg.embedder_dim} --yes\n"
+        f"\n"
+        f"Or restore the prior identity by setting all three env vars:\n"
+        f"\n"
+        f"  export CASTLE_EMBEDDER_MODEL=<the model that produced '{stored_identity}'>\n"
+        f"  export CASTLE_EMBEDDER_DIM={cfg.embedder_dim}\n"
+        f"  export CASTLE_EMBEDDER_IDENTITY={stored_identity}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Backend
 # ---------------------------------------------------------------------------
 
@@ -575,6 +634,7 @@ class LanceDBBackend(BaseBackend):
     def _get_db(self, palace_path: str):
         if self._closed:
             from .base import BackendClosedError
+
             raise BackendClosedError("LanceDBBackend has been closed")
 
         db_dir = self._db_dir(palace_path)
@@ -583,17 +643,100 @@ class LanceDBBackend(BaseBackend):
             return cached
 
         import lancedb
+
         os.makedirs(db_dir, exist_ok=True)
         db = lancedb.connect(db_dir)
+        # Per-palace compat check (once, before caching)
+        self._check_embedder_compat(db, palace_path)
         self._dbs[db_dir] = db
         return db
+
+    def _check_embedder_compat(self, db, palace_path: str) -> None:
+        """Verify the palace's stored embedder dim + identity match cfg.
+
+        Layer 1 (cheap): read FixedSizeList.list_size from castle_drawers' vector
+        column. Mismatch → raise dim-mismatch error.
+        Layer 2 (string compare): read embedder_identity row from castle_metadata.
+        Mismatch → raise identity-mismatch error.
+        Legacy palace (castle_drawers exists, castle_metadata missing) → grandfather
+        by stamping cfg.embedder_identity, but only when dim matches (layer 1 passes).
+        Fresh palace (no castle_drawers) → no check; stamping happens on first
+        get_collection(create=True) via the get_collection hook.
+        """
+        table_names = db.table_names()
+        if "castle_drawers" not in table_names:
+            return  # Fresh palace; first create will stamp identity.
+
+        # Layer 1: dim from PyArrow schema
+        drawers = db.open_table("castle_drawers")
+        try:
+            vector_field = next(f for f in drawers.schema if f.name == "vector")
+            stored_dim = vector_field.type.list_size
+        except (StopIteration, AttributeError):
+            logger.warning("Could not introspect castle_drawers vector dim; skipping check")
+            return
+
+        if stored_dim != self._cfg.embedder_dim:
+            raise EmbedderIdentityMismatchError(
+                _dim_mismatch_message(stored_dim, self._cfg, palace_path)
+            )
+
+        # Layer 2: identity from castle_metadata
+        if "castle_metadata" in table_names:
+            stored_identity = self._read_stored_identity(db)
+            if stored_identity is not None and stored_identity != self._cfg.embedder_identity:
+                raise EmbedderIdentityMismatchError(
+                    _identity_mismatch_message(stored_identity, self._cfg, palace_path)
+                )
+        else:
+            # Legacy palace: dim matched, manifest missing → grandfather
+            self._stamp_identity(db)
+
+    def _stamp_identity(self, db) -> None:
+        """Create castle_metadata table and stamp the current embedder identity.
+
+        Race-safe: if another process won the create_table call, catches the
+        duplicate-table error and re-runs identity verification against the
+        winning process's stamp.
+        """
+        if "castle_metadata" in db.table_names():
+            return  # already stamped (steady state or losing-race fast-path)
+        try:
+            metadata_schema = _build_metadata_schema()
+            table = db.create_table("castle_metadata", schema=metadata_schema)
+            table.add([{"key": "embedder_identity", "value": self._cfg.embedder_identity}])
+        except Exception as e:
+            msg = str(e).lower()
+            if "exists" in msg or "duplicate" in msg:
+                # Race: another process won. Re-verify against winning identity.
+                stored = self._read_stored_identity(db)
+                if stored is not None and stored != self._cfg.embedder_identity:
+                    raise EmbedderIdentityMismatchError(
+                        _identity_mismatch_message(stored, self._cfg, "<palace>")
+                    )
+                return
+            logger.warning("Failed to stamp castle_metadata: %s", e)
+
+    def _read_stored_identity(self, db):
+        """Read the embedder_identity row from castle_metadata; None if absent."""
+        try:
+            import pyarrow.compute as pc
+
+            table = db.open_table("castle_metadata")
+            arrow_table = table.to_arrow()
+            mask = pc.equal(arrow_table["key"], "embedder_identity")
+            matched = arrow_table.filter(mask)
+            if matched.num_rows > 0:
+                return matched.column("value").to_pylist()[0]
+            return None
+        except Exception as e:
+            logger.warning("Failed to read castle_metadata: %s", e)
+            return None
 
     def get_collection(self, *args, **kwargs) -> LanceCollection:
         from ._utils import _normalize_get_collection_args
 
-        palace_ref, collection_name, create, _options = _normalize_get_collection_args(
-            args, kwargs
-        )
+        palace_ref, collection_name, create, _options = _normalize_get_collection_args(args, kwargs)
 
         palace_path = palace_ref.local_path
         if palace_path is None:
@@ -614,6 +757,10 @@ class LanceDBBackend(BaseBackend):
             db = self._get_db(palace_path)
             schema = _build_schema(self._cfg)
             table = db.create_table(collection_name, schema=schema, exist_ok=True)
+            # Stamp identity once when castle_drawers is first created or re-opened.
+            # _stamp_identity is idempotent (no-op if castle_metadata already exists).
+            if collection_name == "castle_drawers":
+                self._stamp_identity(db)
             self._tables[cache_key] = table
             return LanceCollection(table, self._cfg)
 
