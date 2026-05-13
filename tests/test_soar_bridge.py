@@ -329,7 +329,9 @@ def test_entity_match_boost_applied_when_flag_true(tmp_path):
     import pathlib
     from cognitive_castle import soar_bridge
 
-    _RULES = str(pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar")
+    _RULES = str(
+        pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar"
+    )
 
     hits = [
         {
@@ -360,7 +362,9 @@ def test_entity_match_boost_not_applied_when_flag_false(tmp_path):
     import pathlib
     from cognitive_castle import soar_bridge
 
-    _RULES = str(pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar")
+    _RULES = str(
+        pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar"
+    )
 
     hits = [
         {

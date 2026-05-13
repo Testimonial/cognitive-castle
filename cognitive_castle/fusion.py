@@ -4,6 +4,7 @@ Pure functions, no I/O, no model loads. Inputs are simple data structures so
 this module is trivially unit-testable in isolation from the retrieval
 pipeline.
 """
+
 from __future__ import annotations
 
 import math
@@ -14,6 +15,7 @@ from datetime import datetime
 @dataclass(frozen=True)
 class CandidateRef:
     """A drawer reference produced by a single retrieval signal."""
+
     drawer_id: str
     timestamp_unix: float
 
@@ -21,6 +23,7 @@ class CandidateRef:
 @dataclass(frozen=True)
 class ScoredCandidate:
     """A drawer reference with a fused score."""
+
     drawer_id: str
     timestamp_unix: float
     score: float

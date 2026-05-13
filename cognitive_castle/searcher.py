@@ -565,10 +565,7 @@ def _new_pipeline_search(
         return []
 
     # Derive entity-match flag from fusion provenance for the top-K candidates.
-    entity_match_by_id = {
-        sc.drawer_id: "kg" in sc.contributing_signals
-        for sc in fused[:k_cap]
-    }
+    entity_match_by_id = {sc.drawer_id: "kg" in sc.contributing_signals for sc in fused[:k_cap]}
 
     top_k_rows = col.get_by_ids(top_k_ids)
     if not top_k_rows:

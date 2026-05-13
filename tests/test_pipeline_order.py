@@ -252,19 +252,41 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
 
     class FakeCollection:
         def vector_search(self, query_vec, n_results, where=None):
-            return [{"id": "dense-only", "wing": "x", "room": "r", "source_file": "f.md", "text": "dense"}]
+            return [
+                {
+                    "id": "dense-only",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "dense",
+                }
+            ]
 
         def fts_search(self, query, n_results, where=None):
             return []
 
         def get_by_ids(self, ids):
             id_to_row = {
-                "kg-hit": {"id": "kg-hit", "wing": "x", "room": "r", "source_file": "f.md",
-                           "text": "kg hit", "decay_score": 1.0, "chunk_index": 0,
-                           "metadata_json": "{}"},
-                "dense-only": {"id": "dense-only", "wing": "x", "room": "r", "source_file": "f.md",
-                               "text": "dense only", "decay_score": 1.0, "chunk_index": 0,
-                               "metadata_json": "{}"},
+                "kg-hit": {
+                    "id": "kg-hit",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "kg hit",
+                    "decay_score": 1.0,
+                    "chunk_index": 0,
+                    "metadata_json": "{}",
+                },
+                "dense-only": {
+                    "id": "dense-only",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "dense only",
+                    "decay_score": 1.0,
+                    "chunk_index": 0,
+                    "metadata_json": "{}",
+                },
             }
             return [id_to_row[i] for i in ids if i in id_to_row]
 
@@ -289,6 +311,7 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
     # [m.entity_id for m in matches]), so we use a simple namespace object.
     import types
     import cognitive_castle.knowledge_graph as kg_mod
+
     monkeypatch.setattr(
         kg_mod.KnowledgeGraph,
         "find_drawers_by_entities",
@@ -306,6 +329,7 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
     )
 
     from cognitive_castle.config import CognitiveCastleConfig
+
     cfg = CognitiveCastleConfig()
 
     result = searcher_mod._new_pipeline_search(

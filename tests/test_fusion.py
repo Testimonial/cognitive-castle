@@ -1,4 +1,5 @@
 """Unit tests for fusion: weighted RRF + recency."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -50,7 +51,7 @@ class TestWeightedRRF:
     def test_missing_signal_treated_as_unranked(self):
         rank_lists = {
             "dense": [_ref("a"), _ref("b")],
-            "sparse": [_ref("a")],   # b is missing from sparse
+            "sparse": [_ref("a")],  # b is missing from sparse
         }
         weights = {"dense": 1.0, "sparse": 1.0}
         out = weighted_rrf(rank_lists, weights, k_rrf=60)
