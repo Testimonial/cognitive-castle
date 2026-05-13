@@ -179,6 +179,7 @@ def test_legacy_palace_grandfathers_when_dim_matches(tmp_path, monkeypatch):
 
     # Simulate legacy: delete castle_metadata
     import lancedb
+
     db = lancedb.connect(str(palace_path / "lancedb"))
     db.drop_table("castle_metadata")
     assert "castle_metadata" not in db.table_names()
@@ -202,6 +203,7 @@ def test_legacy_palace_grandfathers_when_dim_matches(tmp_path, monkeypatch):
 
     # Verify castle_metadata now exists with bge-m3 (use pyarrow, not pandas)
     import pyarrow.compute as pc
+
     db = lancedb.connect(str(palace_path / "lancedb"))
     assert "castle_metadata" in db.table_names()
     arrow_table = db.open_table("castle_metadata").to_arrow()
@@ -225,6 +227,7 @@ def test_legacy_palace_raises_when_dim_mismatches(tmp_path, monkeypatch):
 
     # Simulate legacy: delete castle_metadata
     import lancedb
+
     db = lancedb.connect(str(palace_path / "lancedb"))
     db.drop_table("castle_metadata")
     del db
@@ -283,6 +286,7 @@ def test_concurrent_grandfather_is_race_safe(tmp_path, monkeypatch):
 
     # Simulate legacy: delete castle_metadata
     import lancedb
+
     db = lancedb.connect(str(palace_path / "lancedb"))
     db.drop_table("castle_metadata")
     del db
@@ -310,6 +314,7 @@ def test_concurrent_grandfather_is_race_safe(tmp_path, monkeypatch):
     # Final state: castle_metadata exists with at least one embedder_identity row
     # (use pyarrow.compute — pandas not installed)
     import pyarrow.compute as pc
+
     db = lancedb.connect(str(palace_path / "lancedb"))
     assert "castle_metadata" in db.table_names()
     arrow_table = db.open_table("castle_metadata").to_arrow()

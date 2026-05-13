@@ -302,11 +302,7 @@ class LanceCollection(BaseCollection):
         if not query.strip():
             return []
         try:
-            results = (
-                self._table.search(query, query_type="fts")
-                .limit(n_results)
-                .to_list()
-            )
+            results = self._table.search(query, query_type="fts").limit(n_results).to_list()
             return list(results)
         except Exception as exc:
             logger.debug("fts_search: FTS query failed (%s), returning []", exc)
@@ -341,12 +337,7 @@ class LanceCollection(BaseCollection):
             return []
         quoted = ", ".join(_quote_val(i) for i in ids)
         try:
-            return (
-                self._table.search(None)
-                .where(f"id IN ({quoted})")
-                .limit(len(ids))
-                .to_list()
-            )
+            return self._table.search(None).where(f"id IN ({quoted})").limit(len(ids)).to_list()
         except Exception as exc:
             logger.debug("get_by_ids: fetch failed (%s), returning []", exc)
             return []
@@ -390,7 +381,11 @@ class LanceCollection(BaseCollection):
             raise ValueError("update requires at least one of documents, metadatas, embeddings")
         existing = self.get(ids=ids, include=["documents", "metadatas", "embeddings"])
         by_id = {
-            eid: (existing.documents[i], existing.metadatas[i], existing.embeddings[i] if existing.embeddings else None)
+            eid: (
+                existing.documents[i],
+                existing.metadatas[i],
+                existing.embeddings[i] if existing.embeddings else None,
+            )
             for i, eid in enumerate(existing.ids)
         }
         merged_docs, merged_metas, merged_vecs = [], [], []
@@ -424,6 +419,7 @@ class LanceCollection(BaseCollection):
 
         if query_texts is not None:
             from ..embedding import embed_texts
+
             vecs = embed_texts(query_texts)
         else:
             vecs = query_embeddings
@@ -441,7 +437,11 @@ class LanceCollection(BaseCollection):
         all_embeds: list[list[list[float]]] = [] if spec.embeddings else None
 
         for vec in vecs:
-            q = self._table.search(vec, vector_column_name="vector").metric("cosine").limit(n_results)
+            q = (
+                self._table.search(vec, vector_column_name="vector")
+                .metric("cosine")
+                .limit(n_results)
+            )
             if combined_filter:
                 q = q.where(combined_filter, prefilter=True)
             rows = q.to_list()
@@ -634,6 +634,7 @@ class LanceDBBackend(BaseBackend):
     def _get_db(self, palace_path: str):
         if self._closed:
             from .base import BackendClosedError
+
             raise BackendClosedError("LanceDBBackend has been closed")
 
         db_dir = self._db_dir(palace_path)
@@ -642,6 +643,7 @@ class LanceDBBackend(BaseBackend):
             return cached
 
         import lancedb
+
         os.makedirs(db_dir, exist_ok=True)
         db = lancedb.connect(db_dir)
         # Per-palace compat check (once, before caching)
@@ -734,9 +736,7 @@ class LanceDBBackend(BaseBackend):
     def get_collection(self, *args, **kwargs) -> LanceCollection:
         from ._utils import _normalize_get_collection_args
 
-        palace_ref, collection_name, create, _options = _normalize_get_collection_args(
-            args, kwargs
-        )
+        palace_ref, collection_name, create, _options = _normalize_get_collection_args(args, kwargs)
 
         palace_path = palace_ref.local_path
         if palace_path is None:
