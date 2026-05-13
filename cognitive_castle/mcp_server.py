@@ -377,6 +377,7 @@ def tool_search(
     context: str = None,
     llm_rerank: bool = False,
     soar_boost: bool = False,
+    soar_first: bool = False,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -390,6 +391,17 @@ def tool_search(
     dist = (1.0 - min_similarity) if min_similarity is not None else max_distance
     # Mitigate system prompt contamination (Issue #333)
     sanitized = sanitize_query(query)
+    # --soar-first requires both companion flags (MCP path: error response, not sys.exit)
+    if soar_first:
+        missing = []
+        if not llm_rerank:
+            missing.append("llm_rerank")
+        if not soar_boost:
+            missing.append("soar_boost")
+        if missing:
+            return {
+                "error": f"soar_first requires both llm_rerank and soar_boost; missing: {', '.join(missing)}",
+            }
     # Kill-switch check: soar_boost requires CASTLE_SOAR_ENABLED=1
     if soar_boost and not _config.soar_enabled:
         return {
@@ -405,6 +417,7 @@ def tool_search(
         max_distance=dist,
         llm_rerank=llm_rerank,
         soar_boost=soar_boost,
+        soar_first=soar_first,
     )
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:

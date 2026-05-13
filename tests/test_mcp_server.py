@@ -1016,3 +1016,20 @@ def test_mcp_castle_search_soar_boost_threads_through(monkeypatch):
     assert mock_sm.call_args.kwargs.get("soar_boost") is True
     # Result has the boosted hit with audit-trail fields
     assert result.get("results", [])[0]["soar_boost"] == 1.25
+
+
+def test_mcp_soar_first_without_other_flags_returns_error(monkeypatch):
+    """MCP tool_search with soar_first=True but soar_boost=False returns error response."""
+    from cognitive_castle import mcp_server
+
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+
+    result = mcp_server.tool_search(
+        query="test",
+        soar_first=True,
+        soar_boost=False,
+        llm_rerank=False,
+    )
+    assert "error" in result
+    assert "soar_first" in result["error"]
+    # MCP does NOT sys.exit — it returns the error to the client
