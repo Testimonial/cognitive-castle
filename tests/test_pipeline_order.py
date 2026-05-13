@@ -350,3 +350,79 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
     assert by_id["dense-only"]["entity_match"] is False, (
         "dense-only came via dense vector search only; entity_match should be False"
     )
+
+
+def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
+    """When _new_pipeline_search is called with a query and soar_boost=True,
+    _stage_5_soar receives the query via kwarg.
+
+    Verifies the plumbing in _apply_stages_4_and_5 passes query=query to
+    both _stage_5_soar call sites (default-order branch + soar_first branch).
+    """
+    import cognitive_castle.searcher as searcher_mod
+
+    captured: dict = {}
+
+    def stub_stage_5(reranked, cfg, query=""):
+        captured["query"] = query
+        captured["reranked"] = reranked
+        return reranked
+
+    monkeypatch.setattr(searcher_mod, "_stage_5_soar", stub_stage_5)
+
+    # Drive _apply_stages_4_and_5 directly with a known query
+    cfg_obj = type(
+        "C",
+        (),
+        {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)},
+    )()
+
+    reranked = [(0.9, {"id": "a", "score": 0.9})]
+    searcher_mod._apply_stages_4_and_5(
+        query="what did we decide about caching",
+        reranked=reranked,
+        cfg=cfg_obj,
+        llm_rerank=False,
+        soar_boost=True,
+        soar_first=False,
+    )
+
+    assert captured.get("query") == "what did we decide about caching", (
+        f"Expected query forwarded to _stage_5_soar; got {captured.get('query')!r}"
+    )
+
+
+def test_query_threaded_through_soar_first_branch(monkeypatch, tmp_path):
+    """Same as above but exercises the soar_first=True branch."""
+    import cognitive_castle.searcher as searcher_mod
+
+    captured: dict = {}
+
+    def stub_stage_5(reranked, cfg, query=""):
+        captured["query"] = query
+        return reranked
+
+    def stub_stage_4(query, reranked, cfg):
+        return reranked
+
+    monkeypatch.setattr(searcher_mod, "_stage_5_soar", stub_stage_5)
+    monkeypatch.setattr(searcher_mod, "_stage_4_judge", stub_stage_4)
+
+    cfg_obj = type(
+        "C",
+        (),
+        {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)},
+    )()
+
+    searcher_mod._apply_stages_4_and_5(
+        query="when did we ship the migration",
+        reranked=[(0.9, {"id": "a", "score": 0.9})],
+        cfg=cfg_obj,
+        llm_rerank=True,
+        soar_boost=True,
+        soar_first=True,
+    )
+
+    assert captured.get("query") == "when did we ship the migration", (
+        f"Expected query forwarded to _stage_5_soar in soar_first branch; got {captured.get('query')!r}"
+    )
