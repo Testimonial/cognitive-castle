@@ -8,6 +8,7 @@ The legacy BM25 Python implementation was removed in Task 14; Tantivy FTS
 via LanceDB now provides the sparse-retrieval signal.
 """
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -321,6 +322,29 @@ def _extract_ts(row) -> float:
     return 0.0
 
 
+def _get_filed_at(r) -> str:
+    """Extract filed_at (used as created_at in hits) from drawer metadata.
+
+    LanceDB stores per-drawer metadata as a JSON-serialized blob in the
+    metadata_json column. filed_at is set by the miner at filing time
+    (miner.py:754, 900) but isn't promoted to a hoisted column, so we
+    parse it on demand here.
+
+    Returns "" if metadata_json is missing, not a string, or malformed
+    JSON — gracefully degrading so missing/old drawers don't crash search.
+    """
+    if not isinstance(r, dict):
+        return ""
+    raw = r.get("metadata_json")
+    if not isinstance(raw, str):
+        return ""
+    try:
+        meta = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return ""
+    return str(meta.get("filed_at", ""))
+
+
 def _build_where_sql(wing, room) -> str | None:
     """Build a LanceDB SQL WHERE fragment for wing/room filtering."""
     conditions = []
@@ -482,6 +506,10 @@ def _new_pipeline_search(
             "score": float(s),
             "wing": r.get("wing", "") if isinstance(r, dict) else "",
             "room": r.get("room", "") if isinstance(r, dict) else "",
+            # NEW (PR follow-up to #4a — unblocks SOAR recency-boost):
+            "source_file": (r.get("source_file") or "") if isinstance(r, dict) else "",
+            "created_at": _get_filed_at(r),
+            "similarity": float(s),  # alias to score (test asserts type only)
         }
         for s, r in reranked[:n_results]
     ]
