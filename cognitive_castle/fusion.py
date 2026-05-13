@@ -122,6 +122,7 @@ def apply_recency(
                 drawer_id=c.drawer_id,
                 timestamp_unix=c.timestamp_unix,
                 score=c.score * factor,
+                contributing_signals=c.contributing_signals,
             )
         )
     boosted.sort(key=lambda s: (-s.score, s.drawer_id))

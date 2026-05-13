@@ -142,3 +142,26 @@ def test_weighted_rrf_populates_contributing_signals():
     by_id = {sc.drawer_id: sc for sc in result}
     assert by_id["a"].contributing_signals == frozenset({"dense", "sparse"})
     assert by_id["b"].contributing_signals == frozenset({"dense", "kg"})
+
+
+def test_apply_recency_preserves_contributing_signals():
+    """apply_recency reconstructs ScoredCandidates with updated score AND preserves provenance.
+
+    This is a regression guard — if apply_recency drops the contributing_signals
+    field, SOAR's entity-match rule never fires.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    scored = [
+        ScoredCandidate(
+            drawer_id="a",
+            timestamp_unix=now.timestamp(),
+            score=1.0,
+            contributing_signals=frozenset({"kg"}),
+        )
+    ]
+    result = apply_recency(scored, now=now, tau_days=90.0, max_boost=1.5)
+    assert result[0].contributing_signals == frozenset({"kg"}), (
+        "apply_recency must preserve contributing_signals through reconstruction"
+    )
