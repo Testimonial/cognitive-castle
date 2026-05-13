@@ -239,3 +239,90 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
         soar_first=False,
     )
     assert call_order == ["stage_4"]
+
+
+def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
+    """In _new_pipeline_search, KG-hop hits get row['entity_match']=True; non-KG hits get False.
+
+    Strategy: stub the recall paths (dense/sparse/kg) so we control which signals fire for
+    which ids. Stub col.get_by_ids to return matching row dicts. Run _new_pipeline_search.
+    Inspect the final hit dicts.
+    """
+    import cognitive_castle.searcher as searcher_mod
+
+    class FakeCollection:
+        def vector_search(self, query_vec, n_results, where=None):
+            return [{"id": "dense-only", "wing": "x", "room": "r", "source_file": "f.md", "text": "dense"}]
+
+        def fts_search(self, query, n_results, where=None):
+            return []
+
+        def get_by_ids(self, ids):
+            id_to_row = {
+                "kg-hit": {"id": "kg-hit", "wing": "x", "room": "r", "source_file": "f.md",
+                           "text": "kg hit", "decay_score": 1.0, "chunk_index": 0,
+                           "metadata_json": "{}"},
+                "dense-only": {"id": "dense-only", "wing": "x", "room": "r", "source_file": "f.md",
+                               "text": "dense only", "decay_score": 1.0, "chunk_index": 0,
+                               "metadata_json": "{}"},
+            }
+            return [id_to_row[i] for i in ids if i in id_to_row]
+
+    # Stub get_collection used inside _new_pipeline_search
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(),
+    )
+
+    # Stub the embedder to skip model loads
+    monkeypatch.setattr(
+        "cognitive_castle.embedding.embed_texts",
+        lambda texts: [[0.0] * 384 for _ in texts],
+    )
+
+    # Create sentinel files so the KG-hop block is entered
+    (tmp_path / "entity_registry.json").write_text("{}")
+    (tmp_path / "knowledge_graph.sqlite3").write_bytes(b"")
+
+    # Stub the KG-hop path to return "kg-hit" only.
+    # lookup_in_text must return objects with .entity_id (production code does
+    # [m.entity_id for m in matches]), so we use a simple namespace object.
+    import types
+    import cognitive_castle.knowledge_graph as kg_mod
+    monkeypatch.setattr(
+        kg_mod.KnowledgeGraph,
+        "find_drawers_by_entities",
+        lambda self, entities, **kwargs: ["kg-hit"],
+    )
+    monkeypatch.setattr(
+        "cognitive_castle.entity_registry.EntityRegistry.lookup_in_text",
+        lambda self, text, **kwargs: [types.SimpleNamespace(entity_id="entity-1")],
+    )
+
+    # Stub cross-encoder rerank to preserve input order
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, docs, cfg: [1.0 - i * 0.1 for i in range(len(docs))],
+    )
+
+    from cognitive_castle.config import CognitiveCastleConfig
+    cfg = CognitiveCastleConfig()
+
+    result = searcher_mod._new_pipeline_search(
+        query="test",
+        palace_path=str(tmp_path),
+        wing=None,
+        room=None,
+        n_results=10,
+        cfg=cfg,
+    )
+
+    by_id = {hit["id"]: hit for hit in result}
+    assert "kg-hit" in by_id, f"Expected kg-hit in results, got ids: {list(by_id)}"
+    assert "dense-only" in by_id, f"Expected dense-only in results, got ids: {list(by_id)}"
+    assert by_id["kg-hit"]["entity_match"] is True, (
+        "kg-hit came via KG-hop; entity_match should be True"
+    )
+    assert by_id["dense-only"]["entity_match"] is False, (
+        "dense-only came via dense vector search only; entity_match should be False"
+    )
