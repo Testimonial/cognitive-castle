@@ -1,0 +1,37 @@
+##
+## castle-boost.soar — Initial production set for PR #4a (2 rules)
+##
+## Schema (pushed to input-link by soar_bridge.py):
+##   state ^io.input-link <il>
+##   <il>  ^context <ctx>
+##         ^memory  <m>     (one per hit, up to 50)
+##   <ctx> ^project       <string>
+##   <m>   ^id                <string>  (composite: wing/room/source_file)
+##         ^project           <string>  (from hit.wing)
+##         ^score             <float>   (Stage 3+4 score)
+##         ^age-seconds       <int>
+##         ^recently-accessed true|false
+##
+## Each matching production adds an i-supported ^boost-tag to <m>.
+## The Python bridge maps tags → BOOST_MULTIPLIERS → compounded score boost.
+##
+## Follow-up PRs add entity-match, correction-priority, stale-penalty
+## rules as the supporting data lands (hit-provenance from fusion.py,
+## drawer-type metadata, EpMem access-counts).
+##
+
+sp {castle-boost*recency-boost
+    (state <s> ^io.input-link.memory <m>)
+    (<m> ^recently-accessed true)
+-->
+    (<m> ^boost-tag recency-boost)
+}
+
+sp {castle-boost*same-project
+    (state <s> ^io.input-link <il>)
+    (<il> ^context.project <p>)
+    (<il> ^memory <m>)
+    (<m> ^project <p>)
+-->
+    (<m> ^boost-tag same-project)
+}
