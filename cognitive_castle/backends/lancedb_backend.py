@@ -644,8 +644,51 @@ class LanceDBBackend(BaseBackend):
         import lancedb
         os.makedirs(db_dir, exist_ok=True)
         db = lancedb.connect(db_dir)
+        # Per-palace compat check (once, before caching)
+        self._check_embedder_compat(db, palace_path)
         self._dbs[db_dir] = db
         return db
+
+    def _check_embedder_compat(self, db, palace_path: str) -> None:
+        """Verify the palace's stored embedder dim + identity match cfg.
+
+        Layer 1 (cheap): read FixedSizeList.list_size from castle_drawers' vector
+        column. Mismatch → raise dim-mismatch error.
+        Layer 2 (string compare): read embedder_identity row from castle_metadata.
+        Mismatch → raise identity-mismatch error.
+        Legacy palace (castle_drawers exists, castle_metadata missing) → grandfather
+        by stamping cfg.embedder_identity, but only when dim matches (layer 1 passes).
+        Fresh palace (no castle_drawers) → no check; stamping happens on first
+        get_collection(create=True) via the get_collection hook.
+        """
+        table_names = db.table_names()
+        if "castle_drawers" not in table_names:
+            return  # Fresh palace; first create will stamp identity.
+
+        # Layer 1: dim from PyArrow schema
+        drawers = db.open_table("castle_drawers")
+        try:
+            vector_field = next(f for f in drawers.schema if f.name == "vector")
+            stored_dim = vector_field.type.list_size
+        except (StopIteration, AttributeError):
+            logger.warning("Could not introspect castle_drawers vector dim; skipping check")
+            return
+
+        if stored_dim != self._cfg.embedder_dim:
+            raise EmbedderIdentityMismatchError(
+                _dim_mismatch_message(stored_dim, self._cfg, palace_path)
+            )
+
+        # Layer 2: identity from castle_metadata
+        if "castle_metadata" in table_names:
+            stored_identity = self._read_stored_identity(db)
+            if stored_identity is not None and stored_identity != self._cfg.embedder_identity:
+                raise EmbedderIdentityMismatchError(
+                    _identity_mismatch_message(stored_identity, self._cfg, palace_path)
+                )
+        else:
+            # Legacy palace: dim matched, manifest missing → grandfather
+            self._stamp_identity(db)
 
     def _stamp_identity(self, db) -> None:
         """Create castle_metadata table and stamp the current embedder identity.
