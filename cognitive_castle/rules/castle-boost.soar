@@ -1,24 +1,25 @@
 ##
-## castle-boost.soar — Initial production set for PR #4a (2 rules)
+## castle-boost.soar — Production set for PR #4a + #4c-type-match
 ##
 ## Schema (pushed to input-link by soar_bridge.py):
 ##   state ^io.input-link <il>
 ##   <il>  ^context <ctx>
 ##         ^memory  <m>     (one per hit, up to 50)
 ##   <ctx> ^project       <string>
+##         ^query-type    <string>?   (decision|preference|milestone|problem|emotional — optional, only present when classify_query succeeds)
 ##   <m>   ^id                <string>  (composite: wing/room/source_file)
 ##         ^project           <string>  (from hit.wing)
 ##         ^score             <float>   (Stage 3+4 score)
 ##         ^age-seconds       <int>
 ##         ^recently-accessed true|false
 ##         ^entity-match      true|false  (came via KG-hop entity match)
+##         ^drawer-type       <string>?   (decision|preference|milestone|problem|emotional — only when hit.room is one of these)
 ##
 ## Each matching production adds an i-supported ^boost-tag to <m>.
 ## The Python bridge maps tags → BOOST_MULTIPLIERS → compounded score boost.
 ##
-## Follow-up PRs add entity-match, correction-priority, stale-penalty
-## rules as the supporting data lands (hit-provenance from fusion.py,
-## drawer-type metadata, EpMem access-counts).
+## Follow-up PRs add correction-priority, stale-penalty rules as the
+## supporting data lands (EpMem access-counts, etc.).
 ##
 
 sp {castle-boost*recency-boost
@@ -43,4 +44,14 @@ sp {castle-boost*entity-match
     (<m> ^entity-match true)
 -->
     (<m> ^boost-tag entity-match)
+}
+
+sp {castle-boost*type-match
+    "Boost hits whose drawer-type (room) matches the inferred query intent."
+    (state <s> ^io.input-link <il>)
+    (<il> ^context.query-type <t>)
+    (<il> ^memory <m>)
+    (<m> ^drawer-type <t>)
+-->
+    (<m> ^boost-tag type-match)
 }

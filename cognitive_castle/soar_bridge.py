@@ -38,8 +38,9 @@ _PREV_TOP_WMES: dict = {}  # palace_path → list of top-level WME handles from 
 # fire on the same hit. Final boost clamped to [0.1, 10.0] (see apply_soar_boosts).
 BOOST_MULTIPLIERS: dict[str, float] = {
     "recency-boost": 1.25,  # ^recently-accessed "true" (age < 7d default)
-    "same-project": 1.15,  # <m>.project == <context>.project
-    "entity-match": 1.30,  # ^entity-match "true" (hit came via KG-hop entity match)
+    "same-project": 1.15,   # ^project matches ^io.input-link.context.project
+    "entity-match": 1.30,   # ^entity-match "true" (came via KG-hop entity match)
+    "type-match": 1.25,     # ^drawer-type matches ^io.input-link.context.query-type
 }
 
 # Hardcoded operational limits (YAGNI on promoting to config knobs).
@@ -210,17 +211,22 @@ def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict
       ^io.input-link <il>
       <il>           ^context <ctx>
                      ^memory[]  with id, project, score, age-seconds,
-                                recently-accessed, entity-match
+                                recently-accessed, entity-match, drawer-type
       ^context <ctx> ^project <string>
-                     [^query-type <string>]   ← added in PR #4c-type-match
-      ^memory <m>    [^drawer-type <string>]  ← added in PR #4c-type-match
+                     [^query-type <string>]   ← when classify_query succeeds
+      ^memory <m>    [^drawer-type <string>]  ← when hit.room in MEMORY_TYPES
 
-    query is accepted (for the type-match rule wiring in PR #4c-type-match)
-    but NOT yet consumed — task 4 of that PR adds the ^query-type and
-    ^drawer-type pushes.
+    query is classified via cognitive_castle.query_intent.classify_query;
+    if it returns one of the 5 memory_types, ^context.query-type is pushed.
+    For each hit, if its room is one of the 5 known memory_types,
+    ^memory.drawer-type is pushed. The castle-boost*type-match rule fires
+    when both attributes match.
 
     Returns (memory_wmes, top_level_wmes) for later WM cleanup.
     """
+    # ── Import here (NOT module-level) to keep query_intent only loaded when SOAR fires ──
+    from .query_intent import MEMORY_TYPES, classify_query
+
     input_link = agent.GetInputLink()
     project = os.environ.get("CASTLE_PROJECT", "default")
 
@@ -229,7 +235,14 @@ def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict
     # Push context
     context_wme = input_link.CreateIdWME("context")
     context_wme.CreateStringWME("project", project)
-    # Skip the query string for #4a — rules don't read it. Add in future PRs.
+
+    # ── NEW (PR #4c-type-match): push ^context.query-type when classification succeeds ──
+    # classify_query handles empty/whitespace/non-matching internally — returns None.
+    query_type = classify_query(query)
+    if query_type:
+        context_wme.CreateStringWME("query-type", query_type)
+    # If query_type is None, skip the push — rule can't fire without it.
+
     top_level_wmes.append(context_wme)
 
     # Push one ^memory WME per hit
@@ -256,6 +269,12 @@ def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict
         # else "false". String symbol to match the recently-accessed pattern.
         entity_match = "true" if hit.get("entity_match") else "false"
         m.CreateStringWME("entity-match", entity_match)
+
+        # ── NEW (PR #4c-type-match): push ^memory.drawer-type when room is a known memory_type ──
+        room = hit.get("room") or ""
+        if room in MEMORY_TYPES:
+            m.CreateStringWME("drawer-type", room)
+        # If room isn't a known type, skip — rule can't fire for this hit.
 
         memory_wmes[composite_id] = m
         top_level_wmes.append(m)

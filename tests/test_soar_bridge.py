@@ -6,10 +6,16 @@ the SML-unavailable fallback path + kill-switch behavior without needing
 Soar installed.
 """
 
+import pathlib
 import time
 from unittest.mock import MagicMock
 
 import pytest
+
+# Path to the live castle-boost.soar rule file used by integration tests.
+_RULES = str(
+    pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar"
+)
 
 _SML_AVAILABLE = False
 try:
@@ -362,7 +368,7 @@ def test_entity_match_boost_not_applied_when_flag_false(tmp_path):
     import pathlib
     from cognitive_castle import soar_bridge
 
-    _RULES = str(
+    _RULES_local = str(
         pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar"
     )
 
@@ -377,10 +383,67 @@ def test_entity_match_boost_not_applied_when_flag_false(tmp_path):
             "created_at": "2020-01-01T00:00:00Z",
         }
     ]
-    cfg = _mock_cfg(rules_path=_RULES)
+    cfg = _mock_cfg(rules_path=_RULES_local)
 
     boosted = soar_bridge.apply_soar_boosts(hits, cfg)
     if soar_bridge._load_sml() is not None:
         assert "entity-match" not in boosted[0]["soar_tags"], (
             "Rule should not fire when entity_match=False"
+        )
+
+
+def test_type_match_boost_applied_when_types_match(tmp_path):
+    """Query classifies to 'decision', drawer room='decision' → rule fires.
+
+    Requires SML-available env to exercise the rule; assertions are skipped
+    on environments without SML (same pattern as other soar_bridge tests).
+    """
+    from cognitive_castle import soar_bridge
+
+    hits = [
+        {
+            "id": "a",
+            "score": 1.0,
+            "wing": "x",
+            "room": "decision",        # ← matches the query intent
+            "source_file": "f",
+            "entity_match": False,
+            "created_at": "2020-01-01T00:00:00Z",  # old → recency-boost won't fire
+        }
+    ]
+    cfg = _mock_cfg(rules_path=_RULES)
+
+    boosted = soar_bridge.apply_soar_boosts(hits, cfg, query="what did we decide about X")
+
+    if soar_bridge._load_sml() is not None:
+        assert "type-match" in boosted[0]["soar_tags"], (
+            f"Expected type-match tag to fire; got soar_tags={boosted[0]['soar_tags']}"
+        )
+        assert boosted[0]["soar_boost"] >= 1.25, (
+            f"Expected boost >= 1.25, got {boosted[0]['soar_boost']}"
+        )
+
+
+def test_type_match_boost_not_applied_when_types_differ(tmp_path):
+    """Query classifies to 'decision', drawer room='preference' → rule does not fire."""
+    from cognitive_castle import soar_bridge
+
+    hits = [
+        {
+            "id": "a",
+            "score": 1.0,
+            "wing": "x",
+            "room": "preference",       # ← different memory_type
+            "source_file": "f",
+            "entity_match": False,
+            "created_at": "2020-01-01T00:00:00Z",
+        }
+    ]
+    cfg = _mock_cfg(rules_path=_RULES)
+
+    boosted = soar_bridge.apply_soar_boosts(hits, cfg, query="what did we decide about X")
+
+    if soar_bridge._load_sml() is not None:
+        assert "type-match" not in boosted[0]["soar_tags"], (
+            "Rule should not fire when query-type != drawer-type"
         )
