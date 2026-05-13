@@ -188,6 +188,8 @@ def search(
     room: str = None,
     n_results: int = 5,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
+    soar_first: bool = False,
 ):
     """CLI entry point.
 
@@ -213,6 +215,8 @@ def search(
             room=room,
             n_results=n_results,
             llm_rerank=llm_rerank,
+            soar_boost=soar_boost,
+            soar_first=soar_first,
         )
     except EmbedderIdentityMismatchError:
         # Surface the friendly migration prompt — don't wrap as SearchError.
@@ -234,6 +238,8 @@ def search_memories(
     candidate_strategy: str = "vector",
     is_hook_call: bool = False,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
+    soar_first: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -258,6 +264,8 @@ def search_memories(
         is_hook_call: When True, uses a smaller reranker K cap (hook budget).
         llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
             cross-encoder (Stage 3). Default False — no behavior change.
+        soar_boost: When True, appends Stage 5 SOAR symbolic boost-tags after
+            Stage 4 (or Stage 3 if llm_rerank is False). Default False.
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
@@ -271,6 +279,8 @@ def search_memories(
         cfg,
         is_hook_call=is_hook_call,
         llm_rerank=llm_rerank,
+        soar_boost=soar_boost,
+        soar_first=soar_first,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
@@ -362,6 +372,73 @@ def _build_where_sql(wing, room) -> str | None:
     return " AND ".join(conditions) if conditions else None
 
 
+def _stage_4_judge(
+    query: str,
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Stage 4: LLM-as-judge re-rank.
+
+    Truncates ``reranked`` to ``cfg.llm_judge_top_n``, then asks the LLM to
+    reorder. Returns the reordered top-N tuples (the rest are discarded —
+    same behavior as the inline block this replaces).
+
+    On any LLM failure, the underlying ``judge.judge()`` returns identity
+    order, so this helper preserves the input top-N order.
+    """
+    from .judge import judge
+
+    top_n = cfg.llm_judge_top_n
+    judge_pool = reranked[:top_n]
+    judge_docs = [_extract_text(r) for _, r in judge_pool]
+    new_order = judge(query, judge_docs, cfg)
+    return [judge_pool[i] for i in new_order]
+
+
+def _stage_5_soar(
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Stage 5: SOAR symbolic boost-tags.
+
+    Delegates to soar_bridge._apply_soar_to_reranked. Lazy-imports
+    soar_bridge so the module is only loaded when soar_boost is on
+    (preserves the "no SOAR overhead by default" invariant from PR #4a).
+    """
+    from . import soar_bridge
+
+    return soar_bridge._apply_soar_to_reranked(reranked, cfg)
+
+
+def _apply_stages_4_and_5(
+    query: str,
+    reranked: list[tuple[float, dict]],
+    cfg,
+    llm_rerank: bool,
+    soar_boost: bool,
+    soar_first: bool,
+) -> list[tuple[float, dict]]:
+    """Run optional Stage 4 (judge) and Stage 5 (SOAR) in the requested order.
+
+    Default order (soar_first=False): Stage 4 → Stage 5 (judge truncates to
+    top-N first, then SOAR re-ranks those). Matches the pre-#4b behavior.
+
+    soar_first=True: Stage 5 → Stage 4 (SOAR re-ranks the full reranked list,
+    then judge truncates to top-N from SOAR's preferred order). Caller is
+    responsible for validation — when soar_first=True, both llm_rerank and
+    soar_boost must also be True (CLI/MCP layers validate this loudly).
+    """
+    if soar_first:
+        reranked = _stage_5_soar(reranked, cfg)
+        reranked = _stage_4_judge(query, reranked, cfg)
+        return reranked
+    if llm_rerank:
+        reranked = _stage_4_judge(query, reranked, cfg)
+    if soar_boost:
+        reranked = _stage_5_soar(reranked, cfg)
+    return reranked
+
+
 def _new_pipeline_search(
     query: str,
     palace_path: str,
@@ -371,6 +448,8 @@ def _new_pipeline_search(
     cfg,
     is_hook_call: bool = False,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
+    soar_first: bool = False,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -493,18 +572,15 @@ def _new_pipeline_search(
     rerank_scores = rerank(query, docs, cfg=cfg)
     reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
 
-    # ── Stage 4 (optional): LLM-as-judge re-rank ───────────────────────────
-    if llm_rerank:
-        from .judge import judge
-
-        # Take top-N (cfg.llm_judge_top_n) from Stage 3 output for LLM judging.
-        # Stage 3 already returned a sorted list (most-relevant first).
-        top_n = cfg.llm_judge_top_n
-        judge_pool = reranked[:top_n]
-        judge_docs = [_extract_text(r) for _, r in judge_pool]
-        new_order = judge(query, judge_docs, cfg)
-        # Reorder judge_pool by the LLM's preferred indices.
-        reranked = [judge_pool[i] for i in new_order]
+    # ── Stage 4 + Stage 5 (optional, composable order) ────────────────────
+    reranked = _apply_stages_4_and_5(
+        query=query,
+        reranked=reranked,
+        cfg=cfg,
+        llm_rerank=llm_rerank,
+        soar_boost=soar_boost,
+        soar_first=soar_first,
+    )
 
     return [
         {

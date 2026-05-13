@@ -377,6 +377,7 @@ def tool_search(
     context: str = None,
     llm_rerank: bool = False,
     soar_boost: bool = False,
+    soar_first: bool = False,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -390,6 +391,23 @@ def tool_search(
     dist = (1.0 - min_similarity) if min_similarity is not None else max_distance
     # Mitigate system prompt contamination (Issue #333)
     sanitized = sanitize_query(query)
+    # --soar-first requires both companion flags (MCP path: error response, not sys.exit)
+    if soar_first:
+        missing = []
+        if not llm_rerank:
+            missing.append("llm_rerank")
+        if not soar_boost:
+            missing.append("soar_boost")
+        if missing:
+            return {
+                "error": f"soar_first requires both llm_rerank and soar_boost; missing: {', '.join(missing)}",
+            }
+    # Kill-switch check: soar_boost requires CASTLE_SOAR_ENABLED=1
+    if soar_boost and not _config.soar_enabled:
+        return {
+            "error": "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost",
+            "soar_boost_skipped": True,
+        }
     result = search_memories(
         sanitized["clean_query"],
         palace_path=_config.palace_path,
@@ -398,6 +416,8 @@ def tool_search(
         n_results=limit,
         max_distance=dist,
         llm_rerank=llm_rerank,
+        soar_boost=soar_boost,
+        soar_first=soar_first,
     )
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:
@@ -417,22 +437,6 @@ def tool_search(
         for h in hits:
             h.pop("metadata", None)
         result["results"] = hits
-
-    # SOAR post-pipeline boost-tags (PR #4a, opt-in via soar_boost param)
-    if soar_boost:
-        if not _config.soar_enabled:
-            # Kill switch — surface error in MCP response
-            result["error"] = (
-                "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost"
-            )
-            result["soar_boost_skipped"] = True
-        elif hits:
-            # LAZY IMPORT (per spec acceptance #14)
-            from . import soar_bridge
-
-            adjusted = soar_bridge.apply_soar_boosts(hits, _config)
-            adjusted.sort(key=lambda h: -h.get("score", 0.0))
-            result["results"] = adjusted
 
     return result
 

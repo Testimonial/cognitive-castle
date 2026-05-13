@@ -156,7 +156,7 @@ def _get_agent(palace_path: str, rules_path: str):
         return None
 
     # Load productions
-    if not os.path.exists(rules_path):
+    if rules_path is None or not os.path.exists(rules_path):
         _warn_once(
             f"rules-not-found-{rules_path}",
             f"rule file not found: {rules_path}",
@@ -478,3 +478,42 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
 
     # Combine boosted hits with truncated remainder
     return hits + _annotate_unboosted(truncated_remainder)
+
+
+def _apply_soar_to_reranked(
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Apply SOAR boost-tags to a list of (score, row) tuples.
+
+    Equivalent to apply_soar_boosts() but operates on the tuple shape used
+    inside _new_pipeline_search. Returns a NEW list sorted by boosted score
+    (descending). Each row dict is mutated in place with audit-trail fields
+    (soar_boost, soar_tags, score_pre_soar) so they surface in the final hits.
+
+    Never raises. Same graceful-fallback behavior as apply_soar_boosts.
+    """
+    if not reranked:
+        return reranked
+
+    # Adapt tuples → dict shape for the shared rule-firing core.
+    # Each tuple's row dict already has the fields apply_soar_boosts reads.
+    # Set "score" on each row from the tuple (the tuple's score is the
+    # authoritative pre-SOAR score, regardless of any "score" already on the row).
+    hits_view = []
+    for score, row in reranked:
+        row["score"] = score
+        hits_view.append(row)
+
+    # Delegate to the existing public API; it mutates hits_view in place
+    # (sets soar_boost, soar_tags, score_pre_soar and updates "score").
+    boosted = apply_soar_boosts(hits_view, cfg)
+
+    # Guarantee audit-trail fields on every row even when apply_soar_boosts
+    # returned early (SML unavailable, kill-switch, etc.) without annotating.
+    _annotate_unboosted(boosted)
+
+    # Rebuild tuples from the (possibly mutated) row dicts using updated scores.
+    new_tuples = [(h["score"], h) for h in boosted]
+    new_tuples.sort(key=lambda t: -t[0])
+    return new_tuples

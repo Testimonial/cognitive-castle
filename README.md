@@ -271,6 +271,24 @@ These compound multiplicatively. Final boost is clamped to `[0.1, 10.0]`.
 
 **Custom rules:** point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend or replace the production set.
 
+### Composable Stage 4 ↔ Stage 5 order (`--soar-first`)
+
+By default, when both `--llm-rerank` and `--soar-boost` are on, the pipeline
+runs Stage 4 (judge) first then Stage 5 (SOAR) — the LLM picks the best
+candidates and SOAR applies final boost adjustments to the chosen top-N.
+
+Use `--soar-first` to flip the order: SOAR runs first (re-ranking the full
+~20 cross-encoder candidates by boost-tag rules), then the judge picks the
+top-N from SOAR's preferred order. Useful when you want SOAR's hand-crafted
+rules to shape what the LLM considers.
+
+```bash
+castle search "what did we decide?" --llm-rerank --soar-boost --soar-first
+```
+
+`--soar-first` requires both `--llm-rerank` AND `--soar-boost` to be on; using
+it alone or with only one companion flag fails loudly with a clear message.
+
 ---
 
 ## How it works
