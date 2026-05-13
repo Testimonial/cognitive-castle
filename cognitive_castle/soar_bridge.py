@@ -156,7 +156,7 @@ def _get_agent(palace_path: str, rules_path: str):
         return None
 
     # Load productions
-    if not os.path.exists(rules_path):
+    if rules_path is None or not os.path.exists(rules_path):
         _warn_once(
             f"rules-not-found-{rules_path}",
             f"rule file not found: {rules_path}",
@@ -508,6 +508,10 @@ def _apply_soar_to_reranked(
     # Delegate to the existing public API; it mutates hits_view in place
     # (sets soar_boost, soar_tags, score_pre_soar and updates "score").
     boosted = apply_soar_boosts(hits_view, cfg)
+
+    # Guarantee audit-trail fields on every row even when apply_soar_boosts
+    # returned early (SML unavailable, kill-switch, etc.) without annotating.
+    _annotate_unboosted(boosted)
 
     # Rebuild tuples from the (possibly mutated) row dicts using updated scores.
     new_tuples = [(h["score"], h) for h in boosted]

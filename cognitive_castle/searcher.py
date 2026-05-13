@@ -188,6 +188,7 @@ def search(
     room: str = None,
     n_results: int = 5,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
 ):
     """CLI entry point.
 
@@ -213,6 +214,7 @@ def search(
             room=room,
             n_results=n_results,
             llm_rerank=llm_rerank,
+            soar_boost=soar_boost,
         )
     except EmbedderIdentityMismatchError:
         # Surface the friendly migration prompt — don't wrap as SearchError.
@@ -234,6 +236,7 @@ def search_memories(
     candidate_strategy: str = "vector",
     is_hook_call: bool = False,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -258,6 +261,8 @@ def search_memories(
         is_hook_call: When True, uses a smaller reranker K cap (hook budget).
         llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
             cross-encoder (Stage 3). Default False — no behavior change.
+        soar_boost: When True, appends Stage 5 SOAR symbolic boost-tags after
+            Stage 4 (or Stage 3 if llm_rerank is False). Default False.
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
@@ -271,6 +276,7 @@ def search_memories(
         cfg,
         is_hook_call=is_hook_call,
         llm_rerank=llm_rerank,
+        soar_boost=soar_boost,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
@@ -385,6 +391,21 @@ def _stage_4_judge(
     return [judge_pool[i] for i in new_order]
 
 
+def _stage_5_soar(
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Stage 5: SOAR symbolic boost-tags.
+
+    Delegates to soar_bridge._apply_soar_to_reranked. Lazy-imports
+    soar_bridge so the module is only loaded when soar_boost is on
+    (preserves the "no SOAR overhead by default" invariant from PR #4a).
+    """
+    from . import soar_bridge
+
+    return soar_bridge._apply_soar_to_reranked(reranked, cfg)
+
+
 def _new_pipeline_search(
     query: str,
     palace_path: str,
@@ -394,6 +415,7 @@ def _new_pipeline_search(
     cfg,
     is_hook_call: bool = False,
     llm_rerank: bool = False,
+    soar_boost: bool = False,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -519,6 +541,10 @@ def _new_pipeline_search(
     # ── Stage 4 (optional): LLM-as-judge re-rank ───────────────────────────
     if llm_rerank:
         reranked = _stage_4_judge(query, reranked, cfg)
+
+    # ── Stage 5 (optional): SOAR symbolic boost-tags ──────────────────────
+    if soar_boost:
+        reranked = _stage_5_soar(reranked, cfg)
 
     return [
         {
