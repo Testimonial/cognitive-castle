@@ -36,6 +36,7 @@ from pathlib import Path
 from .config import CognitiveCastleConfig
 from .corpus_origin import detect_origin_heuristic, detect_origin_llm
 from .llm_client import LLMError, get_provider
+from .searcher import search_memories
 from .version import __version__
 
 # Backward-compat alias for legacy `@patch("cognitive_castle.cli.MempalaceConfig")`
@@ -580,20 +581,52 @@ def cmd_sweep(args):
 
 
 def cmd_search(args):
-    from .searcher import search, SearchError
+    from .searcher import search, SearchError, _print_search_results
 
-    palace_path = (
-        os.path.expanduser(args.palace) if args.palace else CognitiveCastleConfig().palace_path
-    )
-    try:
-        search(
-            query=args.query,
-            palace_path=palace_path,
-            wing=args.wing,
-            room=args.room,
-            n_results=args.results,
-            llm_rerank=getattr(args, "llm_rerank", False),
+    cfg = CognitiveCastleConfig()
+    soar_boost = getattr(args, "soar_boost", False)
+
+    # Kill-switch check: --soar-boost requires CASTLE_SOAR_ENABLED=1
+    if soar_boost and not cfg.soar_enabled:
+        print(
+            "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost",
+            file=sys.stderr,
         )
+        sys.exit(2)
+
+    palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
+
+    try:
+        if soar_boost:
+            # SOAR path: call search_memories directly, apply boosts, format output.
+            result = search_memories(
+                query=args.query,
+                palace_path=palace_path,
+                wing=args.wing,
+                room=args.room,
+                n_results=args.results,
+                llm_rerank=getattr(args, "llm_rerank", False),
+            )
+            hits = result.get("results", [])
+            if hits:
+                # LAZY IMPORT (per spec acceptance #14): soar_bridge module
+                # is only loaded when --soar-boost is actually used.
+                from . import soar_bridge
+
+                hits = soar_bridge.apply_soar_boosts(hits, cfg)
+                hits.sort(key=lambda h: -h.get("score", 0.0))
+            boosted_result = dict(result, results=hits)
+            _print_search_results(boosted_result, args.query)
+        else:
+            # Default path: unchanged.
+            search(
+                query=args.query,
+                palace_path=palace_path,
+                wing=args.wing,
+                room=args.room,
+                n_results=args.results,
+                llm_rerank=getattr(args, "llm_rerank", False),
+            )
     except SearchError:
         sys.exit(1)
 
@@ -1073,6 +1106,15 @@ def main():
             "Adds 1-2s latency. Uses the LLM provider configured at `castle init` "
             "(set via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL or castle.yaml). "
             "Off by default."
+        ),
+    )
+    p_search.add_argument(
+        "--soar-boost",
+        action="store_true",
+        help=(
+            "Apply SOAR symbolic-rule boost-tags to final scores "
+            "(experimental; requires Soar 9.6+ + SML Python bindings "
+            "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
         ),
     )
 
