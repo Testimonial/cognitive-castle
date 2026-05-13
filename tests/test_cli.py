@@ -54,7 +54,12 @@ def test_cmd_status_custom_palace(mock_config_cls):
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
-        palace=None, query="test query", wing="mywing", room="myroom", results=3, soar_boost=False,
+        palace=None,
+        query="test query",
+        wing="mywing",
+        room="myroom",
+        results=3,
+        soar_boost=False,
         soar_first=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:

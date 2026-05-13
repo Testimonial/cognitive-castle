@@ -36,7 +36,6 @@ from pathlib import Path
 from .config import CognitiveCastleConfig
 from .corpus_origin import detect_origin_heuristic, detect_origin_llm
 from .llm_client import LLMError, get_provider
-from .searcher import search_memories
 from .version import __version__
 
 # Backward-compat alias for legacy `@patch("cognitive_castle.cli.MempalaceConfig")`

@@ -284,10 +284,7 @@ def test_apply_soar_to_reranked_tuple_parity(monkeypatch, tmp_path):
         }
         for i in range(3)
     ]
-    hits_dict = [
-        {**r, "text": "doc", "document": "doc"}
-        for r in rows
-    ]
+    hits_dict = [{**r, "text": "doc", "document": "doc"} for r in rows]
     reranked_tuples = [(r["score"], dict(r, text="doc", document="doc")) for r in rows]
 
     cfg = _mock_cfg()

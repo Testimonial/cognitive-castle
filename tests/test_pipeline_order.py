@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_stage_4_judge_helper_exists_and_reorders(monkeypatch):
     """_stage_4_judge takes (query, reranked, cfg) and returns reordered top-N tuples."""
@@ -26,6 +24,7 @@ def test_stage_4_judge_helper_exists_and_reorders(monkeypatch):
 
     # Monkeypatch judge() to return a fixed permutation [2, 0, 1]
     import cognitive_castle.judge as judge_mod
+
     monkeypatch.setattr(judge_mod, "judge", lambda q, docs, cfg: [2, 0, 1])
 
     result = _stage_4_judge("test query", reranked, FakeCfg())
@@ -73,6 +72,7 @@ def test_search_memories_threads_soar_boost_through_pipeline(tmp_path, monkeypat
         return reranked
 
     monkeypatch.setattr(searcher_mod, "_stage_5_soar", stub_stage_5)
+
     # We also need to stub the pipeline so it doesn't try to query a real palace
     def stub_pipeline(query, palace_path, wing, room, n_results, cfg, **kwargs):
         # Mimic what _new_pipeline_search does at the end
@@ -83,7 +83,7 @@ def test_search_memories_threads_soar_boost_through_pipeline(tmp_path, monkeypat
 
     monkeypatch.setattr(searcher_mod, "_new_pipeline_search", stub_pipeline)
 
-    result = searcher_mod.search_memories(
+    searcher_mod.search_memories(
         query="test",
         palace_path=str(tmp_path),
         soar_boost=True,
@@ -111,7 +111,16 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
     from cognitive_castle.searcher import _apply_stages_4_and_5
 
     reranked = [(0.9, {"id": "a", "score": 0.9})]
-    cfg_obj = type("C", (), {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)})()
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
+    )()
 
     _apply_stages_4_and_5(
         query="q",
@@ -137,7 +146,17 @@ def test_soar_first_runs_soar_then_judge(monkeypatch, tmp_path):
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
-    cfg_obj = type("C", (), {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)})()
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
+    )()
 
     _apply_stages_4_and_5(
         query="q",
@@ -163,7 +182,17 @@ def test_soar_only_no_judge_call(monkeypatch, tmp_path):
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
-    cfg_obj = type("C", (), {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)})()
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
+    )()
 
     _apply_stages_4_and_5(
         query="q",
@@ -189,7 +218,17 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
-    cfg_obj = type("C", (), {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)})()
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
+    )()
 
     _apply_stages_4_and_5(
         query="q",
