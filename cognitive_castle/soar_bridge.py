@@ -38,9 +38,9 @@ _PREV_TOP_WMES: dict = {}  # palace_path → list of top-level WME handles from 
 # fire on the same hit. Final boost clamped to [0.1, 10.0] (see apply_soar_boosts).
 BOOST_MULTIPLIERS: dict[str, float] = {
     "recency-boost": 1.25,  # ^recently-accessed "true" (age < 7d default)
-    "same-project": 1.15,   # ^project matches ^io.input-link.context.project
-    "entity-match": 1.30,   # ^entity-match "true" (came via KG-hop entity match)
-    "type-match": 1.25,     # ^drawer-type matches ^io.input-link.context.query-type
+    "same-project": 1.15,  # ^project matches ^io.input-link.context.project
+    "entity-match": 1.30,  # ^entity-match "true" (came via KG-hop entity match)
+    "type-match": 1.25,  # ^drawer-type matches ^io.input-link.context.query-type
 }
 
 # Hardcoded operational limits (YAGNI on promoting to config knobs).

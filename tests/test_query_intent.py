@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 
 from cognitive_castle.query_intent import MEMORY_TYPES, classify_query
 
@@ -52,4 +51,6 @@ def test_overlap_resolves_to_most_specific():
 
 def test_memory_types_constant_matches_known_set():
     """Single-source-of-truth check: MEMORY_TYPES is derived from _INTENT_PATTERNS keys."""
-    assert MEMORY_TYPES == frozenset({"decision", "preference", "milestone", "problem", "emotional"})
+    assert MEMORY_TYPES == frozenset(
+        {"decision", "preference", "milestone", "problem", "emotional"}
+    )

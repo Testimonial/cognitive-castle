@@ -374,7 +374,12 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
     cfg_obj = type(
         "C",
         (),
-        {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)},
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
     )()
 
     reranked = [(0.9, {"id": "a", "score": 0.9})]
@@ -411,7 +416,12 @@ def test_query_threaded_through_soar_first_branch(monkeypatch, tmp_path):
     cfg_obj = type(
         "C",
         (),
-        {"llm_judge_top_n": 5, "soar_enabled": True, "soar_rules_path": None, "palace_path": str(tmp_path)},
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
     )()
 
     searcher_mod._apply_stages_4_and_5(

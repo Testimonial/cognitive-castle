@@ -405,7 +405,7 @@ def test_type_match_boost_applied_when_types_match(tmp_path):
             "id": "a",
             "score": 1.0,
             "wing": "x",
-            "room": "decision",        # ← matches the query intent
+            "room": "decision",  # ← matches the query intent
             "source_file": "f",
             "entity_match": False,
             "created_at": "2020-01-01T00:00:00Z",  # old → recency-boost won't fire
@@ -433,7 +433,7 @@ def test_type_match_boost_not_applied_when_types_differ(tmp_path):
             "id": "a",
             "score": 1.0,
             "wing": "x",
-            "room": "preference",       # ← different memory_type
+            "room": "preference",  # ← different memory_type
             "source_file": "f",
             "entity_match": False,
             "created_at": "2020-01-01T00:00:00Z",
