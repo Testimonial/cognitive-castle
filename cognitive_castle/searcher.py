@@ -362,6 +362,29 @@ def _build_where_sql(wing, room) -> str | None:
     return " AND ".join(conditions) if conditions else None
 
 
+def _stage_4_judge(
+    query: str,
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Stage 4: LLM-as-judge re-rank.
+
+    Truncates ``reranked`` to ``cfg.llm_judge_top_n``, then asks the LLM to
+    reorder. Returns the reordered top-N tuples (the rest are discarded —
+    same behavior as the inline block this replaces).
+
+    On any LLM failure, the underlying ``judge.judge()`` returns identity
+    order, so this helper preserves the input top-N order.
+    """
+    from .judge import judge
+
+    top_n = cfg.llm_judge_top_n
+    judge_pool = reranked[:top_n]
+    judge_docs = [_extract_text(r) for _, r in judge_pool]
+    new_order = judge(query, judge_docs, cfg)
+    return [judge_pool[i] for i in new_order]
+
+
 def _new_pipeline_search(
     query: str,
     palace_path: str,
@@ -495,16 +518,7 @@ def _new_pipeline_search(
 
     # ── Stage 4 (optional): LLM-as-judge re-rank ───────────────────────────
     if llm_rerank:
-        from .judge import judge
-
-        # Take top-N (cfg.llm_judge_top_n) from Stage 3 output for LLM judging.
-        # Stage 3 already returned a sorted list (most-relevant first).
-        top_n = cfg.llm_judge_top_n
-        judge_pool = reranked[:top_n]
-        judge_docs = [_extract_text(r) for _, r in judge_pool]
-        new_order = judge(query, judge_docs, cfg)
-        # Reorder judge_pool by the LLM's preferred indices.
-        reranked = [judge_pool[i] for i in new_order]
+        reranked = _stage_4_judge(query, reranked, cfg)
 
     return [
         {
