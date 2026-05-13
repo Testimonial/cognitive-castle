@@ -123,7 +123,7 @@ def _apply_soar_to_reranked(
 
 Implementation: same Soar agent setup, same WM schema, same rule firings as the existing `apply_soar_boosts`. Only the input/output shape differs. The actual rule-firing logic is shared (extracted to a private helper if needed).
 
-`apply_soar_boosts(hits, cfg)` keeps its current signature for external callers (e.g., MCP-side direct invocations). The cli.py call site goes away. Future direct callers of `apply_soar_boosts` retain back-compat.
+`apply_soar_boosts(hits, cfg)` keeps its current signature as a public API for any external user code that imports it directly from `soar_bridge`. After this PR, NO internal call sites remain — both cli.py and mcp_server.py call sites are removed (SOAR now runs inside `search_memories`). The function stays public mainly for tests (`tests/test_soar_bridge.py` exercises it directly) and any third-party plugins that might call it.
 
 ### Half 4: CLI flag + validation
 
@@ -147,7 +147,7 @@ if args.soar_first:
 
 `--soar-first` alone or with only one of the other two flags is loud (`sys.exit(2)`). Same loud-fail philosophy as the existing SOAR kill switch (`CASTLE_SOAR_ENABLED=0` + `--soar-boost` mismatch).
 
-### Half 5: MCP symmetry
+### Half 5: MCP symmetry + MCP-side SOAR migration
 
 `soar_first: bool = False` param added to the `search_memories` MCP tool schema (and any other MCP tools that wrap `search_memories`). Same validation, but instead of `sys.exit(2)` the MCP path returns an error response:
 
@@ -156,6 +156,8 @@ if soar_first and not (soar_boost and llm_rerank):
     return {"error": "soar_first requires both soar_boost and llm_rerank to be true"}
 ```
 
+**The MCP path ALSO has its own external `apply_soar_boosts` call** at `mcp_server.py:421-435` (mirror of the cli.py block this PR removes). To keep CLI and MCP symmetric, that block is REMOVED in this PR. The MCP tool just passes `soar_boost` and `soar_first` through to `search_memories()`, which handles both stages inside the pipeline. After this PR, NO internal call sites of `apply_soar_boosts` remain — it stays as a public API for external user code only.
+
 ## Components (file-level changes)
 
 | File | Change | LOC |
@@ -163,7 +165,7 @@ if soar_first and not (soar_boost and llm_rerank):
 | `cognitive_castle/searcher.py` | Add `soar_boost: bool = False`, `soar_first: bool = False` to `search_memories()` + `_new_pipeline_search()`. Inside `_new_pipeline_search` after Stage 3 (around line 494): extract Stage 4 (judge) call to a private helper `_stage_4_judge(query, reranked, cfg) -> reranked`. Add Stage 5 (SOAR) call as private helper `_stage_5_soar(reranked, cfg) -> reranked`. Branch on `soar_first` to call them in the right order. | +35 |
 | `cognitive_castle/soar_bridge.py` | Add `_apply_soar_to_reranked(reranked, cfg) -> reranked`. Extract the rule-firing core from `apply_soar_boosts` into a shared private helper. Both public entry points (`apply_soar_boosts` for dict input, `_apply_soar_to_reranked` for tuple input) call the shared helper with appropriate adapter logic. | +50 |
 | `cognitive_castle/cli.py` | Add `--soar-first` argparse flag to the `search` subcommand. In `cmd_search`: validate combination (errors loudly if `--soar-first` without `--llm-rerank` or `--soar-boost`). REMOVE the existing `if soar_boost: ... else:` conditional branch — both stages now run inside `search_memories`. Just pass `soar_boost` + `soar_first` through to `search()`. | +20, -25 |
-| `cognitive_castle/mcp_server.py` | Add `soar_first: bool = False` to the `search_memories` MCP tool schema. Add validation that returns an error response if `soar_first` is True but `soar_boost` or `llm_rerank` is False. Pass through to `search_memories()`. | +12 |
+| `cognitive_castle/mcp_server.py` | Add `soar_first: bool = False` to the `search_memories` MCP tool schema. Add validation that returns an error response if `soar_first` is True but `soar_boost` or `llm_rerank` is False. Pass `soar_boost` and `soar_first` through to `search_memories()`. **REMOVE** the existing external `if soar_boost: ... apply_soar_boosts(hits, _config) ...` block at lines 421-435 — SOAR now runs inside `search_memories`, mirroring the cli.py removal. | +12, -15 |
 | `tests/test_soar_bridge.py` | Add `test_apply_soar_to_reranked_tuple_parity` — feeds the same data to both the dict path and the new tuple path; asserts the boost-tags fired are identical. Add `test_apply_soar_to_reranked_returns_sorted_tuples` — verifies output sorted by boosted score descending. | +50 |
 | `tests/test_pipeline_order.py` (new) | New file. 6 tests for the ordering logic (default-preservation × 3, `soar_first` × 3 — see Testing section). | +120 |
 | `tests/test_cli.py` | Add `test_cli_soar_first_without_llm_rerank_errors`, `test_cli_soar_first_without_soar_boost_errors`. Both expect `sys.exit(2)` with a message naming the missing flag. | +30 |
@@ -207,6 +209,27 @@ castle search "foo" --llm-rerank --soar-boost --soar-first
 ```
 
 Subtle but important: when `soar_first=True`, the LLM-judge sees candidates that SOAR has ALREADY reordered. The judge's top-N selection is from SOAR's view, not the cross-encoder's view. SOAR-applied scores are preserved as `score_pre_soar` in the audit-trail fields; the judge sees the new ordering but the LLM prompt itself does NOT see the boost tags (judge only takes docs + query, no metadata).
+
+### Candidate-pool size difference between the two orderings
+
+Stage 4 (judge) TRUNCATES `reranked` from `cfg.reranker_k_interactive` candidates (~20) down to `cfg.llm_judge_top_n` (~10). This matters for SOAR's input pool:
+
+- **Default (judge-then-SOAR):** judge truncates to top-10 first, then SOAR re-ranks those 10. SOAR sees only the cross-encoder's top-10.
+- **`soar_first=True`:** SOAR re-ranks all 20 first, then judge truncates to top-10 from SOAR's preferred order. SOAR sees the full ~20.
+
+Real consequence: a hit ranked 15th by cross-encoder that would fire `same-project` SOAR boost is INVISIBLE to SOAR in default mode (truncated away before SOAR runs) but VISIBLE in `soar_first` mode (SOAR sees it, boosts it, possibly enough to make the judge's top-10). The two orderings can produce genuinely different result sets, not just different orderings of the same set.
+
+### Score vs. order in `soar_first` mode
+
+The final hit list has:
+- **`score` field**: SOAR's boosted score (because `_apply_soar_to_reranked` rewrote the tuple's first element)
+- **List position**: judge's preferred order (because `_stage_4_judge` reordered the tuples after SOAR ran)
+
+A hit at position 0 might NOT have the highest `score` — the judge moved it there because the LLM prefers it, but a lower-`score` hit could be at position 0 if SOAR-boosted it less than another candidate the judge demoted.
+
+Consumers expecting `score ↓` to correlate with `position ↑` will be surprised. This is intentional in `soar_first` mode (you asked for SOAR-then-judge; judge has final say on order). The audit-trail field `score_pre_soar` already exposes the original cross-encoder score; the SOAR-boosted score is the `score` field; the position is the judge's verdict. No new field added — consumers who care can derive judge's rank from list position.
+
+In default (judge-then-SOAR) mode, `score ↓` and `position ↑` DO agree because SOAR's final sort-by-boosted-score is the last operation.
 
 ### Validation-error path
 
@@ -335,16 +358,17 @@ def test_mcp_soar_first_without_other_flags_returns_error():
 
 1. All new tests pass.
 2. Existing test suite stays at baseline (no NEW failures vs develop).
-3. `castle search "foo"` (default invocation, no flags) — byte-identical output to develop.
-4. `castle search "foo" --soar-boost` (existing behavior) — byte-identical to develop.
-5. `castle search "foo" --llm-rerank --soar-boost` — byte-identical to develop.
+3. `castle search "foo"` (default invocation, no flags) — output (text and hit ordering) identical to develop.
+4. `castle search "foo" --soar-boost` (existing behavior) — same hits in same order with same fields as develop.
+5. `castle search "foo" --llm-rerank --soar-boost` — same hits in same order with same fields as develop.
 6. `castle search "foo" --soar-first` errors with `sys.exit(2)` + clear message naming missing flag(s).
 7. `castle search "foo" --llm-rerank --soar-boost --soar-first` works, audit-trail intact (each hit has `soar_boost`, `soar_tags`, `score_pre_soar`).
 8. MCP `search_memories(soar_first=true, soar_boost=true, llm_rerank=true)` parity with CLI.
 9. MCP `search_memories(soar_first=true, soar_boost=false)` returns error-response.
-10. `ruff check` + `ruff format --check` clean on all 10 touched files.
-11. CLAUDE.md retrieval-pipeline diagram updated to show Stage 4 ↔ Stage 5 as orderable.
-12. README's SOAR subsection mentions `--soar-first`.
+10. MCP `search_memories(soar_boost=true)` (no `soar_first`) — same hits as `search_memories(soar_boost=true)` on develop. The external→internal SOAR migration in `mcp_server.py` produces equivalent output.
+11. `ruff check` + `ruff format --check` clean on all 10 touched files.
+12. CLAUDE.md retrieval-pipeline diagram updated to show Stage 4 ↔ Stage 5 as orderable.
+13. README's SOAR subsection mentions `--soar-first`.
 
 ## Out of scope (deferred)
 
@@ -368,7 +392,19 @@ def test_mcp_soar_first_without_other_flags_returns_error():
 4. **Ambiguity:** Default behavior preserved (stated in Goal, Architecture, Data Flow, Acceptance). `--soar-first` validation rules stated in 3 places (Architecture, Error Handling, Acceptance). Kill-switch precedence (kill switch fires first) called out explicitly in Error Handling.
 5. **Empirical grounding:**
    - SOAR pipeline location confirmed at `cli.py:cmd_search` lines 599-619 (current) — branch is removed in this PR
-   - Stage 4 LLM-judge location confirmed at `searcher.py:_new_pipeline_search` lines 497-507 — Stage 5 SOAR is added immediately after
+   - Stage 4 LLM-judge location confirmed at `searcher.py:_new_pipeline_search` lines 497-507 — Stage 5 SOAR is added immediately after; Stage 4 truncates to `cfg.llm_judge_top_n` (=10)
    - `apply_soar_boosts` signature confirmed at `soar_bridge.py:349` — keeps current public API
+   - Second `apply_soar_boosts` call site confirmed at `mcp_server.py:421-435` — also removed in this PR for CLI/MCP symmetry
    - 2 SOAR rules from #4a (`recency-boost`, `same-project`) are unchanged
    - `cfg.soar_enabled` kill switch behavior confirmed at `cli.py:cmd_search` lines 590-595 — fires before any `--soar-first` validation
+
+## Revision history
+
+**Revision 2 (2026-05-13):** Spec review surfaced 3 substantive issues. Fixed inline:
+- **MCP migration:** the spec described moving SOAR into the pipeline for cli.py but didn't address `mcp_server.py:421-435` (mirror `apply_soar_boosts` call site). Added Half 5 explicit removal note, updated Components row to call out the -15 LOC removal, added new acceptance criterion #10 verifying MCP output equivalence after the migration.
+- **Truncation-pool difference:** added a new "Candidate-pool size difference" subsection under Data Flow. Stage 4 truncates from `cfg.reranker_k_interactive` (~20) down to `cfg.llm_judge_top_n` (~10). Default mode SOAR sees the post-truncation 10; `soar_first` mode SOAR sees the full 20. The two orderings can produce different result sets, not just different orderings of the same set.
+- **Score-vs-order in `soar_first` mode:** added a new "Score vs. order" subsection. In `soar_first` mode, hit `score` is SOAR's boosted score but list position is the judge's preferred order — they may not agree. Documented as intentional (you asked for SOAR-then-judge, judge has final say on order); audit-trail field `score_pre_soar` already exposes original cross-encoder score. No new field added.
+
+Plus minor polish:
+- Replaced "byte-identical" with "same hits in same order with same fields" in acceptance criteria (more accurate for dict-based outputs).
+- Named the back-compat consumers of `apply_soar_boosts` explicitly: tests + third-party plugins. After this PR no internal callers remain.
