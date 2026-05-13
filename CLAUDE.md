@@ -180,7 +180,10 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │     ├── Sparse FTS search (Tantivy via LanceDB)
     │     └── KG-hop (entity registry lookup → KnowledgeGraph.find_drawers_by_entities)
     ├── Stage 2: weighted RRF + recency multiplier → top-K (K=20 interactive, K=10 hook)
-    └── Stage 3: cross-encoder rerank → top-N results
+    ├── Stage 3: cross-encoder rerank → top-N candidates
+    └── Stage 4 (optional, opt-in via --llm-rerank or llm_rerank:true MCP param):
+          LLM-as-judge re-ranks top-cfg.llm_judge_top_n (default 10) from Stage 3
+          → graceful identity-order fallback on any LLM failure
 ```
 
 ## Key Files for Common Tasks

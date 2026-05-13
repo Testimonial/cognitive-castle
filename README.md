@@ -178,6 +178,40 @@ RuntimeError: query dim(1024) doesn't match the column vector vector dim(384)
 
 There's no silent corruption — the system errors loudly — but the error doesn't tell you to reindex. **Always reindex after changing embedder config.** A friendlier error message is tracked as a follow-up PR.
 
+### Stage 4: LLM-as-judge re-rank (`--llm-rerank`)
+
+Castle's default 3-stage pipeline (dense + FTS + KG → fusion → cross-encoder rerank) is already strong. For the last few percent on high-stakes queries — especially ones where subtle intent or multi-hop reasoning matters — you can opt into a **Stage 4 LLM-as-judge re-rank**.
+
+```bash
+castle search "what did we decide about authentication?" --llm-rerank
+```
+
+How it works:
+- Stage 3 produces a top-10 candidate list (configurable via `CASTLE_LLM_JUDGE_TOP_N`).
+- The configured LLM ranks those 10 by relevance, returns a preferred ordering.
+- Castle reorders and returns top-N.
+
+**Cost:** 1–2s extra latency per search.
+
+**LLM provider:** uses the LLM configured at `castle init` (see `castle init --help` for `--llm-provider` / `--llm-model` / etc.). Configure via env vars or `castle.yaml`:
+
+```yaml
+llm_provider: ollama       # or "anthropic" / "openai-compat"
+llm_model: llama3.1:8b      # any model your provider supports
+# llm_endpoint:             # only needed for openai-compat / custom Ollama
+# llm_api_key:              # only needed for anthropic / openai-compat
+```
+
+Or via env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`.
+
+> **⚠️ Note:** Castle's documented default LLM model is `gemma3:e4b`, but that tag doesn't exist in Ollama's registry — it's a pre-existing bug tracked in a follow-up. To actually use `--llm-rerank`, set `CASTLE_LLM_MODEL` to a model your Ollama (or other provider) has.
+
+**MCP:** Claude Code and other MCP clients can pass `llm_rerank: true` to the `search_memories` (or `castle_search`) tool.
+
+**Privacy:** If you've configured a BYOK external provider (Anthropic, cloud OpenAI-compat, etc.), candidate snippets DO leave your machine. Castle prints a privacy warning at `castle init` for external providers — per-search warnings would be noise. If you want strict local-only operation, stick with Ollama / LM Studio / vLLM on localhost.
+
+**Graceful fallback:** if the LLM is unreachable (Ollama not running, network timeout, malformed JSON), Castle prints a one-line stderr warning and returns Stage 3's ordering. Search ALWAYS returns results.
+
 ---
 
 ## How it works

@@ -3,7 +3,12 @@ import json
 import tempfile
 
 import pytest
-from cognitive_castle.config import CognitiveCastleConfig, normalize_wing_name, sanitize_kg_value, sanitize_name
+from cognitive_castle.config import (
+    CognitiveCastleConfig,
+    normalize_wing_name,
+    sanitize_kg_value,
+    sanitize_name,
+)
 
 
 def test_default_config():
@@ -216,6 +221,7 @@ def test_kg_value_rejects_over_length():
 
 def test_config_has_retrieval_upgrade_keys():
     from cognitive_castle.config import CognitiveCastleConfig
+
     cfg = CognitiveCastleConfig()
     # Cutover: defaults are now the new stack.
     assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -256,6 +262,7 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
 def test_cognitive_castle_config_is_canonical_name():
     """CognitiveCastleConfig is the new canonical class name."""
     from cognitive_castle.config import CognitiveCastleConfig
+
     cfg = CognitiveCastleConfig()
     # Sanity check: an existing property still works.
     assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
@@ -264,8 +271,105 @@ def test_cognitive_castle_config_is_canonical_name():
 def test_mempalace_config_is_backward_compat_alias():
     """MempalaceConfig still importable as an alias to CognitiveCastleConfig."""
     from cognitive_castle.config import MempalaceConfig, CognitiveCastleConfig
+
     # Same class object (alias, not a separate class).
     assert MempalaceConfig is CognitiveCastleConfig
     # Instances of one are instances of the other.
     cfg = MempalaceConfig()
     assert isinstance(cfg, CognitiveCastleConfig)
+
+
+# ── Helper for LLM-judge config tests ──────────────────────────────────────
+
+
+def _make_config_with_file_config(file_config):
+    """Construct a CognitiveCastleConfig with a custom file config dict.
+
+    Used by LLM-judge property tests. Bypasses JSON parsing by directly
+    setting _file_config, allowing tests to override individual properties
+    without touching the filesystem.
+    """
+    cfg = CognitiveCastleConfig(config_dir=tempfile.mkdtemp())
+    cfg._file_config = file_config
+    return cfg
+
+
+# ── LLM-judge config properties (Stage 4 judge module contract) ──────────────
+
+
+def test_llm_judge_top_n_default():
+    """Without env var or config file, defaults to 10."""
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_judge_top_n == 10
+
+
+def test_llm_judge_top_n_env_override(monkeypatch):
+    """CASTLE_LLM_JUDGE_TOP_N env var takes precedence."""
+    monkeypatch.setenv("CASTLE_LLM_JUDGE_TOP_N", "15")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_judge_top_n == 15
+
+
+def test_llm_provider_default_is_ollama():
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_provider == "ollama"
+
+
+def test_llm_provider_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_LLM_PROVIDER", "anthropic")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_provider == "anthropic"
+
+
+def test_llm_model_default_matches_cmd_init_default():
+    """Default tracks cmd_init's hardcoded default at cli.py:267.
+
+    Note: both are 'gemma3:e4b' which is a known pre-existing broken tag
+    (the model doesn't exist in Ollama's registry). Tracking the same
+    broken default keeps cmd_init and the judge consistent — both will be
+    fixed together in a follow-up PR. Judge's graceful fallback covers
+    the broken-default case; the user must explicitly enable --llm-rerank
+    AND have a working model configured (via CASTLE_LLM_MODEL env var or
+    castle.yaml) for the path to actually work end-to-end.
+    """
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_model == "gemma3:e4b"
+
+
+def test_llm_model_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_LLM_MODEL", "llama3:8b")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_model == "llama3:8b"
+
+
+def test_llm_endpoint_default_is_none():
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_endpoint is None
+
+
+def test_llm_endpoint_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_LLM_ENDPOINT", "http://localhost:1234")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_endpoint == "http://localhost:1234"
+
+
+def test_llm_api_key_default_is_none():
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_api_key is None
+
+
+def test_llm_api_key_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_LLM_API_KEY", "sk-test-1234")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_api_key == "sk-test-1234"
+
+
+def test_llm_timeout_default_is_120():
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_timeout == 120
+
+
+def test_llm_timeout_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_LLM_TIMEOUT", "60")
+    cfg = _make_config_with_file_config({})
+    assert cfg.llm_timeout == 60
