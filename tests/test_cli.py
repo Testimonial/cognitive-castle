@@ -54,7 +54,8 @@ def test_cmd_status_custom_palace(mock_config_cls):
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
-        palace=None, query="test query", wing="mywing", room="myroom", results=3, soar_boost=False
+        palace=None, query="test query", wing="mywing", room="myroom", results=3, soar_boost=False,
+        soar_first=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -66,6 +67,7 @@ def test_cmd_search_calls_search(mock_config_cls):
             n_results=3,
             llm_rerank=False,
             soar_boost=False,
+            soar_first=False,
         )
 
 
@@ -93,6 +95,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
         results=5,
         llm_rerank=True,
         soar_boost=False,
+        soar_first=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -104,6 +107,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
             n_results=5,
             llm_rerank=True,
             soar_boost=False,
+            soar_first=False,
         )
 
 
@@ -918,6 +922,7 @@ def test_search_cli_soar_boost_flag_propagates(monkeypatch):
         results=5,
         llm_rerank=False,
         soar_boost=True,
+        soar_first=False,
     )
 
     with patch("cognitive_castle.searcher.search") as mock_search:
@@ -930,6 +935,7 @@ def test_search_cli_soar_boost_flag_propagates(monkeypatch):
             n_results=5,
             llm_rerank=False,
             soar_boost=True,
+            soar_first=False,
         )
 
 
@@ -954,3 +960,49 @@ def test_search_cli_soar_boost_with_kill_switch_exits_2(monkeypatch, capsys):
     assert exc.value.code == 2
     err = capsys.readouterr().err
     assert "CASTLE_SOAR_ENABLED=0 kill switch is active" in err
+
+
+def test_cli_soar_first_without_llm_rerank_errors(monkeypatch, capsys):
+    """castle search --soar-boost --soar-first → sys.exit(2), names --llm-rerank as missing."""
+    import sys
+    from cognitive_castle import cli
+
+    monkeypatch.setattr(sys, "argv", ["castle", "search", "test", "--soar-boost", "--soar-first"])
+    # Need CASTLE_SOAR_ENABLED=1 so the kill switch doesn't fire first
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--soar-first" in err
+    assert "--llm-rerank" in err
+
+
+def test_cli_soar_first_without_soar_boost_errors(monkeypatch, capsys):
+    """castle search --llm-rerank --soar-first → sys.exit(2), names --soar-boost as missing."""
+    import sys
+    from cognitive_castle import cli
+
+    monkeypatch.setattr(sys, "argv", ["castle", "search", "test", "--llm-rerank", "--soar-first"])
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--soar-first" in err
+    assert "--soar-boost" in err
+
+
+def test_cli_soar_first_alone_errors(monkeypatch, capsys):
+    """castle search --soar-first → sys.exit(2), names BOTH missing flags."""
+    import sys
+    from cognitive_castle import cli
+
+    monkeypatch.setattr(sys, "argv", ["castle", "search", "test", "--soar-first"])
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+    assert exc_info.value.code == 2
+    err = capsys.readouterr().err
+    assert "--llm-rerank" in err
+    assert "--soar-boost" in err

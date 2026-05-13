@@ -586,6 +586,23 @@ def cmd_search(args):
 
     cfg = CognitiveCastleConfig()
     soar_boost = getattr(args, "soar_boost", False)
+    soar_first = getattr(args, "soar_first", False)
+    llm_rerank = getattr(args, "llm_rerank", False)
+
+    # --soar-first requires both companion flags
+    if soar_first:
+        missing = []
+        if not llm_rerank:
+            missing.append("--llm-rerank")
+        if not soar_boost:
+            missing.append("--soar-boost")
+        if missing:
+            print(
+                f"--soar-first requires both --llm-rerank and --soar-boost; "
+                f"missing: {', '.join(missing)}",
+                file=sys.stderr,
+            )
+            sys.exit(2)
 
     # Kill-switch check: --soar-boost requires CASTLE_SOAR_ENABLED=1
     if soar_boost and not cfg.soar_enabled:
@@ -604,8 +621,9 @@ def cmd_search(args):
             wing=args.wing,
             room=args.room,
             n_results=args.results,
-            llm_rerank=getattr(args, "llm_rerank", False),
+            llm_rerank=llm_rerank,
             soar_boost=soar_boost,
+            soar_first=soar_first,
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
@@ -1113,6 +1131,15 @@ def main():
             "Apply SOAR symbolic-rule boost-tags to final scores "
             "(experimental; requires Soar 9.6+ + SML Python bindings "
             "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
+        ),
+    )
+    p_search.add_argument(
+        "--soar-first",
+        action="store_true",
+        help=(
+            "Run SOAR (Stage 5) BEFORE LLM-as-judge (Stage 4). Requires both "
+            "--llm-rerank and --soar-boost. Default order is judge-then-SOAR. "
+            "Use this to let SOAR's hand-crafted rules shape what the LLM sees."
         ),
     )
 
