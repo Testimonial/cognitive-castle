@@ -631,7 +631,12 @@ def cmd_search(args):
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
         print(f"\n{e}", file=sys.stderr)
-        sys.exit(1)
+        sys.stderr.flush()
+        sys.stdout.flush()
+        # os._exit skips Python finalizers, avoiding a LanceDB/PyArrow
+        # PyGILState_Release fatal during interpreter shutdown that would
+        # otherwise dump noise to stderr after our message.
+        os._exit(1)
     except SearchError:
         sys.exit(1)
 
@@ -839,7 +844,10 @@ def cmd_compress(args):
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print and exit cleanly, don't mask as "no palace".
         print(f"\n{e}", file=sys.stderr)
-        sys.exit(1)
+        sys.stderr.flush()
+        sys.stdout.flush()
+        # See cmd_search for the os._exit rationale.
+        os._exit(1)
     except Exception:
         print(f"\n  No palace found at {palace_path}")
         print("  Run: castle init <dir> then castle mine <dir>")
