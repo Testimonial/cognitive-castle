@@ -147,9 +147,9 @@ def classify_query(query: str) -> Optional[str]:
     """Classify a query as one of the 5 memory_types or None.
 
     First-match-wins on overlap (see module docstring for ordering rationale).
-    Empty string and queries with no matching pattern return None.
+    Empty / whitespace-only / non-matching queries return None.
     """
-    if not query:
+    if not query or not query.strip():
         return None
     for intent, patterns in _INTENT_PATTERNS:
         for p in patterns:
@@ -157,6 +157,8 @@ def classify_query(query: str) -> Optional[str]:
                 return intent
     return None
 ```
+
+**Note on emotional pattern broadness:** the `\b(feel|felt|feeling|emotion|emotional)\b` pattern is broad enough to fire on phrases like *"feel free to refactor"* — where the user isn't asking about emotional drawers. Because `emotional` is LAST in `_INTENT_PATTERNS`, it only fires when NO earlier pattern matched, so false positives are limited to queries that contain emotion words AND nothing else specific. Acceptable initial behavior; tunable if it causes problems.
 
 ### Half 2: Thread `query` through to SOAR
 
@@ -174,11 +176,16 @@ After this PR:
 
 ```
 _new_pipeline_search(query, ...)
-  → _stage_5_soar(reranked, cfg, query=query)       ← thread query
-    → soar_bridge._apply_soar_to_reranked(reranked, cfg, query=query)
-      → soar_bridge.apply_soar_boosts(hits, cfg, query="")
-        → _push_working_memory(agent, hits, query="")
+  → _apply_stages_4_and_5(query, reranked, cfg, ...)   ← already has query (from PR #4b)
+       ↳ if soar_first:    reranked = _stage_5_soar(reranked, cfg, query=query)  ← NEW
+       ↳ if soar_boost:    reranked = _stage_5_soar(reranked, cfg, query=query)  ← NEW
+    → _stage_5_soar(reranked, cfg, query=query)        ← signature gains query="" kwarg
+      → soar_bridge._apply_soar_to_reranked(reranked, cfg, query=query)
+        → soar_bridge.apply_soar_boosts(hits, cfg, query="")
+          → _push_working_memory(agent, hits, query="")
 ```
+
+**Call-site detail:** after PR #4b (commit `764db36e`), `_stage_5_soar` is invoked from `_apply_stages_4_and_5` (a private helper in `searcher.py`) in TWO branches — the default-order branch (`if soar_boost: _stage_5_soar(...)`) and the `soar_first` branch (`reranked = _stage_5_soar(...)` before `_stage_4_judge`). Both call sites need the `query=query` kwarg added. `_apply_stages_4_and_5` already accepts `query: str` as a positional arg (`_stage_4_judge` consumes it), so `query` is in scope at both call sites.
 
 The `query: str = ""` keyword-only default preserves back-compat for any external callers of the public `apply_soar_boosts` API. After PR #4b, `apply_soar_boosts` has NO internal call sites — only `_apply_soar_to_reranked` calls it, and that's also internal. External user code that imports and calls `apply_soar_boosts(hits, cfg)` still works; it just won't get type-match benefit until updated to pass `query=...`.
 
@@ -192,7 +199,8 @@ from .query_intent import MEMORY_TYPES, classify_query
 # (existing code that pushes ^context.project)
 
 # ── NEW: push ^context.query-type (if classification succeeds) ────────
-query_type = classify_query(query) if query else None
+# classify_query handles empty/whitespace/non-matching internally — returns None.
+query_type = classify_query(query)
 if query_type:
     context_wme.CreateStringWME("query-type", query_type)
 # If query_type is None, skip the push — rule can't fire without it.
@@ -268,7 +276,7 @@ Append to the schema documentation block (currently around lines 4-13):
 | File | Change | LOC |
 |---|---|---|
 | `cognitive_castle/query_intent.py` | NEW. `_INTENT_PATTERNS` for 5 memory_types, `MEMORY_TYPES` frozenset derived from keys, `classify_query(query) -> Optional[str]`. Module docstring documents English-only limitation + first-match-wins ordering rationale. | +60 |
-| `cognitive_castle/searcher.py` | In `_new_pipeline_search`, change `_stage_5_soar(reranked, cfg)` to `_stage_5_soar(reranked, cfg, query=query)`. Change `_stage_5_soar` signature to accept `query: str = ""` and pass through to `_apply_soar_to_reranked`. | +4 |
+| `cognitive_castle/searcher.py` | Change `_stage_5_soar` signature to accept `query: str = ""` and pass through to `_apply_soar_to_reranked`. Update the TWO call sites within `_apply_stages_4_and_5` (the soar_first branch AND the default-order `if soar_boost:` branch) to pass `query=query` — `_apply_stages_4_and_5` already has `query` as a positional arg from PR #4b. | +4 |
 | `cognitive_castle/soar_bridge.py` | Add `"type-match": 1.25` to `BOOST_MULTIPLIERS`. Add `query: str = ""` kwarg to `_apply_soar_to_reranked`, `apply_soar_boosts`, `_push_working_memory`; thread through. In `_push_working_memory`, import `MEMORY_TYPES` + `classify_query` from `.query_intent`; push `^context.query-type` (conditional on classification success) and `^memory.drawer-type` (conditional on `room in MEMORY_TYPES`). | +15 |
 | `cognitive_castle/rules/castle-boost.soar` | Add `castle-boost*type-match` production. Update header schema docstring to include `^context.query-type` and `^memory.drawer-type`. | +10 / -1 |
 | `tests/test_query_intent.py` | NEW. 5 tests asserting each example query classifies to the expected type. 1 test for None (empty + non-matching). 1 test for overlap ordering (the milestone-wins-over-problem case). 1 test asserting `MEMORY_TYPES` equals `{"decision", "preference", "milestone", "problem", "emotional"}`. | +80 |
@@ -512,8 +520,8 @@ def test_type_match_flag_attaches_to_memory_type_rooms(monkeypatch, tmp_path):
 5. `pytest tests/test_pipeline_order.py -v -k "type_match"` — 1 test passes.
 6. `ruff check` + `ruff format --check` clean on all touched files.
 7. `castle search "foo"` (default invocation, no flags) — output identical to develop (query NOT threaded to SOAR when soar_boost=False; no behavior change).
-8. `castle search "what did we decide" --soar-boost` (with `CASTLE_SOAR_ENABLED=1`) — decision-typed drawers get `type-match` in soar_tags.
-9. `castle search "ahoj svet" --soar-boost` — no type-match firings (non-English query).
+8. `castle search "what did we decide" --soar-boost` (with `CASTLE_SOAR_ENABLED=1`, on SML-available env) — decision-typed drawers get `type-match` in soar_tags. (Skipped on CI environments without SML; rule-fire assertions in tests are gated by `if soar_bridge._load_sml() is not None:`.)
+9. `castle search "ahoj svet" --soar-boost` (on SML-available env) — no type-match firings (non-English query → `classify_query` returns None → `^query-type` never pushed).
 10. CLAUDE.md mentions 4 SOAR productions.
 11. `cognitive_castle/rules/castle-boost.soar` contains the new `castle-boost*type-match` production with the docstring shown in Half 4, and the header schema doc includes `^context.query-type` and `^memory.drawer-type`.
 
@@ -543,4 +551,14 @@ def test_type_match_flag_attaches_to_memory_type_rooms(monkeypatch, tmp_path):
    - `convo_miner.py:346` confirmed: `chunk_room = chunk.get("memory_type", room) if extract_mode == "general" else room` — drawer-type lives in `room`
    - `general_extractor.py:163-169` confirmed 5 memory_types: decision, preference, milestone, problem, emotional
    - PR #4c-entity-match (commit `ba9fb022`) established the rule-extensibility pattern this follows
+   - PR #4b (commit `764db36e`) established `_apply_stages_4_and_5` as the helper containing the `_stage_5_soar` call sites; this PR adds `query=query` to those 2 call sites
    - `_push_working_memory` is the WM-push hook used by all 3 existing SOAR rules
+
+## Revision history
+
+**Revision 2 (2026-05-13):** First review pass surfaced 1 important issue + 4 minor polish items. Fixed inline:
+- **Call-site location:** spec originally said `_stage_5_soar` is called from `_new_pipeline_search`. After PR #4b, the call lives inside `_apply_stages_4_and_5` (a private helper). Updated Half 2 architecture + Components row to name the correct helper, with explicit note that 2 call sites in the helper need `query=query` added.
+- **Redundant empty-check** in `_push_working_memory` pseudocode (`classify_query(query) if query else None`) — `classify_query` already returns None on empty. Simplified to `query_type = classify_query(query)`.
+- **Whitespace-only handling** in `classify_query` — now explicitly `if not query or not query.strip(): return None` instead of relying on regex non-match.
+- **Acceptance #8/#9** SML-environment-dependent — added "(on SML-available env)" qualifier to make CI environments without SML not look like acceptance failures.
+- **Emotional pattern broadness** — added explanatory note acknowledging "feel free to refactor"-style false positives. Acceptable because `emotional` is last in `_INTENT_PATTERNS` (only fires when no earlier match).
