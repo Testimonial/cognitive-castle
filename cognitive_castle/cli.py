@@ -582,6 +582,7 @@ def cmd_sweep(args):
 
 def cmd_search(args):
     from .searcher import search, SearchError, _print_search_results
+    from .backends.base import EmbedderIdentityMismatchError
 
     cfg = CognitiveCastleConfig()
     soar_boost = getattr(args, "soar_boost", False)
@@ -627,6 +628,10 @@ def cmd_search(args):
                 n_results=args.results,
                 llm_rerank=getattr(args, "llm_rerank", False),
             )
+    except EmbedderIdentityMismatchError as e:
+        # Friendly migration prompt — print cleanly without a traceback.
+        print(f"\n{e}", file=sys.stderr)
+        sys.exit(1)
     except SearchError:
         sys.exit(1)
 
@@ -826,9 +831,15 @@ def cmd_compress(args):
         dialect = Dialect()
 
     # Connect to palace
+    from .backends.base import EmbedderIdentityMismatchError
+
     backend = LanceDBBackend()
     try:
         col = backend.get_collection(palace_path, "castle_drawers")
+    except EmbedderIdentityMismatchError as e:
+        # Friendly migration prompt — print and exit cleanly, don't mask as "no palace".
+        print(f"\n{e}", file=sys.stderr)
+        sys.exit(1)
     except Exception:
         print(f"\n  No palace found at {palace_path}")
         print("  Run: castle init <dir> then castle mine <dir>")

@@ -322,3 +322,36 @@ def test_concurrent_grandfather_is_race_safe(tmp_path, monkeypatch):
     matched = arrow_table.filter(mask)
     assert matched.num_rows >= 1
     assert matched.column("value").to_pylist()[0] == "bge-m3"
+
+
+def test_searcher_surfaces_embedder_mismatch(tmp_path, monkeypatch):
+    """search_memories() must let EmbedderIdentityMismatchError propagate.
+
+    Regression test for issue #27: searcher.py's broad-except was swallowing
+    the friendly migration prompt, leaving CLI users with a misleading
+    "No results found" instead of the actual error.
+    """
+    palace_path = tmp_path / "palace"
+
+    # Build a 384-dim MiniLM palace
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        dim=384,
+        identity="paraphrase-ml-MiniLM-L12-v2",
+    )
+
+    # Clear env vars so cfg defaults to bge-m3 / 1024 (mismatch with palace)
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    from cognitive_castle.searcher import search_memories
+
+    with pytest.raises(EmbedderIdentityMismatchError) as exc_info:
+        search_memories(query="test", palace_path=str(palace_path), n_results=1)
+
+    msg = str(exc_info.value)
+    assert "castle reindex" in msg
+    assert "--embedder-dim 1024" in msg
