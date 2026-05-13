@@ -467,7 +467,7 @@ class CognitiveCastleConfig:
     def llm_model(self):
         """Model name passed to the LLM provider.
 
-        Default: ``"gemma3:e4b"`` (matches ``cmd_init``'s default at
+        Default: ``"gemma3:4b"`` (matches ``cmd_init``'s default at
         ``cli.py:267``). NOTE: this default is a known pre-existing
         broken tag — the model does not exist in Ollama's registry.
         Both defaults will be fixed together in a follow-up PR. Until
@@ -480,7 +480,7 @@ class CognitiveCastleConfig:
         env_val = os.environ.get("CASTLE_LLM_MODEL")
         if env_val:
             return env_val.strip()
-        return str(self._file_config.get("llm_model", "gemma3:e4b")).strip()
+        return str(self._file_config.get("llm_model", "gemma3:4b")).strip()
 
     @property
     def llm_endpoint(self):

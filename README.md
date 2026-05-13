@@ -204,8 +204,6 @@ llm_model: llama3.1:8b      # any model your provider supports
 
 Or via env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`.
 
-> **⚠️ Note:** Castle's documented default LLM model is `gemma3:e4b`, but that tag doesn't exist in Ollama's registry — it's a pre-existing bug tracked in a follow-up. To actually use `--llm-rerank`, set `CASTLE_LLM_MODEL` to a model your Ollama (or other provider) has.
-
 **MCP:** Claude Code and other MCP clients can pass `llm_rerank: true` to the `search_memories` (or `castle_search`) tool.
 
 **Privacy:** If you've configured a BYOK external provider (Anthropic, cloud OpenAI-compat, etc.), candidate snippets DO leave your machine. Castle prints a privacy warning at `castle init` for external providers — per-search warnings would be noise. If you want strict local-only operation, stick with Ollama / LM Studio / vLLM on localhost.

@@ -324,16 +324,13 @@ def test_llm_provider_env_override(monkeypatch):
 def test_llm_model_default_matches_cmd_init_default():
     """Default tracks cmd_init's hardcoded default at cli.py:267.
 
-    Note: both are 'gemma3:e4b' which is a known pre-existing broken tag
-    (the model doesn't exist in Ollama's registry). Tracking the same
-    broken default keeps cmd_init and the judge consistent — both will be
-    fixed together in a follow-up PR. Judge's graceful fallback covers
-    the broken-default case; the user must explicitly enable --llm-rerank
-    AND have a working model configured (via CASTLE_LLM_MODEL env var or
-    castle.yaml) for the path to actually work end-to-end.
+    Note: both `cfg.llm_model` and `cmd_init`'s `--llm-model` default
+    point at `gemma3:4b` — a real Ollama tag. The original PR #20
+    introduced `gemma3:e4b` as a typo; this PR fixed it. Users who
+    accept defaults get a working model on first `ollama pull`.
     """
     cfg = _make_config_with_file_config({})
-    assert cfg.llm_model == "gemma3:e4b"
+    assert cfg.llm_model == "gemma3:4b"
 
 
 def test_llm_model_env_override(monkeypatch):
