@@ -79,6 +79,7 @@ markers = [
     "benchmark: scale/performance benchmark tests",
     "slow: tests that take more than 30 seconds",
     "stress: destructive scale tests (100K+ drawers)",
+    "soar: tests requiring Soar 9.6+ + SML Python bindings (auto-skip if unavailable)",
 ]
 
 [tool.coverage.run]
