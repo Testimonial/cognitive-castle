@@ -141,46 +141,18 @@ def _expand_with_neighbors(drawers_col, matched_doc: str, matched_meta: dict, ra
     }
 
 
-def search(
-    query: str,
-    palace_path: str,
-    wing: str = None,
-    room: str = None,
-    n_results: int = 5,
-    llm_rerank: bool = False,
-):
-    """CLI entry point.
-
-    Routes through the 3-stage pipeline (dense + FTS + KG-hop → fuse → rerank),
-    same as `search_memories()`. Prints results to stdout in the legacy format
-    so existing scraping tests keep working. Score shown is the cross-encoder
-    reranker score, not cosine distance.
+def _print_search_results(result: dict, query: str) -> None:
+    """Print search results to stdout in the standard CLI format.
 
     Args:
-        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
-            cross-encoder (Stage 3). Default False — no behavior change.
-
-    Raises SearchError if the pipeline fails. Returns None either way (this is
-    a print-only function — programmatic callers should use `search_memories`).
+        result: Dict returned by ``search_memories()`` with keys ``results``,
+            ``query``, and ``filters``.
+        query: The original query string (used in the header line).
     """
-    from .config import CognitiveCastleConfig
-
-    cfg = CognitiveCastleConfig()
-
-    try:
-        hits = _new_pipeline_search(
-            query,
-            palace_path,
-            wing,
-            room,
-            n_results,
-            cfg,
-            is_hook_call=False,
-            llm_rerank=llm_rerank,
-        )
-    except Exception as e:
-        print(f"\n  Search error: {e}")
-        raise SearchError(f"Search error: {e}") from e
+    hits = result.get("results", [])
+    filters = result.get("filters", {})
+    wing = filters.get("wing")
+    room = filters.get("room")
 
     if not hits:
         print(f'\n  No results found for: "{query}"')
@@ -206,6 +178,43 @@ def search(
         print(f"      Match:  score={score}\n")
         print(f"      {text}\n")
         print(f"  {'─' * 56}")
+
+
+def search(
+    query: str,
+    palace_path: str,
+    wing: str = None,
+    room: str = None,
+    n_results: int = 5,
+    llm_rerank: bool = False,
+):
+    """CLI entry point.
+
+    Routes through the 3-stage pipeline (dense + FTS + KG-hop → fuse → rerank),
+    same as `search_memories()`. Prints results to stdout in the legacy format
+    so existing scraping tests keep working. Score shown is the cross-encoder
+    reranker score, not cosine distance.
+
+    Args:
+        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
+            cross-encoder (Stage 3). Default False — no behavior change.
+
+    Raises SearchError if the pipeline fails. Returns None either way (this is
+    a print-only function — programmatic callers should use `search_memories`).
+    """
+    try:
+        result = search_memories(
+            query=query,
+            palace_path=palace_path,
+            wing=wing,
+            room=room,
+            n_results=n_results,
+            llm_rerank=llm_rerank,
+        )
+    except Exception as e:
+        print(f"\n  Search error: {e}")
+        raise SearchError(f"Search error: {e}") from e
+    _print_search_results(result, query)
 
 
 def search_memories(
@@ -248,7 +257,14 @@ def search_memories(
 
     cfg = _cfg_cls()
     results = _new_pipeline_search(
-        query, palace_path, wing, room, n_results, cfg, is_hook_call, llm_rerank=llm_rerank
+        query,
+        palace_path,
+        wing,
+        room,
+        n_results,
+        cfg,
+        is_hook_call=is_hook_call,
+        llm_rerank=llm_rerank,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
