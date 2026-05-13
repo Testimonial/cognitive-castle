@@ -265,3 +265,59 @@ sp {castle-boost*custom-tag
     err = capsys.readouterr().err
     assert "unknown boost-tag" in err.lower()
     assert "mystery-tag" in err
+
+
+def test_apply_soar_to_reranked_tuple_parity(monkeypatch, tmp_path):
+    """_apply_soar_to_reranked on tuples produces same boost decisions as
+    apply_soar_boosts on the equivalent dict hits."""
+    from cognitive_castle import soar_bridge
+
+    # Build paired inputs: same data in both shapes
+    rows = [
+        {
+            "id": f"id-{i}",
+            "score": 1.0 - i * 0.1,
+            "wing": "project-a",
+            "room": "room-1",
+            "source_file": "f.md",
+            "created_at": "2026-05-10T00:00:00Z",
+        }
+        for i in range(3)
+    ]
+    hits_dict = [
+        {**r, "text": "doc", "document": "doc"}
+        for r in rows
+    ]
+    reranked_tuples = [(r["score"], dict(r, text="doc", document="doc")) for r in rows]
+
+    cfg = _mock_cfg()
+
+    # Call both APIs
+    boosted_dict = soar_bridge.apply_soar_boosts(hits_dict, cfg)
+    boosted_tuples = soar_bridge._apply_soar_to_reranked(reranked_tuples, cfg)
+
+    # Parity check: same boost-tags fired on same ids
+    dict_tags_by_id = {h["id"]: h["soar_tags"] for h in boosted_dict}
+    tuple_tags_by_id = {row["id"]: row["soar_tags"] for _, row in boosted_tuples}
+    assert dict_tags_by_id == tuple_tags_by_id
+
+    # Parity check: same boost multipliers
+    dict_boosts_by_id = {h["id"]: h["soar_boost"] for h in boosted_dict}
+    tuple_boosts_by_id = {row["id"]: row["soar_boost"] for _, row in boosted_tuples}
+    assert dict_boosts_by_id == tuple_boosts_by_id
+
+
+def test_apply_soar_to_reranked_returns_sorted_tuples(tmp_path):
+    """Output is sorted by boosted score descending."""
+    from cognitive_castle import soar_bridge
+
+    reranked = [
+        (0.5, {"id": "a", "score": 0.5, "wing": "x", "room": "r", "source_file": "f"}),
+        (0.8, {"id": "b", "score": 0.8, "wing": "x", "room": "r", "source_file": "f"}),
+        (0.3, {"id": "c", "score": 0.3, "wing": "x", "room": "r", "source_file": "f"}),
+    ]
+    cfg = _mock_cfg()
+
+    result = soar_bridge._apply_soar_to_reranked(reranked, cfg)
+    scores = [s for s, _ in result]
+    assert scores == sorted(scores, reverse=True), f"Expected descending sort, got {scores}"
