@@ -17,6 +17,9 @@
   6. `gemma3:e4b` framing fix from review-1 missed two Components rows (cli.py + README) — they still said "default gemma3:e4b via Ollama", contradicting Acceptance #5 + #10. Both rows now use neutral framing.
   7. Cosmetic survivals of the broken tag in the test mock and Acceptance #8 comment — replaced with `"test-model"` placeholder + neutral comment respectively.
   8. Error-handling table promised a `len(candidates) == 1` short-circuit but the test suite didn't cover it. Added `test_judge_single_candidate_returns_zero_without_llm_call` (test #8).
+- **2026-05-13 (post-review #3 — scope expansion at plan-writing time):** Discovered while drafting the implementation plan: the spec's `_get_provider(cfg)` contract assumed LLM provider config could be read from `CognitiveCastleConfig`, but no `cfg.llm_*` properties exist today (LLM provider is only constructed from argparse args at `cmd_init` and not persisted). User chose to extend the config layer rather than work around with env vars or pass-through. New scope:
+  9. Add 5 LLM-related properties to `CognitiveCastleConfig` (`llm_provider`, `llm_model`, `llm_endpoint`, `llm_api_key`, `llm_timeout`) each reading env var first, then `_file_config`, then default. Matches the pattern used for `embedder_model` (`config.py:305-321`).
+  10. `_get_provider(cfg)` now reads all 5 properties from `cfg` and calls the existing `llm_client.get_provider(name, model, endpoint, api_key, timeout)` factory — closing the spec's contract gap.
 
 ## Background
 
@@ -80,18 +83,19 @@ Query → Stage 1 (recall) → Stage 2 (fusion) → Stage 3 (cross-encoder reran
 
 | File | Change | LOC |
 |---|---|---|
-| `cognitive_castle/judge.py` (new) | Public `judge(query, candidates, cfg) -> list[int]`. Builds prompt, calls llm_client, parses + validates JSON. Identity-order fallback with stderr warning on any failure. Mirrors `reranker.py`. Includes a private `_get_provider(cfg) -> LLMProvider` helper that constructs the right provider from config — analogous to `reranker._get_reranker(model_name, device)`. Tests mock this helper to inject behaviour. | +80 |
+| `cognitive_castle/judge.py` (new) | Public `judge(query, candidates, cfg) -> list[int]`. Builds prompt, calls llm_client, parses + validates JSON. Identity-order fallback with stderr warning on any failure. Mirrors `reranker.py`. Includes a private `_get_provider(cfg) -> LLMProvider` helper that reads `cfg.llm_provider` / `cfg.llm_model` / `cfg.llm_endpoint` / `cfg.llm_api_key` / `cfg.llm_timeout` and calls the existing `llm_client.get_provider(name, model, endpoint, api_key, timeout)` factory (defined at `llm_client.py:406`). Tests mock this helper to inject behaviour. | +80 |
 | `cognitive_castle/searcher.py` | Add `llm_rerank: bool = False` param to both `search()` and `search_memories()`. Thread through internal pipeline. After current line 422 (Stage 3 sort), if enabled: take top-`cfg.llm_judge_top_n` from reranked, call `judge.judge`, reorder, slice. | +20 |
-| `cognitive_castle/config.py` | New `llm_judge_top_n` property (default 10, env `CASTLE_LLM_JUDGE_TOP_N`). Pattern matches `reranker_k_interactive` at `config.py:392-413`. | +20 |
+| `cognitive_castle/config.py` | Add **six** new properties (all env-first → file-config → default, matching the `embedder_model` pattern at `config.py:305-321`): `llm_judge_top_n` (default 10, env `CASTLE_LLM_JUDGE_TOP_N`), `llm_provider` (default `"ollama"`, env `CASTLE_LLM_PROVIDER`), `llm_model` (default `"gemma3:e4b"` — see note below, env `CASTLE_LLM_MODEL`), `llm_endpoint` (default `None`, env `CASTLE_LLM_ENDPOINT`), `llm_api_key` (default `None`, env `CASTLE_LLM_API_KEY`), `llm_timeout` (default `120`, env `CASTLE_LLM_TIMEOUT`). Note: `llm_model` default is kept at `"gemma3:e4b"` for consistency with `cmd_init`'s current default at `cli.py:267` — both are the SAME pre-existing-broken tag, will be fixed together in a follow-up PR. The judge falls back gracefully when the model can't be loaded, so a broken default doesn't break the opt-in path; the user must explicitly enable `--llm-rerank` AND have a real LLM configured. | +60 |
 | `cognitive_castle/cli.py` | Add `--llm-rerank` flag (store_true, default False) to the `castle search` subparser. Pass through to `search(..., llm_rerank=args.llm_rerank)`. Help text mentions 1-2s latency cost + says "uses the LLM provider configured at `castle init`" (neutral framing — no specific model promoted, since `gemma3:e4b` default is a pre-existing broken tag tracked separately). | +10 |
 | `cognitive_castle/mcp_server.py` | Add optional `llm_rerank: bool = False` param to the `search_memories` MCP tool handler. Update the JSON schema in the `TOOLS` dict. Pass through to `search_memories(..., llm_rerank=...)`. | +15 |
 | `tests/test_judge.py` (new) | 8 unit tests for `judge.judge()`: happy path, malformed JSON, missing key, wrong count, duplicate indices, LLM error, empty candidates, single candidate (short-circuit). All use a mock LLM. | +130 |
+| `tests/test_config.py` (existing) | 6 tests for the new config properties: defaults, env-var override, file-config override. One per property × the 3 paths is 18; the spec collapses to 6 parametrize-style tests (one per property) that exercise default + env-var paths. | +50 |
 | `tests/test_searcher.py` (existing) | 3 integration tests: stage 4 NOT called when `llm_rerank=False`; stage 4 called once with top-`llm_judge_top_n` when True; identity fallback preserves Stage 3 order. | +60 |
 | `tests/test_cli.py` (existing) | 1 test: `--llm-rerank` flag propagates to `search(llm_rerank=True)`. | +20 |
 | `README.md` | Append `--llm-rerank` subsection inside the existing "Going further" block (added by PR #1). Include: when to use, 1-2s latency cost, "uses the LLM provider configured at `castle init` (Ollama by default; BYOK Anthropic/OpenAI/Google supported)" — no specific model name promoted, since the documented `gemma3:e4b` default is a pre-existing broken tag tracked separately. | +20 |
 | `CLAUDE.md` | Update the retrieval pipeline diagram (line 179 area) to show optional Stage 4. | +5 |
 
-**Total:** ~380 LOC across 1 new module, 1 new test file, 8 existing files.
+**Total:** ~420 LOC across 1 new module, 1 new test file, 8 existing files (config.py grows by +60 LOC for 6 new properties instead of +20 for 1; everything else unchanged).
 
 ## Data flow
 
@@ -320,6 +324,7 @@ The PR is mergeable when ALL hold:
 1. `pytest tests/test_judge.py -v` — all 8 unit tests pass
 2. `pytest tests/test_searcher.py -v -k llm_rerank` — 3 integration tests pass
 3. `pytest tests/test_cli.py -v -k llm_rerank` — CLI flag test passes
+3a. `pytest tests/test_config.py -v -k "llm_"` — 6 config-property tests pass (one per new property)
 4. Default test suite: `pytest tests/ -v --ignore=tests/benchmarks` — no NEW regressions (pre-existing CI-UNSTABLE failures acceptable)
 5. `castle search --help` shows `--llm-rerank` flag with help text that includes:
    - "1-2s extra latency" (the cost)
@@ -354,7 +359,7 @@ The PR is mergeable when ALL hold:
 - Changes to reranker (PR #2 — deferred for multilingual reasons)
 - Changes to fusion (PR #4 — future)
 
-## Spec self-review (post-revision #2, 2026-05-13)
+## Spec self-review (post-revision #3, 2026-05-13)
 
 1. **Placeholders:** None. All test code is concrete (mock setup + assertions shown). Pipeline integration point is `searcher.py:422-ish`; exact line will be discovered at plan-writing time. `_get_provider(cfg)` private helper now explicitly named in Components row so tests have a stable contract.
 2. **Internal consistency:** Architecture, Components, Data Flow, Error Handling, Testing, and Acceptance all reference the same:
@@ -384,3 +389,10 @@ The PR is mergeable when ALL hold:
    - ✅ Acceptance #8 smoke-recipe comment reworded to not depend on a specific model tag.
    - ✅ Added `test_judge_single_candidate_returns_zero_without_llm_call` (test #8 of 8) — closes the gap where the error-handling table promised a short-circuit the tests didn't verify.
    - ✅ Test count + LOC updated consistently: Components row (8 tests, +130 LOC), Acceptance #1 (8 unit tests), total (~380 LOC).
+9. **Post-review #3 scope expansion addressed:**
+   - ✅ Identified at plan-writing time that the spec's `_get_provider(cfg)` contract presumed config-layer integration that didn't exist (no `cfg.llm_*` properties; LLM provider was only constructed transiently in `cmd_init`).
+   - ✅ Added 5 new `CognitiveCastleConfig` properties (`llm_provider` / `llm_model` / `llm_endpoint` / `llm_api_key` / `llm_timeout`) + 1 from original spec (`llm_judge_top_n`) = 6 total, all env-first → file-config → default, matching the `embedder_model` pattern.
+   - ✅ `_get_provider(cfg)` contract now concrete: reads the 5 LLM properties from cfg, calls `llm_client.get_provider(name, model, endpoint, api_key, timeout)` factory at `llm_client.py:406`.
+   - ✅ `llm_model` default stays `"gemma3:e4b"` (matching `cmd_init`'s default at `cli.py:267`) — both will be fixed together in the pre-existing-default-LLM-bug follow-up PR. Judge's graceful fallback covers the broken-default case so this doesn't block opt-in users with a working model env-var.
+   - ✅ Components total updated: +60 LOC for config.py (was +20), +50 LOC for test_config.py (new row); total ~420 LOC (was ~380).
+   - ✅ Acceptance #3a added: `pytest tests/test_config.py -v -k "llm_"` — 6 config-property tests pass.
