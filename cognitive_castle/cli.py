@@ -592,6 +592,7 @@ def cmd_search(args):
             wing=args.wing,
             room=args.room,
             n_results=args.results,
+            llm_rerank=getattr(args, "llm_rerank", False),
         )
     except SearchError:
         sys.exit(1)
@@ -1064,6 +1065,16 @@ def main():
     p_search.add_argument("--wing", default=None, help="Limit to one project")
     p_search.add_argument("--room", default=None, help="Limit to one room")
     p_search.add_argument("--results", type=int, default=5, help="Number of results")
+    p_search.add_argument(
+        "--llm-rerank",
+        action="store_true",
+        help=(
+            "Run optional Stage 4 LLM-as-judge re-rank over top candidates. "
+            "Adds 1-2s latency. Uses the LLM provider configured at `castle init` "
+            "(set via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL or castle.yaml). "
+            "Off by default."
+        ),
+    )
 
     # compress
     p_compress = sub.add_parser(

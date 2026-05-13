@@ -64,6 +64,7 @@ def test_cmd_search_calls_search(mock_config_cls):
             wing="mywing",
             room="myroom",
             n_results=3,
+            llm_rerank=False,
         )
 
 
@@ -77,6 +78,30 @@ def test_cmd_search_error_exits(mock_config_cls):
         with pytest.raises(SystemExit) as exc_info:
             cmd_search(args)
         assert exc_info.value.code == 1
+
+
+@patch("cognitive_castle.cli.CognitiveCastleConfig")
+def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
+    """`castle search ... --llm-rerank` must set llm_rerank=True on the search call."""
+    mock_config_cls.return_value.palace_path = "/fake/palace"
+    args = argparse.Namespace(
+        palace=None,
+        query="x",
+        wing=None,
+        room=None,
+        results=5,
+        llm_rerank=True,
+    )
+    with patch("cognitive_castle.searcher.search") as mock_search:
+        cmd_search(args)
+        mock_search.assert_called_once_with(
+            query="x",
+            palace_path="/fake/palace",
+            wing=None,
+            room=None,
+            n_results=5,
+            llm_rerank=True,
+        )
 
 
 # ── cmd_instructions ───────────────────────────────────────────────────
