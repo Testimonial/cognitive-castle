@@ -54,7 +54,7 @@ def test_cmd_status_custom_palace(mock_config_cls):
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
     args = argparse.Namespace(
-        palace=None, query="test query", wing="mywing", room="myroom", results=3
+        palace=None, query="test query", wing="mywing", room="myroom", results=3, soar_boost=False
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -65,6 +65,7 @@ def test_cmd_search_calls_search(mock_config_cls):
             room="myroom",
             n_results=3,
             llm_rerank=False,
+            soar_boost=False,
         )
 
 
@@ -91,6 +92,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
         room=None,
         results=5,
         llm_rerank=True,
+        soar_boost=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -101,6 +103,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
             room=None,
             n_results=5,
             llm_rerank=True,
+            soar_boost=False,
         )
 
 
@@ -900,24 +903,12 @@ def test_reindex_rejects_unpaired_dim_flag(monkeypatch, capsys, tmp_path):
 
 
 def test_search_cli_soar_boost_flag_propagates(monkeypatch):
-    """`castle search --soar-boost` calls apply_soar_boosts when soar_enabled=True."""
+    """`castle search --soar-boost` passes soar_boost=True through to search()."""
     import argparse
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import patch
     from cognitive_castle.cli import cmd_search
 
     monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
-    fake_result = {"results": [{"id": "a", "score": 0.5}], "query": "x", "filters": {}}
-    spy = MagicMock(
-        return_value=[
-            {
-                "id": "a",
-                "score": 0.625,
-                "soar_boost": 1.25,
-                "soar_tags": ["recency-boost"],
-                "score_pre_soar": 0.5,
-            }
-        ]
-    )
 
     args = argparse.Namespace(
         query="x",
@@ -929,14 +920,17 @@ def test_search_cli_soar_boost_flag_propagates(monkeypatch):
         soar_boost=True,
     )
 
-    with (
-        patch("cognitive_castle.cli.search_memories", return_value=fake_result),
-        patch("cognitive_castle.soar_bridge.apply_soar_boosts", spy),
-    ):
+    with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
-    spy.assert_called_once()
-    # First positional arg is the hits list
-    assert spy.call_args.args[0] == fake_result["results"]
+        mock_search.assert_called_once_with(
+            query="x",
+            palace_path=mock_search.call_args.kwargs["palace_path"],
+            wing=None,
+            room=None,
+            n_results=5,
+            llm_rerank=False,
+            soar_boost=True,
+        )
 
 
 def test_search_cli_soar_boost_with_kill_switch_exits_2(monkeypatch, capsys):

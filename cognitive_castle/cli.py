@@ -581,7 +581,7 @@ def cmd_sweep(args):
 
 
 def cmd_search(args):
-    from .searcher import search, SearchError, _print_search_results
+    from .searcher import search, SearchError
     from .backends.base import EmbedderIdentityMismatchError
 
     cfg = CognitiveCastleConfig()
@@ -598,36 +598,15 @@ def cmd_search(args):
     palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
 
     try:
-        if soar_boost:
-            # SOAR path: call search_memories directly, apply boosts, format output.
-            result = search_memories(
-                query=args.query,
-                palace_path=palace_path,
-                wing=args.wing,
-                room=args.room,
-                n_results=args.results,
-                llm_rerank=getattr(args, "llm_rerank", False),
-            )
-            hits = result.get("results", [])
-            if hits:
-                # LAZY IMPORT (per spec acceptance #14): soar_bridge module
-                # is only loaded when --soar-boost is actually used.
-                from . import soar_bridge
-
-                hits = soar_bridge.apply_soar_boosts(hits, cfg)
-                hits.sort(key=lambda h: -h.get("score", 0.0))
-            boosted_result = dict(result, results=hits)
-            _print_search_results(boosted_result, args.query)
-        else:
-            # Default path: unchanged.
-            search(
-                query=args.query,
-                palace_path=palace_path,
-                wing=args.wing,
-                room=args.room,
-                n_results=args.results,
-                llm_rerank=getattr(args, "llm_rerank", False),
-            )
+        search(
+            query=args.query,
+            palace_path=palace_path,
+            wing=args.wing,
+            room=args.room,
+            n_results=args.results,
+            llm_rerank=getattr(args, "llm_rerank", False),
+            soar_boost=soar_boost,
+        )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
         print(f"\n{e}", file=sys.stderr)
