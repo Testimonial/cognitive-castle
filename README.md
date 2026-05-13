@@ -126,28 +126,15 @@ castle search "auth flow" --wing myapp --room backend
 
 ---
 
-## Going further: better recall with bge-m3
+## Migration from MiniLM (pre-cutover users)
 
-Castle ships with `paraphrase-multilingual-MiniLM-L12-v2` (384-dim) as the default embedder — fast, multilingual, modest hardware needs. If you want stronger retrieval (especially for non-English content or fine-grained semantic distinctions), switch to **`BAAI/bge-m3`** (1024-dim). It consistently outperforms MiniLM on MTEB retrieval benchmarks.
+If you built your palace before the 2026-05 cutover, it uses
+`paraphrase-multilingual-MiniLM-L12-v2` (384-dim). The current default is
+`BAAI/bge-m3` (1024-dim), which has stronger retrieval — but your old palace
+was indexed against MiniLM, so Castle will fail loudly on the next search
+with a friendly migration prompt rather than a cryptic LanceDB error.
 
-**Hardware:** ≈2.3 GB VRAM (NVIDIA / Apple Silicon GPU recommended). Falls back to CPU automatically if VRAM is insufficient, but CPU encoding is significantly slower.
-
-### Migration (two-step)
-
-1. Edit `~/.castle.yaml` (or the palace-local `castle.yaml`) — set **both** keys:
-
-   ```yaml
-   embedder_model: BAAI/bge-m3
-   embedder_dim: 1024
-   ```
-
-2. Reindex:
-
-   ```bash
-   castle reindex --palace ~/.castle/palace --sources ~/projects --yes
-   ```
-
-### Migration (one-shot — no config edit)
+**Option 1 — Migrate to bge-m3 (recommended):**
 
 ```bash
 castle reindex \
@@ -158,25 +145,34 @@ castle reindex \
   --yes
 ```
 
-Both `--embedder` and `--embedder-dim` MUST be passed together; passing only one is a usage error.
+**Option 2 — Keep using MiniLM (opt-out):**
+
+Set all three env vars (the third matches the pre-cutover identity
+abbreviation; without it, Castle reports an identity mismatch):
+
+```bash
+export CASTLE_EMBEDDER_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+export CASTLE_EMBEDDER_DIM=384
+export CASTLE_EMBEDDER_IDENTITY=paraphrase-ml-MiniLM-L12-v2
+```
+
+Then continue using Castle normally.
 
 ### Known model→dim pairs
 
 | `embedder_model` | `embedder_dim` |
 |---|---|
-| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (default) | 384 |
-| `BAAI/bge-m3` (recommended for better recall) | 1024 |
+| `BAAI/bge-m3` (default) | 1024 |
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (legacy default) | 384 |
 | `BAAI/bge-large-en-v1.5` (English-only) | 1024 |
 
-### ⚠️ Forget-to-reindex footgun
+### Changing embedder later
 
-If you change `embedder_model` / `embedder_dim` in `castle.yaml` without running `castle reindex`, the next search will fail with a cryptic LanceDB dim-mismatch error like:
-
-```
-RuntimeError: query dim(1024) doesn't match the column vector vector dim(384)
-```
-
-There's no silent corruption — the system errors loudly — but the error doesn't tell you to reindex. **Always reindex after changing embedder config.** A friendlier error message is tracked as a follow-up PR.
+If you change `embedder_model` / `embedder_dim` in `castle.yaml` (or via env
+vars) without running `castle reindex`, Castle detects the mismatch and
+prints a friendly error with the exact `castle reindex` command to run.
+There's no silent corruption. (Implementation: `EmbedderIdentityMismatchError`
+in `cognitive_castle/backends/lancedb_backend.py`.)
 
 ### Stage 4: LLM-as-judge re-rank (`--llm-rerank`)
 
@@ -445,7 +441,7 @@ Both hooks are auto-registered when you install the plugin. `castle sweep <trans
 
 - Python 3.9+
 - LanceDB (installed automatically)
-- ~500 MB disk for the default embedding model (`paraphrase-multilingual-MiniLM-L12-v2`)
+- ~2.3 GB disk + VRAM for the default embedding model (`BAAI/bge-m3`)
 
 No API key is required for the core path.
 
