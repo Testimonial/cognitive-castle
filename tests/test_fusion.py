@@ -165,3 +165,17 @@ def test_apply_recency_preserves_contributing_signals():
     assert result[0].contributing_signals == frozenset({"kg"}), (
         "apply_recency must preserve contributing_signals through reconstruction"
     )
+
+
+def test_weighted_rrf_zero_weight_signal_not_in_contributing():
+    """A signal with weight=0 must NOT appear in contributing_signals.
+
+    Regression guard: if someone refactors the early-continue in
+    weighted_rrf and accidentally accumulates signal names for
+    zero-weight signals, this test catches it.
+    """
+    rank_lists = {"dense": [_ref("a")], "sparse": [_ref("a")]}
+    weights = {"dense": 1.0, "sparse": 0.0}
+
+    result = weighted_rrf(rank_lists, weights, k_rrf=60)
+    assert result[0].contributing_signals == frozenset({"dense"})
