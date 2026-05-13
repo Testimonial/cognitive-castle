@@ -163,3 +163,87 @@ def test_identity_mismatch_raises_when_dim_matches(tmp_path, monkeypatch):
     assert "bge-m3" in msg
     assert "CASTLE_EMBEDDER_MODEL" in msg
     backend.close()
+
+
+def test_legacy_palace_grandfathers_when_dim_matches(tmp_path, monkeypatch):
+    """Palace with castle_drawers but no castle_metadata → grandfather writes identity."""
+    palace_path = tmp_path / "palace"
+
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="BAAI/bge-m3",
+        dim=1024,
+        identity="bge-m3",
+    )
+
+    # Simulate legacy: delete castle_metadata
+    import lancedb
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    db.drop_table("castle_metadata")
+    assert "castle_metadata" not in db.table_names()
+    del db  # close the connection so our backend gets a fresh one
+
+    # Re-open with matching defaults
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    cfg = CognitiveCastleConfig()
+    backend = LanceDBBackend(cfg=cfg)
+    # No exception expected; grandfather kicks in
+    collection = backend.get_collection(
+        palace=_make_palace_ref(palace_path),
+        collection_name="castle_drawers",
+        create=False,
+    )
+    assert collection is not None
+    backend.close()
+
+    # Verify castle_metadata now exists with bge-m3 (use pyarrow, not pandas)
+    import pyarrow.compute as pc
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    assert "castle_metadata" in db.table_names()
+    arrow_table = db.open_table("castle_metadata").to_arrow()
+    mask = pc.equal(arrow_table["key"], "embedder_identity")
+    matched = arrow_table.filter(mask)
+    assert matched.num_rows > 0
+    assert matched.column("value").to_pylist()[0] == "bge-m3"
+
+
+def test_legacy_palace_raises_when_dim_mismatches(tmp_path, monkeypatch):
+    """Legacy palace (no manifest) with dim=384, cfg.embedder_dim=1024 → raise immediately."""
+    palace_path = tmp_path / "palace"
+
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+        dim=384,
+        identity="paraphrase-ml-MiniLM-L12-v2",
+    )
+
+    # Simulate legacy: delete castle_metadata
+    import lancedb
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    db.drop_table("castle_metadata")
+    del db
+
+    # Re-open with bge-m3 defaults (dim=1024 conflicts with palace dim=384)
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    cfg = CognitiveCastleConfig()
+    backend = LanceDBBackend(cfg=cfg)
+    with pytest.raises(EmbedderIdentityMismatchError):
+        backend.get_collection(
+            palace=_make_palace_ref(palace_path),
+            collection_name="castle_drawers",
+            create=False,
+        )
+
+    # Verify NO grandfather happened (castle_metadata still missing)
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    assert "castle_metadata" not in db.table_names()
+    backend.close()
