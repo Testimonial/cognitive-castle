@@ -33,6 +33,7 @@ coverage.xml
 # Virtual environments
 .venv/
 venv/
+test_env/
 
 # ChromaDB local data
 *.sqlite3-journal
