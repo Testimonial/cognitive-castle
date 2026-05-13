@@ -11,7 +11,7 @@ Covers the LanceDB backend's per-palace identity verification:
 
 from __future__ import annotations
 
-import multiprocessing  # noqa: F401  # used in Task 7 (test_concurrent_grandfather_is_race_safe)
+import multiprocessing
 import pytest  # noqa: F401  # used in test function decorators
 
 from cognitive_castle.backends import EmbedderIdentityMismatchError  # noqa: F401  # used in Tasks 5 & 6
@@ -247,3 +247,73 @@ def test_legacy_palace_raises_when_dim_mismatches(tmp_path, monkeypatch):
     db = lancedb.connect(str(palace_path / "lancedb"))
     assert "castle_metadata" not in db.table_names()
     backend.close()
+
+
+def _grandfather_worker(palace_path_str, result_queue):
+    """Worker process: opens a backend against the palace, captures result/exception."""
+    try:
+        from cognitive_castle.backends.lancedb_backend import LanceDBBackend
+        from cognitive_castle.backends.base import PalaceRef
+        from cognitive_castle.config import CognitiveCastleConfig
+
+        cfg = CognitiveCastleConfig()
+        backend = LanceDBBackend(cfg=cfg)
+        backend.get_collection(
+            palace=PalaceRef(id=palace_path_str, local_path=palace_path_str),
+            collection_name="castle_drawers",
+            create=False,
+        )
+        backend.close()
+        result_queue.put(("ok", None))
+    except Exception as e:
+        result_queue.put(("error", f"{type(e).__name__}: {e}"))
+
+
+def test_concurrent_grandfather_is_race_safe(tmp_path, monkeypatch):
+    """Two simultaneous backend inits on a legacy palace both succeed."""
+    palace_path = tmp_path / "palace"
+
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="BAAI/bge-m3",
+        dim=1024,
+        identity="bge-m3",
+    )
+
+    # Simulate legacy: delete castle_metadata
+    import lancedb
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    db.drop_table("castle_metadata")
+    del db
+
+    # Important: subprocess inherits parent env — clear overrides so workers
+    # see the bge-m3 defaults.
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    ctx = multiprocessing.get_context("spawn")
+    result_queue = ctx.Queue()
+    p1 = ctx.Process(target=_grandfather_worker, args=(str(palace_path), result_queue))
+    p2 = ctx.Process(target=_grandfather_worker, args=(str(palace_path), result_queue))
+    p1.start()
+    p2.start()
+    p1.join(timeout=30)
+    p2.join(timeout=30)
+
+    results = [result_queue.get(timeout=5) for _ in range(2)]
+    statuses = [r[0] for r in results]
+    errors = [r[1] for r in results if r[0] == "error"]
+    assert statuses.count("ok") == 2, f"Expected both workers to succeed; got errors: {errors}"
+
+    # Final state: castle_metadata exists with at least one embedder_identity row
+    # (use pyarrow.compute — pandas not installed)
+    import pyarrow.compute as pc
+    db = lancedb.connect(str(palace_path / "lancedb"))
+    assert "castle_metadata" in db.table_names()
+    arrow_table = db.open_table("castle_metadata").to_arrow()
+    mask = pc.equal(arrow_table["key"], "embedder_identity")
+    matched = arrow_table.filter(mask)
+    assert matched.num_rows >= 1
+    assert matched.column("value").to_pylist()[0] == "bge-m3"
