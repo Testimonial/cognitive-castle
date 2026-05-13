@@ -11,6 +11,7 @@
 ##         ^score             <float>   (Stage 3+4 score)
 ##         ^age-seconds       <int>
 ##         ^recently-accessed true|false
+##         ^entity-match      true|false  (came via KG-hop entity match)
 ##
 ## Each matching production adds an i-supported ^boost-tag to <m>.
 ## The Python bridge maps tags → BOOST_MULTIPLIERS → compounded score boost.
@@ -34,4 +35,12 @@ sp {castle-boost*same-project
     (<m> ^project <p>)
 -->
     (<m> ^boost-tag same-project)
+}
+
+sp {castle-boost*entity-match
+    "Boost hits whose drawer shares an entity with the query (came via KG-hop)."
+    (state <s> ^io.input-link.memory <m>)
+    (<m> ^entity-match true)
+-->
+    (<m> ^boost-tag entity-match)
 }

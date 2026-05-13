@@ -318,3 +318,65 @@ def test_apply_soar_to_reranked_returns_sorted_tuples(tmp_path):
     result = soar_bridge._apply_soar_to_reranked(reranked, cfg)
     scores = [s for s, _ in result]
     assert scores == sorted(scores, reverse=True), f"Expected descending sort, got {scores}"
+
+
+def test_entity_match_boost_applied_when_flag_true(tmp_path):
+    """A hit with entity_match=True fires the entity-match rule.
+
+    Uses the existing _mock_cfg helper from this file. Requires SML to actually
+    fire the rule; on test environments without SML, the boost-tag never appears.
+    """
+    import pathlib
+    from cognitive_castle import soar_bridge
+
+    _RULES = str(pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar")
+
+    hits = [
+        {
+            "id": "a",
+            "score": 1.0,
+            "wing": "x",
+            "room": "r",
+            "source_file": "f",
+            "entity_match": True,
+            "created_at": "2020-01-01T00:00:00Z",  # old → recency-boost won't fire
+        }
+    ]
+    cfg = _mock_cfg(rules_path=_RULES)
+
+    boosted = soar_bridge.apply_soar_boosts(hits, cfg)
+    # On SML-available environments, the rule fires
+    if soar_bridge._load_sml() is not None:
+        assert "entity-match" in boosted[0]["soar_tags"], (
+            f"Expected entity-match tag to fire; got soar_tags={boosted[0]['soar_tags']}"
+        )
+        assert boosted[0]["soar_boost"] >= 1.30, (
+            f"Expected boost >= 1.30, got {boosted[0]['soar_boost']}"
+        )
+
+
+def test_entity_match_boost_not_applied_when_flag_false(tmp_path):
+    """A hit with entity_match=False does NOT fire the entity-match rule."""
+    import pathlib
+    from cognitive_castle import soar_bridge
+
+    _RULES = str(pathlib.Path(__file__).parent.parent / "cognitive_castle" / "rules" / "castle-boost.soar")
+
+    hits = [
+        {
+            "id": "a",
+            "score": 1.0,
+            "wing": "x",
+            "room": "r",
+            "source_file": "f",
+            "entity_match": False,
+            "created_at": "2020-01-01T00:00:00Z",
+        }
+    ]
+    cfg = _mock_cfg(rules_path=_RULES)
+
+    boosted = soar_bridge.apply_soar_boosts(hits, cfg)
+    if soar_bridge._load_sml() is not None:
+        assert "entity-match" not in boosted[0]["soar_tags"], (
+            "Rule should not fire when entity_match=False"
+        )
