@@ -325,9 +325,10 @@ def test_llm_model_default_matches_cmd_init_default():
     """Default tracks cmd_init's hardcoded default at cli.py:267.
 
     Note: both `cfg.llm_model` and `cmd_init`'s `--llm-model` default
-    point at `gemma3:4b` — a real Ollama tag. The original PR #20
-    introduced `gemma3:e4b` as a typo; this PR fixed it. Users who
-    accept defaults get a working model on first `ollama pull`.
+    point at `gemma3:4b` — a real Ollama tag. This test verifies the
+    config-driven and CLI-driven paths stay in sync; if a future change
+    drifts them apart, users would get different LLM defaults via
+    `castle init` vs in-process config loading. Both must match.
     """
     cfg = _make_config_with_file_config({})
     assert cfg.llm_model == "gemma3:4b"
