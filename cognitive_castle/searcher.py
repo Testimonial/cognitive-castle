@@ -203,6 +203,8 @@ def search(
     Raises SearchError if the pipeline fails. Returns None either way (this is
     a print-only function — programmatic callers should use `search_memories`).
     """
+    from .backends.base import EmbedderIdentityMismatchError
+
     try:
         result = search_memories(
             query=query,
@@ -212,6 +214,9 @@ def search(
             n_results=n_results,
             llm_rerank=llm_rerank,
         )
+    except EmbedderIdentityMismatchError:
+        # Surface the friendly migration prompt — don't wrap as SearchError.
+        raise
     except Exception as e:
         print(f"\n  Search error: {e}")
         raise SearchError(f"Search error: {e}") from e
@@ -393,8 +398,13 @@ def _new_pipeline_search(
     from .reranker import rerank
 
     # Resolve the LanceCollection from the default palace backend.
+    from .backends.base import EmbedderIdentityMismatchError
+
     try:
         col = _get_collection(palace_path, collection_name="castle_drawers", create=False)
+    except EmbedderIdentityMismatchError:
+        # Surface the friendly migration prompt — don't swallow it as "no palace".
+        raise
     except Exception:
         # No palace found — degrade to empty results rather than crashing.
         return []
