@@ -273,7 +273,11 @@ def test_search_memories_llm_rerank_true_calls_judge(
     assert spy.call_args[0][0] == "authentication tokens"
     # Second positional arg = list of candidate doc strings (top cfg.llm_judge_top_n from Stage 3)
     assert isinstance(spy.call_args[0][1], list)
-    assert len(spy.call_args[0][1]) == 10  # default llm_judge_top_n
+    # Read the actual config value rather than hardcoding 10 — prevents silent
+    # test failure if CASTLE_LLM_JUDGE_TOP_N is set in CI or castle.yaml overrides it.
+    from cognitive_castle.config import CognitiveCastleConfig
+
+    assert len(spy.call_args[0][1]) == CognitiveCastleConfig().llm_judge_top_n
     # Result has 3 items per n_results
     assert len(result["results"]) == 3
 
