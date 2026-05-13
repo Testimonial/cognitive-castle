@@ -988,30 +988,31 @@ class TestCacheInvalidation:
 
 
 def test_mcp_castle_search_soar_boost_threads_through(monkeypatch):
-    """MCP castle_search with soar_boost:true reaches apply_soar_boosts handler."""
-    from unittest.mock import MagicMock, patch
+    """MCP castle_search with soar_boost:true passes soar_boost to search_memories."""
+    from unittest.mock import patch
     from cognitive_castle.mcp_server import tool_search
 
     monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
-    fake_hits = [{"id": "a", "score": 0.5, "wing": "w", "room": "r", "source_file": "f"}]
+    # Simulate in-pipeline SOAR: search_memories returns hits with audit-trail fields
+    fake_hits = [
+        {
+            "id": "a",
+            "score": 0.625,
+            "soar_boost": 1.25,
+            "soar_tags": ["recency-boost"],
+            "score_pre_soar": 0.5,
+            "wing": "w",
+            "room": "r",
+            "source_file": "f",
+        }
+    ]
     fake_result = {"results": fake_hits, "query": "x", "filters": {}}
-    spy = MagicMock(
-        return_value=[
-            {
-                "id": "a",
-                "score": 0.625,
-                "soar_boost": 1.25,
-                "soar_tags": ["recency-boost"],
-                "score_pre_soar": 0.5,
-            }
-        ]
-    )
 
-    with (
-        patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result),
-        patch("cognitive_castle.soar_bridge.apply_soar_boosts", spy),
-    ):
+    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
         result = tool_search(query="x", soar_boost=True)
-    spy.assert_called_once()
-    # Result has the boosted hit
+
+    # search_memories was called with soar_boost=True
+    mock_sm.assert_called_once()
+    assert mock_sm.call_args.kwargs.get("soar_boost") is True
+    # Result has the boosted hit with audit-trail fields
     assert result.get("results", [])[0]["soar_boost"] == 1.25
