@@ -84,7 +84,7 @@ cognitive_castle/
 ├── searcher.py             # 3-stage retrieval pipeline (dense + FTS + KG-hop → RRF + recency → cross-encoder rerank)
 ├── fusion.py               # Pure functions: weighted Reciprocal Rank Fusion + recency multiplier
 ├── reranker.py             # Cross-encoder reranker wrapper (device-aware: bge-reranker-base on CPU, v2-m3 on GPU)
-├── embedding.py            # Sentence-transformers embedding (default: paraphrase-multilingual-MiniLM-L12-v2 384-dim; alternative: BAAI/bge-m3 1024-dim via config)
+├── embedding.py            # Sentence-transformers embedding (default: BAAI/bge-m3 1024-dim; legacy: paraphrase-multilingual-MiniLM-L12-v2 384-dim, opt-in via env var)
 ├── knowledge_graph.py      # Temporal entity-relationship graph (SQLite)
 ├── palace.py               # Shared palace operations
 ├── palace_graph.py         # Room traversal + cross-wing tunnels
@@ -176,7 +176,7 @@ Knowledge Graph:
 Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`):
   Query
     ├── Stage 1 (parallel recall, ~top-100 each):
-    │     ├── Dense vector search (paraphrase-multilingual-MiniLM-L12-v2 default, BAAI/bge-m3 supported via config — see README)
+    │     ├── Dense vector search (BAAI/bge-m3 default 1024-dim, paraphrase-multilingual-MiniLM-L12-v2 384-dim legacy via env var — see README)
     │     ├── Sparse FTS search (Tantivy via LanceDB)
     │     └── KG-hop (entity registry lookup → KnowledgeGraph.find_drawers_by_entities)
     ├── Stage 2: weighted RRF + recency multiplier → top-K (K=20 interactive, K=10 hook)
