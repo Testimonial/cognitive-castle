@@ -159,9 +159,7 @@ class CognitiveCastleConfig:
             config_dir: Override config directory (useful for testing).
                         Defaults to ~/.castle.
         """
-        self._config_dir = (
-            Path(config_dir) if config_dir else Path(os.path.expanduser("~/.castle"))
-        )
+        self._config_dir = Path(config_dir) if config_dir else Path(os.path.expanduser("~/.castle"))
         self._config_file = self._config_dir / "config.json"
         self._people_map_file = self._config_dir / "people_map.json"
         self._file_config = {}
@@ -429,6 +427,111 @@ class CognitiveCastleConfig:
             parsed = int(cfg_val) if cfg_val is not None else 10
         except (TypeError, ValueError):
             parsed = 10
+        return max(1, parsed)
+
+    @property
+    def llm_judge_top_n(self):
+        """Number of candidates to feed the LLM judge in Stage 4.
+
+        Default: ``10``. Reads from ``CASTLE_LLM_JUDGE_TOP_N`` env var
+        first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_LLM_JUDGE_TOP_N")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("llm_judge_top_n")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 10
+        except (TypeError, ValueError):
+            parsed = 10
+        return max(1, parsed)
+
+    @property
+    def llm_provider(self):
+        """Provider name for the LLM-as-judge step (``"ollama"`` / ``"openai-compat"`` / ``"anthropic"``).
+
+        Default: ``"ollama"``. Reads from ``CASTLE_LLM_PROVIDER`` env var
+        first, then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_LLM_PROVIDER")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("llm_provider", "ollama")).strip()
+
+    @property
+    def llm_model(self):
+        """Model name passed to the LLM provider.
+
+        Default: ``"gemma3:e4b"`` (matches ``cmd_init``'s default at
+        ``cli.py:267``). NOTE: this default is a known pre-existing
+        broken tag — the model does not exist in Ollama's registry.
+        Both defaults will be fixed together in a follow-up PR. Until
+        then, users who want a working LLM-as-judge path must override
+        via ``CASTLE_LLM_MODEL`` env var or ``llm_model`` in castle.yaml.
+
+        Reads from ``CASTLE_LLM_MODEL`` env var first, then config file,
+        then default.
+        """
+        env_val = os.environ.get("CASTLE_LLM_MODEL")
+        if env_val:
+            return env_val.strip()
+        return str(self._file_config.get("llm_model", "gemma3:e4b")).strip()
+
+    @property
+    def llm_endpoint(self):
+        """Endpoint URL override for the LLM provider, or None to use the provider's default.
+
+        Default: ``None`` (use provider's default: e.g. http://localhost:11434
+        for Ollama, https://api.anthropic.com for Anthropic).
+        Reads from ``CASTLE_LLM_ENDPOINT`` env var first, then config file,
+        then default.
+        """
+        env_val = os.environ.get("CASTLE_LLM_ENDPOINT")
+        if env_val:
+            return env_val.strip()
+        cfg_val = self._file_config.get("llm_endpoint")
+        return str(cfg_val).strip() if cfg_val else None
+
+    @property
+    def llm_api_key(self):
+        """API key for external LLM providers (Anthropic / OpenAI-compat).
+
+        Default: ``None`` (no API key — works for local Ollama).
+        Reads from ``CASTLE_LLM_API_KEY`` env var first, then config file,
+        then default. NOTE: prefer the env var over the config file for
+        secrets — castle.yaml may be checked into version control.
+        """
+        env_val = os.environ.get("CASTLE_LLM_API_KEY")
+        if env_val:
+            return env_val.strip()
+        cfg_val = self._file_config.get("llm_api_key")
+        return str(cfg_val).strip() if cfg_val else None
+
+    @property
+    def llm_timeout(self):
+        """HTTP timeout (seconds) for LLM provider calls.
+
+        Default: ``120``. Reads from ``CASTLE_LLM_TIMEOUT`` env var first,
+        then config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_LLM_TIMEOUT")
+        if env_val:
+            try:
+                parsed = int(env_val)
+                if parsed >= 1:
+                    return parsed
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("llm_timeout")
+        try:
+            parsed = int(cfg_val) if cfg_val is not None else 120
+        except (TypeError, ValueError):
+            parsed = 120
         return max(1, parsed)
 
     @property
