@@ -375,6 +375,7 @@ def tool_search(
     max_distance: float = 1.5,
     min_similarity: float = None,
     context: str = None,
+    llm_rerank: bool = False,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -395,6 +396,7 @@ def tool_search(
         room=room,
         n_results=limit,
         max_distance=dist,
+        llm_rerank=llm_rerank,
     )
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:
@@ -1417,6 +1419,16 @@ TOOLS = {
                 "context": {
                     "type": "string",
                     "description": "Background context for the search (optional). NOT used for embedding — only for future re-ranking.",
+                },
+                "llm_rerank": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Run optional Stage 4 LLM-as-judge re-rank over top "
+                        "candidates. Adds 1-2s latency. Uses the LLM provider "
+                        "configured via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL "
+                        "or castle.yaml. Off by default."
+                    ),
                 },
             },
             "required": ["query"],
