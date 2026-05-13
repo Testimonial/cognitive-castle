@@ -203,18 +203,23 @@ def _get_agent(palace_path: str, rules_path: str):
     return agent
 
 
-def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
-    """Push input-link WMEs for the given hits.
+def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict, list]:
+    """Push hits + context to SOAR's working memory.
 
-    Returns:
-        (memory_wmes, top_level_wmes) where:
-        - memory_wmes: composite_id → memory Identifier handle
-        - top_level_wmes: list of top-level input-link Identifier WMEs pushed
-          (context + memory roots), to be destroyed on the next call's cleanup.
+    Builds ^io.input-link structure:
+      ^io.input-link <il>
+      <il>           ^context <ctx>
+                     ^memory[]  with id, project, score, age-seconds,
+                                recently-accessed, entity-match
+      ^context <ctx> ^project <string>
+                     [^query-type <string>]   ← added in PR #4c-type-match
+      ^memory <m>    [^drawer-type <string>]  ← added in PR #4c-type-match
 
-    Schema (matches castle-boost.soar):
-      ^io.input-link.context.{project, query}
-      ^io.input-link.memory[]  with id, project, score, age-seconds, recently-accessed
+    query is accepted (for the type-match rule wiring in PR #4c-type-match)
+    but NOT yet consumed — task 4 of that PR adds the ^query-type and
+    ^drawer-type pushes.
+
+    Returns (memory_wmes, top_level_wmes) for later WM cleanup.
     """
     input_link = agent.GetInputLink()
     project = os.environ.get("CASTLE_PROJECT", "default")
@@ -352,7 +357,7 @@ def _annotate_unboosted(hits: list[dict]) -> list[dict]:
     return hits
 
 
-def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
+def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
     """Post-pipeline boost-tag application.
 
     Args:
@@ -360,6 +365,10 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
             Each hit must have at least: "id", "score", "wing", and optionally
             "created_at" (used to derive recency).
         cfg: Config object exposing .soar_enabled, .soar_rules_path, .palace_path.
+        query: The original search query string. Forwarded to
+            _push_working_memory so the type-match rule (PR #4c-type-match)
+            can classify it into a memory_type intent. Default empty preserves
+            back-compat for external callers that don't have the query handy.
 
     Returns:
         list[dict]: same hits with `score` adjusted by SOAR's compound multiplier
@@ -431,7 +440,7 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
 
     # Push WM
     try:
-        memory_wmes, top_level_wmes = _push_working_memory(agent, hits)
+        memory_wmes, top_level_wmes = _push_working_memory(agent, hits, query=query)
     except Exception as e:
         _warn_once("wm-push-failed", f"WM push failed ({type(e).__name__}: {e})")
         return _annotate_unboosted(hits + truncated_remainder)
@@ -489,6 +498,7 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
 def _apply_soar_to_reranked(
     reranked: list[tuple[float, dict]],
     cfg,
+    query: str = "",
 ) -> list[tuple[float, dict]]:
     """Apply SOAR boost-tags to a list of (score, row) tuples.
 
@@ -496,6 +506,9 @@ def _apply_soar_to_reranked(
     inside _new_pipeline_search. Returns a NEW list sorted by boosted score
     (descending). Each row dict is mutated in place with audit-trail fields
     (soar_boost, soar_tags, score_pre_soar) so they surface in the final hits.
+
+    The query string is forwarded to apply_soar_boosts so the type-match
+    rule (PR #4c-type-match) can use it.
 
     Never raises. Same graceful-fallback behavior as apply_soar_boosts.
     """
@@ -513,7 +526,7 @@ def _apply_soar_to_reranked(
 
     # Delegate to the existing public API; it mutates hits_view in place
     # (sets soar_boost, soar_tags, score_pre_soar and updates "score").
-    boosted = apply_soar_boosts(hits_view, cfg)
+    boosted = apply_soar_boosts(hits_view, cfg, query=query)
 
     # Guarantee audit-trail fields on every row even when apply_soar_boosts
     # returned early (SML unavailable, kill-switch, etc.) without annotating.

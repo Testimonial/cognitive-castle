@@ -67,7 +67,7 @@ def test_search_memories_threads_soar_boost_through_pipeline(tmp_path, monkeypat
 
     soar_calls = []
 
-    def stub_stage_5(reranked, cfg):
+    def stub_stage_5(reranked, cfg, query=""):
         soar_calls.append(reranked)
         return reranked
 
@@ -101,7 +101,7 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
         call_order.append("stage_4")
         return reranked
 
-    def fake_stage_5(reranked, cfg):
+    def fake_stage_5(reranked, cfg, query=""):
         call_order.append("stage_5")
         return reranked
 
@@ -142,7 +142,7 @@ def test_soar_first_runs_soar_then_judge(monkeypatch, tmp_path):
         searcher_mod, "_stage_4_judge", lambda q, r, c: call_order.append("stage_4") or r
     )
     monkeypatch.setattr(
-        searcher_mod, "_stage_5_soar", lambda r, c: call_order.append("stage_5") or r
+        searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
@@ -178,7 +178,7 @@ def test_soar_only_no_judge_call(monkeypatch, tmp_path):
         searcher_mod, "_stage_4_judge", lambda q, r, c: call_order.append("stage_4") or r
     )
     monkeypatch.setattr(
-        searcher_mod, "_stage_5_soar", lambda r, c: call_order.append("stage_5") or r
+        searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
@@ -214,7 +214,7 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
         searcher_mod, "_stage_4_judge", lambda q, r, c: call_order.append("stage_4") or r
     )
     monkeypatch.setattr(
-        searcher_mod, "_stage_5_soar", lambda r, c: call_order.append("stage_5") or r
+        searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
     from cognitive_castle.searcher import _apply_stages_4_and_5
