@@ -174,6 +174,32 @@ prints a friendly error with the exact `castle reindex` command to run.
 There's no silent corruption. (Implementation: `EmbedderIdentityMismatchError`
 in `cognitive_castle/backends/lancedb_backend.py`.)
 
+### Stage 3 alternative: mxbai reranker (English-only)
+
+Castle defaults to `BAAI/bge-reranker-v2-m3` for the Stage 3 cross-encoder
+rerank — strong on multilingual retrieval and well-suited to Castle's mixed-
+language defaults. For English-only corpora, `mixedbread-ai/mxbai-rerank-large-v2`
+outperforms bge-reranker-v2-m3 on English MTEB benchmarks but is **trained
+exclusively on English**; non-English queries against a palace reranked with
+mxbai produce noticeably weaker results.
+
+**Opt in (English-only corpora only):**
+
+```bash
+export CASTLE_RERANKER_MODEL_GPU=mixedbread-ai/mxbai-rerank-large-v2
+```
+
+Or set in `castle.yaml`:
+
+```yaml
+reranker_model_gpu: mixedbread-ai/mxbai-rerank-large-v2
+```
+
+**Caveat:** `bge-reranker-v2-m3` (the default) is multilingual; mxbai is not.
+If your palace contains any non-English content, keep the default. The default
+selection is conservative for cross-lingual safety, not for raw English
+benchmark numbers.
+
 ### Stage 4: LLM-as-judge re-rank (`--llm-rerank`)
 
 Castle's default 3-stage pipeline (dense + FTS + KG → fusion → cross-encoder rerank) is already strong. For the last few percent on high-stakes queries — especially ones where subtle intent or multi-hop reasoning matters — you can opt into a **Stage 4 LLM-as-judge re-rank**.
