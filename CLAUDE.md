@@ -185,8 +185,8 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │     ├── Stage 4 (--llm-rerank or llm_rerank:true MCP): LLM-as-judge re-ranks
     │     │     top-cfg.llm_judge_top_n (default 10) from Stage 3
     │     │     → graceful identity-order fallback on any LLM failure
-    │     ├── Stage 5 (--soar-boost AND CASTLE_SOAR_ENABLED=1): 3 SOAR symbolic
-    │     │     productions (recency-boost, same-project, entity-match) add boost-tags
+    │     ├── Stage 5 (--soar-boost AND CASTLE_SOAR_ENABLED=1): 4 SOAR symbolic
+    │     │     productions (recency-boost, same-project, entity-match, type-match) add boost-tags
     │     │     → graceful pass-through on any Soar failure
     │     └── Ordering: default is Stage 4 then Stage 5 (judge-then-SOAR).
     │            --soar-first / soar_first:true flips to Stage 5 then Stage 4

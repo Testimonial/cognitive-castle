@@ -38,8 +38,9 @@ _PREV_TOP_WMES: dict = {}  # palace_path → list of top-level WME handles from 
 # fire on the same hit. Final boost clamped to [0.1, 10.0] (see apply_soar_boosts).
 BOOST_MULTIPLIERS: dict[str, float] = {
     "recency-boost": 1.25,  # ^recently-accessed "true" (age < 7d default)
-    "same-project": 1.15,  # <m>.project == <context>.project
-    "entity-match": 1.30,  # ^entity-match "true" (hit came via KG-hop entity match)
+    "same-project": 1.15,  # ^project matches ^io.input-link.context.project
+    "entity-match": 1.30,  # ^entity-match "true" (came via KG-hop entity match)
+    "type-match": 1.25,  # ^drawer-type matches ^io.input-link.context.query-type
 }
 
 # Hardcoded operational limits (YAGNI on promoting to config knobs).
@@ -203,19 +204,29 @@ def _get_agent(palace_path: str, rules_path: str):
     return agent
 
 
-def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
-    """Push input-link WMEs for the given hits.
+def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict, list]:
+    """Push hits + context to SOAR's working memory.
 
-    Returns:
-        (memory_wmes, top_level_wmes) where:
-        - memory_wmes: composite_id → memory Identifier handle
-        - top_level_wmes: list of top-level input-link Identifier WMEs pushed
-          (context + memory roots), to be destroyed on the next call's cleanup.
+    Builds ^io.input-link structure:
+      ^io.input-link <il>
+      <il>           ^context <ctx>
+                     ^memory[]  with id, project, score, age-seconds,
+                                recently-accessed, entity-match, drawer-type
+      ^context <ctx> ^project <string>
+                     [^query-type <string>]   ← when classify_query succeeds
+      ^memory <m>    [^drawer-type <string>]  ← when hit.room in MEMORY_TYPES
 
-    Schema (matches castle-boost.soar):
-      ^io.input-link.context.{project, query}
-      ^io.input-link.memory[]  with id, project, score, age-seconds, recently-accessed
+    query is classified via cognitive_castle.query_intent.classify_query;
+    if it returns one of the 5 memory_types, ^context.query-type is pushed.
+    For each hit, if its room is one of the 5 known memory_types,
+    ^memory.drawer-type is pushed. The castle-boost*type-match rule fires
+    when both attributes match.
+
+    Returns (memory_wmes, top_level_wmes) for later WM cleanup.
     """
+    # ── Import here (NOT module-level) to keep query_intent only loaded when SOAR fires ──
+    from .query_intent import MEMORY_TYPES, classify_query
+
     input_link = agent.GetInputLink()
     project = os.environ.get("CASTLE_PROJECT", "default")
 
@@ -224,7 +235,14 @@ def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
     # Push context
     context_wme = input_link.CreateIdWME("context")
     context_wme.CreateStringWME("project", project)
-    # Skip the query string for #4a — rules don't read it. Add in future PRs.
+
+    # ── NEW (PR #4c-type-match): push ^context.query-type when classification succeeds ──
+    # classify_query handles empty/whitespace/non-matching internally — returns None.
+    query_type = classify_query(query)
+    if query_type:
+        context_wme.CreateStringWME("query-type", query_type)
+    # If query_type is None, skip the push — rule can't fire without it.
+
     top_level_wmes.append(context_wme)
 
     # Push one ^memory WME per hit
@@ -251,6 +269,12 @@ def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
         # else "false". String symbol to match the recently-accessed pattern.
         entity_match = "true" if hit.get("entity_match") else "false"
         m.CreateStringWME("entity-match", entity_match)
+
+        # ── NEW (PR #4c-type-match): push ^memory.drawer-type when room is a known memory_type ──
+        room = hit.get("room") or ""
+        if room in MEMORY_TYPES:
+            m.CreateStringWME("drawer-type", room)
+        # If room isn't a known type, skip — rule can't fire for this hit.
 
         memory_wmes[composite_id] = m
         top_level_wmes.append(m)
@@ -352,7 +376,7 @@ def _annotate_unboosted(hits: list[dict]) -> list[dict]:
     return hits
 
 
-def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
+def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
     """Post-pipeline boost-tag application.
 
     Args:
@@ -360,6 +384,10 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
             Each hit must have at least: "id", "score", "wing", and optionally
             "created_at" (used to derive recency).
         cfg: Config object exposing .soar_enabled, .soar_rules_path, .palace_path.
+        query: The original search query string. Forwarded to
+            _push_working_memory so the type-match rule (PR #4c-type-match)
+            can classify it into a memory_type intent. Default empty preserves
+            back-compat for external callers that don't have the query handy.
 
     Returns:
         list[dict]: same hits with `score` adjusted by SOAR's compound multiplier
@@ -431,7 +459,7 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
 
     # Push WM
     try:
-        memory_wmes, top_level_wmes = _push_working_memory(agent, hits)
+        memory_wmes, top_level_wmes = _push_working_memory(agent, hits, query=query)
     except Exception as e:
         _warn_once("wm-push-failed", f"WM push failed ({type(e).__name__}: {e})")
         return _annotate_unboosted(hits + truncated_remainder)
@@ -489,6 +517,7 @@ def apply_soar_boosts(hits: list[dict], cfg) -> list[dict]:
 def _apply_soar_to_reranked(
     reranked: list[tuple[float, dict]],
     cfg,
+    query: str = "",
 ) -> list[tuple[float, dict]]:
     """Apply SOAR boost-tags to a list of (score, row) tuples.
 
@@ -496,6 +525,9 @@ def _apply_soar_to_reranked(
     inside _new_pipeline_search. Returns a NEW list sorted by boosted score
     (descending). Each row dict is mutated in place with audit-trail fields
     (soar_boost, soar_tags, score_pre_soar) so they surface in the final hits.
+
+    The query string is forwarded to apply_soar_boosts so the type-match
+    rule (PR #4c-type-match) can use it.
 
     Never raises. Same graceful-fallback behavior as apply_soar_boosts.
     """
@@ -513,7 +545,7 @@ def _apply_soar_to_reranked(
 
     # Delegate to the existing public API; it mutates hits_view in place
     # (sets soar_boost, soar_tags, score_pre_soar and updates "score").
-    boosted = apply_soar_boosts(hits_view, cfg)
+    boosted = apply_soar_boosts(hits_view, cfg, query=query)
 
     # Guarantee audit-trail fields on every row even when apply_soar_boosts
     # returned early (SML unavailable, kill-switch, etc.) without annotating.

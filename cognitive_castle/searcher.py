@@ -398,16 +398,20 @@ def _stage_4_judge(
 def _stage_5_soar(
     reranked: list[tuple[float, dict]],
     cfg,
+    query: str = "",
 ) -> list[tuple[float, dict]]:
     """Stage 5: SOAR symbolic boost-tags.
 
     Delegates to soar_bridge._apply_soar_to_reranked. Lazy-imports
     soar_bridge so the module is only loaded when soar_boost is on
     (preserves the "no SOAR overhead by default" invariant from PR #4a).
+
+    The query string is threaded through to soar_bridge so the type-match
+    rule (PR #4c-type-match) can classify it into a memory_type intent.
     """
     from . import soar_bridge
 
-    return soar_bridge._apply_soar_to_reranked(reranked, cfg)
+    return soar_bridge._apply_soar_to_reranked(reranked, cfg, query=query)
 
 
 def _apply_stages_4_and_5(
@@ -429,13 +433,13 @@ def _apply_stages_4_and_5(
     soar_boost must also be True (CLI/MCP layers validate this loudly).
     """
     if soar_first:
-        reranked = _stage_5_soar(reranked, cfg)
+        reranked = _stage_5_soar(reranked, cfg, query=query)
         reranked = _stage_4_judge(query, reranked, cfg)
         return reranked
     if llm_rerank:
         reranked = _stage_4_judge(query, reranked, cfg)
     if soar_boost:
-        reranked = _stage_5_soar(reranked, cfg)
+        reranked = _stage_5_soar(reranked, cfg, query=query)
     return reranked
 
 
