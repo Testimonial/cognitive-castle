@@ -4,6 +4,7 @@ Pure functions, no I/O, no model loads. Inputs are simple data structures so
 this module is trivially unit-testable in isolation from the retrieval
 pipeline.
 """
+
 from __future__ import annotations
 
 import math
@@ -14,6 +15,7 @@ from datetime import datetime
 @dataclass(frozen=True)
 class CandidateRef:
     """A drawer reference produced by a single retrieval signal."""
+
     drawer_id: str
     timestamp_unix: float
 
@@ -21,9 +23,11 @@ class CandidateRef:
 @dataclass(frozen=True)
 class ScoredCandidate:
     """A drawer reference with a fused score."""
+
     drawer_id: str
     timestamp_unix: float
     score: float
+    contributing_signals: frozenset[str] = frozenset()
 
 
 def weighted_rrf(
@@ -55,6 +59,7 @@ def weighted_rrf(
     """
     scores: dict[str, float] = {}
     timestamps: dict[str, float] = {}
+    contributing_signals_acc: dict[str, set[str]] = {}
 
     for signal_name, candidates in rank_lists.items():
         weight = weights.get(signal_name, 0.0)
@@ -67,6 +72,7 @@ def weighted_rrf(
             contribution = weight / (k_rrf + rank)
             scores[cand.drawer_id] = scores.get(cand.drawer_id, 0.0) + contribution
             timestamps.setdefault(cand.drawer_id, cand.timestamp_unix)
+            contributing_signals_acc.setdefault(cand.drawer_id, set()).add(signal_name)
 
     return sorted(
         (
@@ -74,6 +80,7 @@ def weighted_rrf(
                 drawer_id=did,
                 timestamp_unix=timestamps[did],
                 score=score,
+                contributing_signals=frozenset(contributing_signals_acc.get(did, set())),
             )
             for did, score in scores.items()
         ),
@@ -118,6 +125,7 @@ def apply_recency(
                 drawer_id=c.drawer_id,
                 timestamp_unix=c.timestamp_unix,
                 score=c.score * factor,
+                contributing_signals=c.contributing_signals,
             )
         )
     boosted.sort(key=lambda s: (-s.score, s.drawer_id))

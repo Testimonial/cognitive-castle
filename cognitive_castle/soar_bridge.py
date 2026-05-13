@@ -39,6 +39,7 @@ _PREV_TOP_WMES: dict = {}  # palace_path → list of top-level WME handles from 
 BOOST_MULTIPLIERS: dict[str, float] = {
     "recency-boost": 1.25,  # ^recently-accessed "true" (age < 7d default)
     "same-project": 1.15,  # <m>.project == <context>.project
+    "entity-match": 1.30,  # ^entity-match "true" (hit came via KG-hop entity match)
 }
 
 # Hardcoded operational limits (YAGNI on promoting to config knobs).
@@ -245,6 +246,11 @@ def _push_working_memory(agent, hits: list[dict]) -> tuple[dict, list]:
         # ^recently-accessed: "true" (string symbol — Soar matches `^recently-accessed true`)
         recent = "true" if age_sec < RECENCY_THRESHOLD_SEC else "false"
         m.CreateStringWME("recently-accessed", recent)
+
+        # ^entity-match: "true" if hit came via KG-hop (fusion provenance flag),
+        # else "false". String symbol to match the recently-accessed pattern.
+        entity_match = "true" if hit.get("entity_match") else "false"
+        m.CreateStringWME("entity-match", entity_match)
 
         memory_wmes[composite_id] = m
         top_level_wmes.append(m)

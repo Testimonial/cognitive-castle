@@ -1,4 +1,5 @@
 """Unit tests for fusion: weighted RRF + recency."""
+
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -50,7 +51,7 @@ class TestWeightedRRF:
     def test_missing_signal_treated_as_unranked(self):
         rank_lists = {
             "dense": [_ref("a"), _ref("b")],
-            "sparse": [_ref("a")],   # b is missing from sparse
+            "sparse": [_ref("a")],  # b is missing from sparse
         }
         weights = {"dense": 1.0, "sparse": 1.0}
         out = weighted_rrf(rank_lists, weights, k_rrf=60)
@@ -127,3 +128,55 @@ class TestApplyRecency:
     def test_empty_input_returns_empty(self):
         now = datetime(2026, 5, 10, tzinfo=timezone.utc)
         assert apply_recency([], now=now, tau_days=90.0, max_boost=1.5) == []
+
+
+def test_weighted_rrf_populates_contributing_signals():
+    """contributing_signals reflects which signals had non-zero weight + the candidate appeared in their rank list."""
+    rank_lists = {
+        "dense": [_ref("a"), _ref("b")],
+        "sparse": [_ref("a")],
+        "kg": [_ref("b")],
+    }
+    weights = {"dense": 1.0, "sparse": 1.0, "kg": 0.5}
+
+    result = weighted_rrf(rank_lists, weights, k_rrf=60)
+    by_id = {sc.drawer_id: sc for sc in result}
+    assert by_id["a"].contributing_signals == frozenset({"dense", "sparse"})
+    assert by_id["b"].contributing_signals == frozenset({"dense", "kg"})
+
+
+def test_apply_recency_preserves_contributing_signals():
+    """apply_recency reconstructs ScoredCandidates with updated score AND preserves provenance.
+
+    This is a regression guard — if apply_recency drops the contributing_signals
+    field, SOAR's entity-match rule never fires.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    scored = [
+        ScoredCandidate(
+            drawer_id="a",
+            timestamp_unix=now.timestamp(),
+            score=1.0,
+            contributing_signals=frozenset({"kg"}),
+        )
+    ]
+    result = apply_recency(scored, now=now, tau_days=90.0, max_boost=1.5)
+    assert result[0].contributing_signals == frozenset({"kg"}), (
+        "apply_recency must preserve contributing_signals through reconstruction"
+    )
+
+
+def test_weighted_rrf_zero_weight_signal_not_in_contributing():
+    """A signal with weight=0 must NOT appear in contributing_signals.
+
+    Regression guard: if someone refactors the early-continue in
+    weighted_rrf and accidentally accumulates signal names for
+    zero-weight signals, this test catches it.
+    """
+    rank_lists = {"dense": [_ref("a")], "sparse": [_ref("a")]}
+    weights = {"dense": 1.0, "sparse": 0.0}
+
+    result = weighted_rrf(rank_lists, weights, k_rrf=60)
+    assert result[0].contributing_signals == frozenset({"dense"})

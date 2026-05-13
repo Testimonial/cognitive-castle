@@ -564,9 +564,17 @@ def _new_pipeline_search(
     if not top_k_ids:
         return []
 
+    # Derive entity-match flag from fusion provenance for the top-K candidates.
+    entity_match_by_id = {sc.drawer_id: "kg" in sc.contributing_signals for sc in fused[:k_cap]}
+
     top_k_rows = col.get_by_ids(top_k_ids)
     if not top_k_rows:
         return []
+
+    # Attach entity-match flag to each row so SOAR can read it via _push_working_memory.
+    for row in top_k_rows:
+        if isinstance(row, dict):
+            row["entity_match"] = entity_match_by_id.get(row.get("id"), False)
 
     docs = [_extract_text(r) for r in top_k_rows]
     rerank_scores = rerank(query, docs, cfg=cfg)
@@ -596,6 +604,7 @@ def _new_pipeline_search(
             "source_file": (r.get("source_file") or "") if isinstance(r, dict) else "",
             "created_at": _get_filed_at(r),
             "similarity": float(s),  # alias to score (test asserts type only)
+            "entity_match": (r.get("entity_match", False) if isinstance(r, dict) else False),
         }
         for s, r in reranked[:n_results]
     ]
