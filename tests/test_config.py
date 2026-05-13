@@ -224,8 +224,8 @@ def test_config_has_retrieval_upgrade_keys():
 
     cfg = CognitiveCastleConfig()
     # Cutover: defaults are now the new stack.
-    assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-    assert cfg.embedder_dim == 384
+    assert cfg.embedder_model == "BAAI/bge-m3"
+    assert cfg.embedder_dim == 1024
     assert cfg.use_new_retrieval_pipeline is True
     # Reranker, fusion, recency, kg-hop unchanged.
     assert cfg.reranker_model_gpu == "BAAI/bge-reranker-v2-m3"
@@ -256,7 +256,7 @@ def test_embedder_dim_rejects_negative_in_config_json(tmp_path):
         json.dump({"embedder_dim": -1}, f)
 
     cfg = CognitiveCastleConfig(config_dir=str(tmp_path))
-    assert cfg.embedder_dim == 384
+    assert cfg.embedder_dim == 1024
 
 
 def test_cognitive_castle_config_is_canonical_name():
@@ -265,7 +265,7 @@ def test_cognitive_castle_config_is_canonical_name():
 
     cfg = CognitiveCastleConfig()
     # Sanity check: an existing property still works.
-    assert cfg.embedder_model == "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+    assert cfg.embedder_model == "BAAI/bge-m3"
 
 
 def test_mempalace_config_is_backward_compat_alias():
@@ -397,3 +397,24 @@ def test_soar_rules_path_env_override(monkeypatch, tmp_path):
     monkeypatch.setenv("CASTLE_SOAR_RULES_PATH", str(custom))
     cfg = _make_config_with_file_config({})
     assert cfg.soar_rules_path == str(custom)
+
+
+def test_embedder_identity_auto_derives_from_model(monkeypatch):
+    """When CASTLE_EMBEDDER_IDENTITY is unset, identity derives from the model path."""
+    from cognitive_castle.config import CognitiveCastleConfig
+
+    # Clear any existing override
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+    monkeypatch.setenv("CASTLE_EMBEDDER_MODEL", "BAAI/bge-large-en-v1.5")
+    cfg = CognitiveCastleConfig()
+    assert cfg.embedder_identity == "bge-large-en-v1.5"
+
+    # Default model (no override) derives to "bge-m3"
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    cfg = CognitiveCastleConfig()
+    assert cfg.embedder_identity == "bge-m3"
+
+    # Explicit identity wins over auto-derive
+    monkeypatch.setenv("CASTLE_EMBEDDER_IDENTITY", "custom-id")
+    cfg = CognitiveCastleConfig()
+    assert cfg.embedder_identity == "custom-id"
