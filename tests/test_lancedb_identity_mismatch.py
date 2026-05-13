@@ -102,3 +102,64 @@ def test_dim_mismatch_raises_with_migration_prompt(tmp_path, monkeypatch):
     assert "CASTLE_EMBEDDER_MODEL" in msg
     assert "paraphrase-ml-MiniLM-L12-v2" in msg  # legacy identity in opt-out block
     backend.close()
+
+
+def test_matching_palace_proceeds_silently(tmp_path, monkeypatch):
+    """Palace with matching dim + matching identity → __init__ + get_collection do not raise."""
+    palace_path = tmp_path / "palace"
+
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="BAAI/bge-m3",
+        dim=1024,
+        identity="bge-m3",
+    )
+
+    # Re-open with same defaults
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    cfg = CognitiveCastleConfig()
+    backend = LanceDBBackend(cfg=cfg)
+    collection = backend.get_collection(
+        palace=_make_palace_ref(palace_path),
+        collection_name="castle_drawers",
+        create=False,
+    )
+    assert collection is not None
+    backend.close()
+
+
+def test_identity_mismatch_raises_when_dim_matches(tmp_path, monkeypatch):
+    """Palace dim=1024 + identity 'bge-large-en-v1.5', cfg wants 'bge-m3' → raises."""
+    palace_path = tmp_path / "palace"
+
+    # Build a 1024-dim palace stamped with bge-large-en-v1.5
+    _build_palace_with_identity(
+        palace_path,
+        monkeypatch,
+        model="BAAI/bge-large-en-v1.5",
+        dim=1024,
+        identity="bge-large-en-v1.5",
+    )
+
+    # Switch cfg to bge-m3 defaults (same dim, different identity)
+    monkeypatch.delenv("CASTLE_EMBEDDER_MODEL", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_DIM", raising=False)
+    monkeypatch.delenv("CASTLE_EMBEDDER_IDENTITY", raising=False)
+
+    cfg = CognitiveCastleConfig()
+    backend = LanceDBBackend(cfg=cfg)
+    with pytest.raises(EmbedderIdentityMismatchError) as exc_info:
+        backend.get_collection(
+            palace=_make_palace_ref(palace_path),
+            collection_name="castle_drawers",
+            create=False,
+        )
+    msg = str(exc_info.value)
+    assert "bge-large-en-v1.5" in msg
+    assert "bge-m3" in msg
+    assert "CASTLE_EMBEDDER_MODEL" in msg
+    backend.close()
