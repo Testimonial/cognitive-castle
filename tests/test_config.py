@@ -373,3 +373,29 @@ def test_llm_timeout_env_override(monkeypatch):
     monkeypatch.setenv("CASTLE_LLM_TIMEOUT", "60")
     cfg = _make_config_with_file_config({})
     assert cfg.llm_timeout == 60
+
+
+def test_soar_enabled_default_is_false():
+    cfg = _make_config_with_file_config({})
+    assert cfg.soar_enabled is False
+
+
+def test_soar_enabled_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    cfg = _make_config_with_file_config({})
+    assert cfg.soar_enabled is True
+
+
+def test_soar_rules_path_default_points_at_package():
+    cfg = _make_config_with_file_config({})
+    # Default should be <package>/rules/castle-boost.soar
+    assert cfg.soar_rules_path.endswith("rules/castle-boost.soar")
+    assert "cognitive_castle" in cfg.soar_rules_path
+
+
+def test_soar_rules_path_env_override(monkeypatch, tmp_path):
+    custom = tmp_path / "my-rules.soar"
+    custom.write_text("# placeholder")
+    monkeypatch.setenv("CASTLE_SOAR_RULES_PATH", str(custom))
+    cfg = _make_config_with_file_config({})
+    assert cfg.soar_rules_path == str(custom)

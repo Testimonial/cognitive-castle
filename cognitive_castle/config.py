@@ -535,6 +535,43 @@ class CognitiveCastleConfig:
         return max(1, parsed)
 
     @property
+    def soar_enabled(self):
+        """Kill switch for SOAR post-pipeline boost-tags (PR #4a).
+
+        Default: ``False``. Must be explicitly set to a truthy value
+        (``"1"`` / ``"true"`` / ``"yes"`` case-insensitive) to enable.
+        When False, `--soar-boost` CLI flag triggers a loud kill-switch
+        error rather than silent no-op.
+
+        Reads from ``CASTLE_SOAR_ENABLED`` env var first, then config file,
+        then default.
+        """
+        env_val = os.environ.get("CASTLE_SOAR_ENABLED")
+        if env_val is not None:
+            return env_val.strip().lower() in ("1", "true", "yes")
+        cfg_val = self._file_config.get("soar_enabled", False)
+        return bool(cfg_val)
+
+    @property
+    def soar_rules_path(self):
+        """Path to the Soar production rule file for #4a's boost-tag layer.
+
+        Default: ``<package>/rules/castle-boost.soar`` (shipped with Castle).
+        Override to point at a custom rule file via env or castle.yaml.
+
+        Reads from ``CASTLE_SOAR_RULES_PATH`` env var first, then config file,
+        then default.
+        """
+        env_val = os.environ.get("CASTLE_SOAR_RULES_PATH")
+        if env_val:
+            return env_val.strip()
+        cfg_val = self._file_config.get("soar_rules_path")
+        if cfg_val:
+            return str(cfg_val).strip()
+        # Default: package-relative path to rules/castle-boost.soar
+        return str(Path(__file__).parent / "rules" / "castle-boost.soar")
+
+    @property
     def k_rrf(self):
         """Number of results to fuse in Reciprocal Rank Fusion.
 
