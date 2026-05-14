@@ -35,7 +35,7 @@ Before this design was finalized, a 100-drawer random sample from the user's 55,
 ```
 n=100 (random sample, seed=42)
 errors=0
-latency=38ms/drawer avg (~760ms per 20-candidate query — matches budget)
+latency=38ms/drawer avg (~760ms per 20-candidate query)
 
 Score distribution (overall_weighted_average):
   min=0.194  max=0.756
@@ -116,7 +116,7 @@ Stage 3 (cross-encoder rerank)
 
 - **Append-only audit** — never modifies prior-stage outputs; only adds `quality_*` fields to hit dict
 - **Deterministic** — same input → same output (no RNG, no concurrent state, threshold defaults from a fixed calibration moment)
-- **Local-only** — spaCy + its model are local; no LLM call, no network
+- **Local-only** — spaCy and its `en_core_web_sm` model are local files; no LLM call, no network at runtime
 - **Composable** — runs after Stages 4 and 5 by default; multipliers compound multiplicatively
 - **Idempotent display** — printing the audit line is a function of hit fields, not pipeline state
 - **Graceful degradation** — if `understanding` import fails or per-hit calls raise, the affected hits get default fields (`quality_score=None, quality_tier=None, quality_boost=1.0, score_pre_quality=score`), warning logged once
@@ -200,7 +200,7 @@ searcher.py
 
 ### Concurrent-run safety
 
-Stage 6 is pure read/transform per-process. spaCy's `nlp` model is module-local; Castle's single-process / single-threaded-asyncio architecture doesn't trigger concurrent calls into Stage 6 from one process. Multi-process safety: each process loads its own spaCy model independently.
+Stage 6 is pure read/transform per-process. spaCy's `nlp` model is module-local. Castle's CLI is truly single-threaded (one query per process); Castle's MCP server is single-threaded asyncio with coroutines but no parallel CPU work. Neither path triggers concurrent calls into Stage 6 from one process. Multi-process safety: each process loads its own spaCy model independently.
 
 Not threadsafe-claimed; not tested for thread safety.
 
@@ -266,7 +266,7 @@ tests/test_pipeline_order.py          (EXISTING — append + adapt)
 ├── test_quality_skipped_when_flag_off
 ├── test_default_order_judge_then_soar_then_quality
 ├── test_quality_alone_no_judge_no_soar
-└── test_all_three_optional_stages_compound_correctly
+└── test_judge_soar_quality_compound_in_default_order
 
 tests/test_searcher.py                (EXISTING — append)
 ├── search_memories return dict has quality_* fields when quality_rerank=True
@@ -309,8 +309,6 @@ tests/test_config.py                  (EXISTING — append)
 3. **Stage 6 underperforms on chat-data despite calibration showing variance** — the metrics discriminate (stdev 0.113) but it's not proven that high-scoring drawers are USEFULLY high-scoring (i.e., more relevant). Acceptable risk because: (a) Stage 6 is opt-in, (b) audit trail surfaces what's being boosted so user can inspect quality, (c) thresholds are configurable for easy adjustment
 4. **CLI cold-load tax** — every CLI invocation pays +381ms for spaCy. Not a blocker (CLI usage is rare per the user's actual workflow); MCP-mode amortizes the cost
 5. **`understanding` package upgrades** — vendored copy is a snapshot. Future upgrades to the upstream `echelon` package require manual sync. The `VENDORED` docstring records the source version
-
-(Calibration-drift handling is covered in Acceptance criteria's "Pre-merge re-calibration" item; not duplicated here.)
 
 ## Out of scope
 
