@@ -778,6 +778,112 @@ class CognitiveCastleConfig:
         return max(1, parsed)
 
     @property
+    def quality_enabled(self) -> bool:
+        """Kill-switch for Stage 6 (deterministic quality rerank). Default False.
+
+        Reads from ``CASTLE_QUALITY_ENABLED`` env var first, then config file,
+        then default. Any truthy env value (``1``, ``true``, ``yes`` —
+        case-insensitive) enables; anything else disables.
+        """
+        env_val = os.environ.get("CASTLE_QUALITY_ENABLED")
+        if env_val is not None:
+            return env_val.strip().lower() in ("1", "true", "yes")
+        cfg_val = self._file_config.get("quality_enabled")
+        if cfg_val is not None:
+            return bool(cfg_val)
+        return False
+
+    @property
+    def quality_threshold_medium(self) -> float:
+        """Lower threshold for Stage 6's two-tier boost. Default: ``0.53``.
+
+        Calibrated from a 100-drawer random sample on the user's palace at
+        ~/.castle/palace on 2026-05-14 (p75).
+
+        Reads from ``CASTLE_QUALITY_THRESHOLD_MEDIUM`` env var first, then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_QUALITY_THRESHOLD_MEDIUM")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("quality_threshold_medium")
+        if cfg_val is not None:
+            try:
+                return float(cfg_val)
+            except (ValueError, TypeError):
+                pass
+        return 0.53
+
+    @property
+    def quality_threshold_high(self) -> float:
+        """Upper threshold for Stage 6's two-tier boost. Default: ``0.60``.
+
+        Calibrated from a 100-drawer random sample on the user's palace at
+        ~/.castle/palace on 2026-05-14 (p90).
+
+        Reads from ``CASTLE_QUALITY_THRESHOLD_HIGH`` env var first, then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_QUALITY_THRESHOLD_HIGH")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("quality_threshold_high")
+        if cfg_val is not None:
+            try:
+                return float(cfg_val)
+            except (ValueError, TypeError):
+                pass
+        return 0.60
+
+    @property
+    def quality_boost_medium(self) -> float:
+        """Score multiplier applied to medium-tier hits in Stage 6. Default: ``1.15``.
+
+        Reads from ``CASTLE_QUALITY_BOOST_MEDIUM`` env var first, then config
+        file, then default.
+        """
+        env_val = os.environ.get("CASTLE_QUALITY_BOOST_MEDIUM")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("quality_boost_medium")
+        if cfg_val is not None:
+            try:
+                return float(cfg_val)
+            except (ValueError, TypeError):
+                pass
+        return 1.15
+
+    @property
+    def quality_boost_high(self) -> float:
+        """Score multiplier applied to high-tier hits in Stage 6. Default: ``1.25``.
+
+        Reads from ``CASTLE_QUALITY_BOOST_HIGH`` env var first, then config
+        file, then default.
+        """
+        env_val = os.environ.get("CASTLE_QUALITY_BOOST_HIGH")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("quality_boost_high")
+        if cfg_val is not None:
+            try:
+                return float(cfg_val)
+            except (ValueError, TypeError):
+                pass
+        return 1.25
+
+    @property
     def use_new_retrieval_pipeline(self):
         """Whether to use the new 3-stage retrieval pipeline.
 
