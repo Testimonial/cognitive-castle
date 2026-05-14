@@ -1030,8 +1030,7 @@ def mine(
             )
     except MineAlreadyRunning:
         print(
-            f"castle: another `mine` is already running against "
-            f"{palace_path} — exiting cleanly.",
+            f"castle: another `mine` is already running against {palace_path} — exiting cleanly.",
             file=sys.stderr,
         )
         return
@@ -1078,7 +1077,9 @@ def _mine_impl(
     if not respect_gitignore:
         print("  .gitignore: DISABLED", flush=True)
     if include_ignored:
-        print(f"  Include: {', '.join(sorted(normalize_include_paths(include_ignored)))}", flush=True)
+        print(
+            f"  Include: {', '.join(sorted(normalize_include_paths(include_ignored)))}", flush=True
+        )
     print(f"{'-' * 55}\n", flush=True)
 
     if not dry_run:
@@ -1116,12 +1117,16 @@ def _mine_impl(
             last_file = filepath.name
             if drawers == 0 and not dry_run:
                 files_skipped += 1
-                print(f"  . [{i:4}/{len(files)}] {filepath.name[:50]:50} (already filed)", flush=True)
+                print(
+                    f"  . [{i:4}/{len(files)}] {filepath.name[:50]:50} (already filed)", flush=True
+                )
             else:
                 total_drawers += drawers
                 room_counts[room] += 1
                 if not dry_run:
-                    print(f"  + [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}", flush=True)
+                    print(
+                        f"  + [{i:4}/{len(files)}] {filepath.name[:50]:50} +{drawers}", flush=True
+                    )
 
         if not dry_run:
             # Cross-wing topic tunnels: after every file in this wing has been
@@ -1149,6 +1154,25 @@ def _mine_impl(
             print(f"    {room:20} {count} files")
         print('\n  Next: castle search "what you\'re looking for"')
         print(f"{'=' * 55}\n")
+
+        # ── Phase 2: KG enrichment (lazy import, never re-raises) ────────
+        try:
+            from . import kg_enricher
+            from .config import CognitiveCastleConfig
+
+            _cfg = CognitiveCastleConfig()
+            _result = kg_enricher.enrich_palace(palace_path, _cfg)
+            print(
+                f"KG enrichment: scanned {_result['drawers_scanned']} drawers, "
+                f"promoted {_result['entities_promoted']}, "
+                f"wrote {_result['triples_written']} triples "
+                f"in {_result['elapsed_s']}s"
+            )
+        except Exception as _kg_err:
+            print(
+                f"KG enrichment FAILED ({type(_kg_err).__name__}: {_kg_err}) — "
+                f"palace unaffected; rerun mine to retry"
+            )
     except KeyboardInterrupt:
         # Idempotent re-mine: deterministic drawer IDs mean already-filed
         # drawers upsert to the same row on next run, so partial progress

@@ -829,3 +829,61 @@ def test_progress_mixed_filed_and_skipped(tmp_path, capsys):
     assert "  + [" in out, "Expected '+' lines for filed files"
     assert "  . [" in out, "Expected '.' lines for skipped files"
     assert "already filed" in out
+
+
+# ---------------------------------------------------------------------------
+# KG enrichment hook tests
+# ---------------------------------------------------------------------------
+
+
+def test_mine_invokes_enrich_palace(tmp_path, monkeypatch):
+    """mine() calls kg_enricher.enrich_palace after the main loop."""
+    called = {"n": 0}
+
+    def stub_enrich(palace_path, cfg):
+        called["n"] += 1
+        return {
+            "drawers_scanned": 0,
+            "entities_promoted": 0,
+            "triples_written": 0,
+            "elapsed_s": 0.01,
+        }
+
+    monkeypatch.setattr("cognitive_castle.kg_enricher.enrich_palace", stub_enrich)
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    palace = tmp_path / "palace"
+    with open(project / "castle.yaml", "w") as f:
+        import yaml
+
+        yaml.dump({"wing": "test"}, f)
+
+    mine(str(project), str(palace))
+
+    assert called["n"] == 1
+
+
+def test_mine_continues_when_enrich_palace_raises(tmp_path, monkeypatch, capsys):
+    """A failure inside enrich_palace must not break mine() — caller warns
+    and continues."""
+
+    def stub_enrich(palace_path, cfg):
+        raise RuntimeError("simulated enrich failure")
+
+    monkeypatch.setattr("cognitive_castle.kg_enricher.enrich_palace", stub_enrich)
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    palace = tmp_path / "palace"
+    with open(project / "castle.yaml", "w") as f:
+        import yaml
+
+        yaml.dump({"wing": "test"}, f)
+
+    # Should NOT raise
+    mine(str(project), str(palace))
+
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "KG enrichment FAILED" in output

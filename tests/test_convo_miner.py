@@ -136,9 +136,9 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         # Second mine — version gate should trigger rebuild
         mine_convos(tmpdir, palace_path, wing="test")
         out = capsys.readouterr().out
-        assert (
-            "Files skipped (already filed): 0" in out
-        ), "stale drawers should force a rebuild, not a skip"
+        assert "Files skipped (already filed): 0" in out, (
+            "stale drawers should force a rebuild, not a skip"
+        )
 
         col = get_collection(palace_path)
         rebuilt = col.get(where={"source_file": resolved})
@@ -153,3 +153,53 @@ def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
         del col
     finally:
         shutil.rmtree(tmpdir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# KG enrichment hook tests
+# ---------------------------------------------------------------------------
+
+
+def test_mine_convos_invokes_enrich_palace(tmp_path, monkeypatch):
+    """mine_convos() calls kg_enricher.enrich_palace after the main loop."""
+    called = {"n": 0}
+
+    def stub_enrich(palace_path, cfg):
+        called["n"] += 1
+        return {
+            "drawers_scanned": 0,
+            "entities_promoted": 0,
+            "triples_written": 0,
+            "elapsed_s": 0.01,
+        }
+
+    monkeypatch.setattr("cognitive_castle.kg_enricher.enrich_palace", stub_enrich)
+
+    convos = tmp_path / "convos"
+    convos.mkdir()
+    palace = tmp_path / "palace"
+
+    mine_convos(str(convos), str(palace))
+
+    assert called["n"] == 1
+
+
+def test_mine_convos_continues_when_enrich_palace_raises(tmp_path, monkeypatch, capsys):
+    """A failure inside enrich_palace must not break mine_convos() — caller warns
+    and continues."""
+
+    def stub_enrich(palace_path, cfg):
+        raise RuntimeError("simulated enrich failure")
+
+    monkeypatch.setattr("cognitive_castle.kg_enricher.enrich_palace", stub_enrich)
+
+    convos = tmp_path / "convos"
+    convos.mkdir()
+    palace = tmp_path / "palace"
+
+    # Should NOT raise
+    mine_convos(str(convos), str(palace))
+
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "KG enrichment FAILED" in output

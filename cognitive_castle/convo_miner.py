@@ -507,6 +507,25 @@ def mine_convos(
     print('\n  Next: castle search "what you\'re looking for"')
     print(f"{'=' * 55}\n")
 
+    # ── Phase 2: KG enrichment (lazy import, never re-raises) ────────
+    try:
+        from . import kg_enricher
+        from .config import CognitiveCastleConfig
+
+        _cfg = CognitiveCastleConfig()
+        _result = kg_enricher.enrich_palace(palace_path, _cfg)
+        print(
+            f"KG enrichment: scanned {_result['drawers_scanned']} drawers, "
+            f"promoted {_result['entities_promoted']}, "
+            f"wrote {_result['triples_written']} triples "
+            f"in {_result['elapsed_s']}s"
+        )
+    except Exception as _kg_err:
+        print(
+            f"KG enrichment FAILED ({type(_kg_err).__name__}: {_kg_err}) — "
+            f"palace unaffected; rerun mine to retry"
+        )
+
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
