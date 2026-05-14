@@ -113,7 +113,7 @@ FAILED tests/test_retrieval_pipeline.py::test_pipeline_returns_results_when_flag
 
 **Production code changes:** None expected. If investigation reveals stub functions that exist solely to satisfy these tests, those can also be removed in the same PR.
 
-**Acceptance:** All 6 failures resolved (whether by deletion or update). `grep -rn "closet_boost\|TestSearchMemoriesHybrid" cognitive_castle/` shows no orphaned references.
+**Acceptance:** All 6 failures resolved (whether by deletion or update). `grep -rn "closet_boost\|TestSearchMemoriesHybrid" cognitive_castle/ tests/` shows no orphaned references — covers BOTH production code (dead stubs to clean up) AND any test helpers in `tests/` that referenced the deleted test classes.
 
 ## Cluster D — README/CLAUDE.md doc-parser drift (2 failures)
 
@@ -135,15 +135,17 @@ FAILED tests/test_retrieval_pipeline.py::test_pipeline_returns_results_when_flag
 
 These need individual investigation rather than a single recipe.
 
-**E.1 `test_config.py::test_config_from_file`** — Passes in isolation, fails in full suite. This is a **test-isolation bug**, not a stale-test issue. Some prior test pollutes shared state (likely an environment variable or a singleton cfg cache). Approach: identify the polluting test (use `pytest --collect-only` ordering + bisect with `-k`), isolate the polluted state, fix the leak in a test fixture (or `monkeypatch` the variable so it's reset between tests). **Time-box: 90 minutes.** If diagnosis exceeds that, defer Cluster E entirely — ship 4 PRs (A, B, C, D) and leave E for a separate spec.
+**E.1 `test_config.py::test_config_from_file`** — Passes in isolation, fails in full suite. **Root cause already diagnosed during spec review:** `tests/test_cli.py::test_cmd_init_with_palace_arg` (~line 266) invokes `cmd_init(args)`, which internally sets `os.environ["CASTLE_PALACE_PATH"] = <palace>`. The test asserts the env var was set but never cleans it up. When `test_config.py::test_config_from_file` runs later (alphabetical order: cli < config), the lingering env var overrides the file_config's `palace_path`. **Fix:** add `monkeypatch.delenv("CASTLE_PALACE_PATH", raising=False)` to the offending test's setup, OR wrap its body to clean up after asserting. Trivial — ~3 lines.
 
-**E.2 `test_embedding.py::test_get_model_falls_back_to_cpu_on_cuda_oom`** — Test mocks CUDA OOM and asserts the returned model entries. Assertion expects `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, actual is `BAAI/bge-m3`. The default cutover (PR #26) changed the model; test wasn't updated. Approach: update the assertion to expect the current default. If the test parameterizes over both models, that's even cleaner.
+**E.2 `test_embedding.py::test_get_model_falls_back_to_cpu_on_cuda_oom`** — Test mocks CUDA OOM and asserts the returned model entries. Assertion expects `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`, actual is `BAAI/bge-m3`. The default cutover (PR #26) changed the model; test wasn't updated.
+
+**Approach (intent-preserving):** The test's intent is to verify CUDA-OOM triggers CPU fallback correctly. Updating the model-name assertion alone isn't enough — confirm that the OOM-fallback code path still works with bge-m3 as the default (the failure path may have model-specific assumptions that broke during the cutover). If the fallback is healthy, update the assertion. If it isn't, the test is revealing a real production bug — fix it under the production-bug policy above. Do not rubber-stamp the assertion without verifying the fallback behavior.
 
 **E.3 `test_known_entities_registry.py::test_populated_registry_improves_miner_recall`** — Test asserts `'cognitive-castle' in extracted_entities` but the entity_detector returned `{'Julia Grib', 'Kevin Heifner', 'hyperion-history'}`. Either the test fixture's source text changed, or the entity_detector's recall changed. Approach: read the test, the fixture, and entity_detector behavior. Likely a fixture issue — the source text probably needs to actually contain "cognitive-castle" enough times (3+ per the discovery from KG enrichment work).
 
 **E.4 `test_retrieval_pipeline.py::test_pipeline_returns_results_when_flag_enabled`** — Tests the `CASTLE_USE_NEW_RETRIEVAL_PIPELINE` env-var feature flag. **Verified: the flag is dead.** `cognitive_castle/searcher.py` unconditionally calls `_new_pipeline_search` (line 279); no code reads the env var. The file `test_retrieval_pipeline.py` contains **two tests** — the failing one plus `test_pipeline_disabled_falls_back_to_old_path` (currently passing by happenstance because both branches now run the same code path). Approach: **delete both tests**. If the file becomes empty after deletion, delete the file too.
 
-**Acceptance:** E.1, E.2, E.3 pass with updated tests; E.4 is deleted along with its passing partner. (If E.1 hits the 90-minute time-box, entire cluster E is deferred to a separate spec.)
+**Acceptance:** E.1, E.2, E.3 pass with updated tests; E.4 is deleted along with its passing partner.
 
 ## Implementation order
 
@@ -152,7 +154,7 @@ These need individual investigation rather than a single recipe.
 1. **B** (hooks console-script) — 30 min, 2 tests, smallest. Builds momentum.
 2. **A** (rename) — 1 hr, 4 tests, mechanical. Continued momentum.
 3. **D** (doc-parser) — 30 min, 2 tests. One small decision (doc vs parser).
-4. **E** (misc) — 2-3 hr, 4 tests. Each one's own diagnosis. Time-boxed (see Cluster E).
+4. **E** (misc) — 2-3 hr, 4 tests. Each one's own diagnosis. E.1 root cause already diagnosed (env var leak); other three need investigation per their sub-sections.
 5. **C** (closets) — 2-4 hr, 6 tests. Most investigation, possibly the biggest deletions.
 
 Total estimated effort: ~6-9 hours of focused work across 5 PRs. Each PR ~5 min reviewer time.
@@ -171,7 +173,15 @@ python -m pytest tests/ --ignore=tests/benchmarks -q  # verify failure count dec
 ruff format <touched-files>
 ruff check <touched-files>
 git add <touched-files>
-git commit -m "test(<area>): <description>"  # or "fix(<area>): ..." if production code touched
+git commit -m "$(cat <<'EOF'
+test(<area>): <description>
+
+<optional body>
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+EOF
+)"
+# or fix(<area>): ... if production code touched per the production-bug policy
 git push -u origin fix/<cluster-name>
 gh pr create --title "..." --body "..."
 gh pr merge <PR#> --merge --delete-branch
@@ -179,12 +189,14 @@ git checkout develop
 git pull --ff-only
 ```
 
+The `Co-Authored-By` line is the Castle convention — present on every commit in this repo's history.
+
 Each PR's body should include the before/after failure counts (e.g., "18 → 16" for cluster B) so the cumulative cleanup is visible from PR history.
 
 ## Risk register
 
 1. **Cluster C investigation may surface a feature decision** — if the closets-based hybrid search has constituents who want it back, the spec's "delete the tests" default flips. Investigation step in Cluster C addresses this
-2. **Cluster E.1 (test isolation) may be hard to diagnose** — 90-minute time-box; if exceeded, defer entire Cluster E to a separate spec (4 PRs ship, 1 deferred; still strictly no `xfail`)
+2. **Cluster E.1 (test isolation)** — root cause diagnosed during spec review (env var leak from `test_cli.py::test_cmd_init_with_palace_arg`). Trivial ~3-line fix. No longer a risk.
 3. **Production bugs found during cleanup** — handled by the uniform policy above ("fix in same PR with separate commit; flag in PR body")
 4. **README/docs may have a third source of truth** — `test_readme_claims` may parse `website/reference/mcp-tools.md` while CLAUDE.md and the actual README differ. Investigation step should confirm which source of truth the test expects
 5. **Cluster B test renaming bleeds into other test files** — grep is now explicitly in the cluster's approach; risk mitigated
@@ -200,8 +212,8 @@ Each PR's body should include the before/after failure counts (e.g., "18 → 16"
 
 ## Acceptance criteria
 
-- `python -m pytest tests/ --ignore=tests/benchmarks -q` returns `0 failed` (or `14 failed` if Cluster E was deferred per E.1 time-box)
-- All 5 PRs (or 4, if E deferred) merged to `develop` and feature branches deleted
+- `python -m pytest tests/ --ignore=tests/benchmarks -q` returns `0 failed`
+- All 5 PRs merged to `develop` and feature branches deleted
 - No `@pytest.mark.skip`, `@pytest.mark.xfail`, or similar markers were added during this work
 - Historical spec/plan docs that mention "18 pre-existing failures" are LEFT AS-IS (they reflect a true state at the time of writing; updating post-hoc would be revisionist)
 
