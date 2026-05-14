@@ -692,6 +692,53 @@ class CognitiveCastleConfig:
             return 1.5
 
     @property
+    def entity_promote_threshold(self) -> float:
+        """Confidence threshold above which auto-detected entities are added
+        to the registry by the KG enricher. Default 0.70.
+
+        Reads from ``CASTLE_ENTITY_PROMOTE_THRESHOLD`` env var first, then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_ENTITY_PROMOTE_THRESHOLD")
+        if env_val:
+            return float(env_val.strip())
+        cfg_val = self._file_config.get("entity_promote_threshold")
+        if cfg_val is not None:
+            return float(cfg_val)
+        return 0.70
+
+    @property
+    def entity_score_sample_drawers(self) -> int:
+        """Per-candidate drawer-sample size for Stage B scoring. Default 20.
+
+        Reads from ``CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS`` env var first, then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS")
+        if env_val:
+            return int(env_val.strip())
+        cfg_val = self._file_config.get("entity_score_sample_drawers")
+        if cfg_val is not None:
+            return int(cfg_val)
+        return 20
+
+    @property
+    def entity_fetch_batch_size(self) -> int:
+        """LanceDB bulk-fetch batch size for Stage B's text_by_id build.
+        Default 1000.
+
+        Reads from ``CASTLE_ENTITY_FETCH_BATCH_SIZE`` env var first, then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_ENTITY_FETCH_BATCH_SIZE")
+        if env_val:
+            return int(env_val.strip())
+        cfg_val = self._file_config.get("entity_fetch_batch_size")
+        if cfg_val is not None:
+            return int(cfg_val)
+        return 1000
+
+    @property
     def kg_hop_top_n(self):
         """Number of top results to expand via KG hops.
 
