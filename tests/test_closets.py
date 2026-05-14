@@ -13,9 +13,7 @@ Coverage map:
   * Project-miner end-to-end rebuild — re-mining with fewer topics fully
     purges leftover numbered closets from a larger prior run.
   * _extract_drawer_ids_from_closet — pointer parsing + dedup.
-  * search_memories hybrid path — drawer query always the floor,
-    closets boost matching source_file, matched_via reflects both signals,
-    no whole-file glue, max_distance enforcement.
+  * _expand_with_neighbors — drawer-grep context enrichment with neighbor chunks.
   * Entity metadata — extracted, stoplist applied, registry cached by mtime.
   * Real BM25 — real IDF over candidate corpus, hybrid rerank.
   * Diary ingest — drawers + closets created, incremental skips, state
@@ -55,7 +53,6 @@ from cognitive_castle.palace_graph import (
 from cognitive_castle.searcher import (
     _expand_with_neighbors,
     _extract_drawer_ids_from_closet,
-    search_memories,
 )
 
 
@@ -341,59 +338,6 @@ class TestExtractDrawerIds:
     def test_empty_doc_returns_empty(self):
         assert _extract_drawer_ids_from_closet("") == []
         assert _extract_drawer_ids_from_closet("no arrows here") == []
-
-
-# ── search_memories closet-first path ────────────────────────────────
-
-
-class TestSearchMemoriesHybrid:
-    def test_pure_drawer_when_no_closets(self, palace_path, seeded_collection):
-        """Palaces without closets return results via direct drawer search —
-        every hit must advertise that the closet signal was absent."""
-        result = search_memories("JWT authentication", palace_path)
-        assert result["results"], "should still find drawer hits"
-        for hit in result["results"]:
-            assert hit.get("matched_via") == "drawer"
-            assert hit.get("closet_boost") == 0.0
-            assert "closet_preview" not in hit
-
-    def test_closet_boost_marks_hit_as_drawer_plus_closet(self, palace_path, seeded_collection):
-        """When a closet agrees with direct search on source_file, the
-        matching drawer's ``matched_via`` switches to ``drawer+closet`` and
-        ``closet_preview`` exposes the hydrated index line."""
-        closets = get_closets_collection(palace_path)
-        # Seed the closet against the same source_file the drawer uses so
-        # the boost lookup keys align.
-        closets.upsert(
-            ids=["closet_proj_backend_aaa_01"],
-            documents=["JWT auth tokens|;|→drawer_proj_backend_aaa"],
-            metadatas=[{"wing": "project", "room": "backend", "source_file": "auth.py"}],
-        )
-
-        result = search_memories("JWT authentication", palace_path)
-        assert result["results"], "hybrid search should still return results"
-        # The JWT-bearing drawer should surface with closet agreement.
-        boosted = [h for h in result["results"] if h["matched_via"] == "drawer+closet"]
-        assert boosted, "closet agreement should promote the matching source"
-        top = boosted[0]
-        assert "JWT" in top["text"]
-        assert top["closet_boost"] > 0
-        assert "→drawer_proj_backend_aaa" in top["closet_preview"]
-
-    def test_max_distance_filters_hybrid_hits(self, palace_path, seeded_collection):
-        closets = get_closets_collection(palace_path)
-        closets.upsert(
-            ids=["closet_proj_backend_aaa_01"],
-            documents=["JWT auth tokens|;|→drawer_proj_backend_aaa"],
-            metadatas=[{"wing": "project", "room": "backend", "source_file": "auth.py"}],
-        )
-        result = search_memories(
-            "completely unrelated query about quantum gardening",
-            palace_path,
-            max_distance=0.001,
-        )
-        for hit in result["results"]:
-            assert hit["distance"] <= 0.001
 
 
 # ── entity metadata ──────────────────────────────────────────────────
@@ -866,45 +810,3 @@ class TestDrawerGrepExpansion:
         assert out["text"] == "matched doc"
         assert out["drawer_index"] is None
         assert out["total_drawers"] is None
-
-    def test_hybrid_search_enrichment_populates_drawer_index_and_total(self, palace_path):
-        """End-to-end: when a closet boosts a source with many drawers, the
-        enrichment step runs drawer-grep across all chunks of that source
-        and exposes drawer_index + total_drawers on the hit (so the client
-        knows which chunk was expanded around)."""
-        col = get_collection(palace_path)
-        source = "/proj/indexed.md"
-        # Seed 5 drawers for one source file.
-        for i in range(5):
-            col.upsert(
-                ids=[f"drawer_proj_backend_indexed_{i:03d}"],
-                documents=[f"chunk_{i} talks about JWT authentication flow"],
-                metadatas=[
-                    {
-                        "wing": "project",
-                        "room": "backend",
-                        "source_file": source,
-                        "chunk_index": i,
-                        "filed_at": "2026-04-13T00:00:00",
-                    }
-                ],
-            )
-        # Closet pointing at chunk_2 for this source.
-        closets = get_closets_collection(palace_path)
-        closets.upsert(
-            ids=["closet_proj_backend_indexed_01"],
-            documents=["JWT auth|;|→drawer_proj_backend_indexed_002"],
-            metadatas=[{"wing": "project", "room": "backend", "source_file": source}],
-        )
-
-        result = search_memories("JWT authentication", palace_path)
-        assert result["results"]
-        # The hybrid path promotes the closet-agreeing source to drawer+closet.
-        boosted = [h for h in result["results"] if h["matched_via"] == "drawer+closet"]
-        assert boosted, "hybrid search should mark the closet-agreeing source"
-        top = boosted[0]
-        assert top["total_drawers"] == 5
-        assert isinstance(top["drawer_index"], int)
-        # Enriched text must include the grep-best chunk plus one neighbor
-        # on each side (chunk boundary may clip).
-        assert "chunk_" in top["text"]
