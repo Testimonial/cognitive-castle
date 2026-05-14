@@ -77,7 +77,7 @@ If the user's palace changes shape materially, the calibration script (`scripts/
 - **No per-drawer index-time annotation** (Option 2 from brainstorming) — only query-time scoring
 - **No threshold auto-calibration** — calibration is a one-time investigation; thresholds are tunable knobs in config but don't auto-update
 - **No multi-language support** — `understanding` is English-only via spaCy `en_core_web_sm`. Non-English drawers may score low; this is acknowledged, not addressed in this PR
-- **No surfacing of individual metric categories** — only the aggregate `overall_weighted_average` is consumed. The 7-category breakdown is internal to `understanding`
+- **No surfacing of individual metric categories** — only the aggregate `overall_weighted_average` is consumed. The 6-category breakdown is internal to `understanding`
 
 ## Architecture & data flow
 
