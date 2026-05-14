@@ -31,9 +31,9 @@ from typing import Optional
 
 @dataclass(frozen=True)
 class EntityMatch:
-    entity_id: str       # canonical entity name (e.g., "Alice", "cognitive-castle")
-    matched_token: str   # the substring from query that matched (in original case)
-    edit_distance: int   # 0 for exact, >0 for fuzzy
+    entity_id: str  # canonical entity name (e.g., "Alice", "cognitive-castle")
+    matched_token: str  # the substring from query that matched (in original case)
+    edit_distance: int  # 0 for exact, >0 for fuzzy
 
 
 def _levenshtein(a: str, b: str) -> int:
@@ -438,6 +438,42 @@ class EntityRegistry:
 
         self.save()
 
+    def add_learned(self, name: str, type: str, confidence: float) -> None:
+        """Add an auto-detected entity to the registry.
+
+        Idempotent: if ``name`` is already present (regardless of source),
+        this is a no-op — onboarding-sourced entries are not overwritten.
+
+        Caller is responsible for calling ``self.save()`` afterwards.
+        The KG enricher batches saves at end of Stage B.
+
+        Args:
+            name: Entity name.
+            type: "person" or "project". Concepts are not auto-promoted
+                from drawer text by the enricher.
+            confidence: Classifier confidence in [0, 1].
+
+        Raises:
+            ValueError: if ``type`` is not "person" or "project".
+        """
+        if type not in ("person", "project"):
+            raise ValueError(f"type must be 'person' or 'project', got {type!r}")
+
+        if type == "person":
+            if name in self._data["people"]:
+                return  # idempotent — preserve existing entry
+            self._data["people"][name] = {
+                "source": "learned",
+                "contexts": ["personal"],
+                "aliases": [],
+                "relationship": "",
+                "confidence": float(confidence),
+            }
+        else:  # project
+            if name in self._data["projects"]:
+                return  # idempotent
+            self._data["projects"].append(name)
+
     # ── Lookup ───────────────────────────────────────────────────────────────
 
     def lookup(self, word: str, context: str = "") -> dict:
@@ -623,7 +659,11 @@ class EntityRegistry:
         configured ``CognitiveCastleConfig().entity_languages`` to match the
         locales used at ``castle init`` time.
         """
-        from cognitive_castle.entity_detector import extract_candidates, score_entity, classify_entity
+        from cognitive_castle.entity_detector import (
+            extract_candidates,
+            score_entity,
+            classify_entity,
+        )
 
         lines = text.splitlines()
         candidates = extract_candidates(text, languages=languages)

@@ -371,3 +371,71 @@ def test_summary(tmp_path):
     assert "personal" in s
     assert "Riley" in s
     assert "MemPalace" in s
+
+
+# ── add_learned ─────────────────────────────────────────────────────────
+
+
+def test_add_learned_person_new_entity(tmp_path):
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry.add_learned("Riley", type="person", confidence=0.85)
+
+    assert "Riley" in registry._data["people"]
+    entry = registry._data["people"]["Riley"]
+    assert entry["source"] == "learned"
+    assert entry["confidence"] == 0.85
+
+
+def test_add_learned_project_new_entity(tmp_path):
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry.add_learned("bge-m3", type="project", confidence=0.90)
+
+    assert "bge-m3" in registry._data["projects"]
+
+
+def test_add_learned_idempotent_when_person_already_present(tmp_path):
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry._data["people"]["Riley"] = {
+        "source": "onboarding",
+        "contexts": ["personal"],
+        "aliases": [],
+        "relationship": "child",
+        "confidence": 1.0,
+    }
+
+    registry.add_learned("Riley", type="person", confidence=0.70)
+
+    # Onboarding entry preserved — not overwritten
+    assert registry._data["people"]["Riley"]["source"] == "onboarding"
+    assert registry._data["people"]["Riley"]["confidence"] == 1.0
+
+
+def test_add_learned_idempotent_when_project_already_present(tmp_path):
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry._data["projects"].append("bge-m3")
+
+    registry.add_learned("bge-m3", type="project", confidence=0.50)
+
+    # Still just one entry — no duplicate
+    assert registry._data["projects"].count("bge-m3") == 1
+
+
+def test_add_learned_does_not_save_to_disk(tmp_path):
+    """add_learned mutates in memory; caller must call .save() to persist."""
+    path = tmp_path / "reg.json"
+    registry = EntityRegistry(EntityRegistry._empty(), path)
+    registry.add_learned("Riley", type="person", confidence=0.85)
+
+    # File not yet written
+    assert not path.exists()
+
+    registry.save()
+    assert path.exists()
+
+
+def test_add_learned_rejects_unknown_type(tmp_path):
+    import pytest
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    with pytest.raises(ValueError, match="type must be 'person' or 'project'"):
+        registry.add_learned("Riley", type="concept", confidence=0.85)
