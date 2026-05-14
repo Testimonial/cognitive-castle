@@ -420,23 +420,27 @@ def _stage_5_soar(
     return soar_bridge._apply_soar_to_reranked(reranked, cfg, query=query)
 
 
-def _apply_stages_4_and_5(
+def _apply_optional_stages(
     query: str,
     reranked: list[tuple[float, dict]],
     cfg,
     llm_rerank: bool,
     soar_boost: bool,
     soar_first: bool,
+    quality_rerank: bool = False,
 ) -> list[tuple[float, dict]]:
-    """Run optional Stage 4 (judge) and Stage 5 (SOAR) in the requested order.
+    """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank) in the
+    requested order.
 
-    Default order (soar_first=False): Stage 4 → Stage 5 (judge truncates to
-    top-N first, then SOAR re-ranks those). Matches the pre-#4b behavior.
+    Default order (soar_first=False): Stage 4 → Stage 5 → Stage 6.
 
-    soar_first=True: Stage 5 → Stage 4 (SOAR re-ranks the full reranked list,
-    then judge truncates to top-N from SOAR's preferred order). Caller is
-    responsible for validation — when soar_first=True, both llm_rerank and
-    soar_boost must also be True (CLI/MCP layers validate this loudly).
+    soar_first=True: Stage 5 → Stage 4 → Stage 6 (SOAR re-ranks the full
+    reranked list, then judge truncates to top-N, then quality reranks).
+    Stage 6 always runs last.
+
+    quality_rerank must be False for now — Stage 6 wiring lands in a
+    subsequent commit. This param is added here so the call-site signature
+    is stable while Stage 6 implementation arrives.
     """
     if soar_first:
         reranked = _stage_5_soar(reranked, cfg, query=query)
@@ -591,13 +595,14 @@ def _new_pipeline_search(
     reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
 
     # ── Stage 4 + Stage 5 (optional, composable order) ────────────────────
-    reranked = _apply_stages_4_and_5(
+    reranked = _apply_optional_stages(
         query=query,
         reranked=reranked,
         cfg=cfg,
         llm_rerank=llm_rerank,
         soar_boost=soar_boost,
         soar_first=soar_first,
+        quality_rerank=False,
     )
 
     return [
