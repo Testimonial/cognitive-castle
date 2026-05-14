@@ -66,7 +66,7 @@ If the user's palace changes shape materially, the calibration script (`scripts/
 - Per-hit audit trail: `quality_score`, `quality_tier`, `quality_boost`, `score_pre_quality` fields always present
 - CLI audit line: `QUALITY: high (×1.250, score=0.78)` printed only when boost fires
 - Composable with Stages 4 (LLM-judge) and 5 (SOAR), default execution order judge → SOAR → quality
-- Local-only (regex + spaCy + transformers + torch; no LLM call, no network)
+- Local-only (regex + spaCy; no LLM call, no network)
 - Append-only audit (never modifies prior-stage outputs)
 - Graceful degradation if the vendored package or its model loads fail
 
@@ -94,7 +94,7 @@ Stage 3 (cross-encoder rerank)
        │     score = understanding.analyze_with_enhanced_metrics(text)
        │             ["enhanced_metrics"]["overall_weighted_average"]
        │
-       ├── Three-state tier classification:
+       ├── Two-tier classification (high / medium / no-boost):
        │     if score >= cfg.quality_threshold_high (0.60):
        │         tier = "high",   multiplier = cfg.quality_boost_high (1.25)
        │     elif score >= cfg.quality_threshold_medium (0.53):
@@ -116,7 +116,7 @@ Stage 3 (cross-encoder rerank)
 
 - **Append-only audit** — never modifies prior-stage outputs; only adds `quality_*` fields to hit dict
 - **Deterministic** — same input → same output (no RNG, no concurrent state, threshold defaults from a fixed calibration moment)
-- **Local-only** — spaCy + transformers + torch are local; no LLM call, no network
+- **Local-only** — spaCy + its model are local; no LLM call, no network
 - **Composable** — runs after Stages 4 and 5 by default; multipliers compound multiplicatively
 - **Idempotent display** — printing the audit line is a function of hit fields, not pipeline state
 - **Graceful degradation** — if `understanding` import fails or per-hit calls raise, the affected hits get default fields (`quality_score=None, quality_tier=None, quality_boost=1.0, score_pre_quality=score`), warning logged once
@@ -148,7 +148,7 @@ Latency range bounded by the calibration measurement: **38ms/drawer mean** on th
 | File | Purpose |
 |---|---|
 | `cognitive_castle/understanding/` (directory, 12 .py files) | Vendored copy of `~/echelon/src/understanding/`. MIT, same author. Files (verified by `ls`): `__init__.py`, `cli.py`, `behavioral_metrics.py`, `constraint_metrics.py`, `depth_metrics.py`, `energy_metrics.py`, `enhanced_metrics.py`, `entity_metrics.py`, `markdown_parser.py`, `normalized_metrics.py`, `requirements_metrics.py`, `semantic_metrics.py`. Metric categories from the package docstring (readability, structure, cognitive, testability) are implemented WITHIN these files, not as separate modules. Top-level `__getattr__` lazy-loader preserved. NO modifications to the vendored code. Provenance recorded as a docstring header in `__init__.py` (source: `~/echelon/src/understanding/` v3.7.0 on 2026-05-14) |
-| `cognitive_castle/quality_rerank.py` | Public entry `apply_quality_rerank(reranked: list[tuple[float, dict]], cfg) -> list[tuple[float, dict]]`. Implements the three-state threshold rule. Lazy-imports `cognitive_castle.understanding` so it's only loaded when Stage 6 fires |
+| `cognitive_castle/quality_rerank.py` | Public entry `apply_quality_rerank(reranked: list[tuple[float, dict]], cfg) -> list[tuple[float, dict]]`. Implements the two-tier (high / medium / no-boost) threshold rule. Lazy-imports `cognitive_castle.understanding` so it's only loaded when Stage 6 fires |
 | `tests/test_quality_rerank.py` | Stage 6 unit + integration + audit-trail tests. Mirrors `test_soar_bridge.py` fixture pattern |
 | `scripts/calibrate_quality_threshold.py` | One-shot CLI tool: random-sample drawers from a palace, run `analyze_with_enhanced_metrics`, print distribution stats + histogram. Not a test; reproducibility helper. Users re-run after material palace changes |
 
@@ -156,12 +156,12 @@ Latency range bounded by the calibration measurement: **38ms/drawer mean** on th
 
 | File | Change |
 |---|---|
-| `pyproject.toml` | Add `spacy>=3.0.0` (NEW). Add `transformers>=4.30.0` explicitly (NOT relying on `sentence-transformers` transitive — pinning avoids silent breakage if sentence-transformers ever changes its transformers range). Add `en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl` (same wheel URL echelon uses, ~12MB) |
+| `pyproject.toml` | Add `spacy>=3.0.0` (NEW dep — the `understanding` package lazy-imports it in 3 files: `entity_metrics.py`, `markdown_parser.py`, `semantic_metrics.py`). Add `en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl` (same wheel URL echelon uses, ~12MB). **No `transformers` dep added** — verified `understanding/` does not import transformers anywhere; Castle's existing transitive transformers (via `sentence-transformers`) is unrelated |
 | `cognitive_castle/config.py` | Five new properties, each env→file→default with try-except (Castle's standard pattern post-Task 1 of zero-failures cleanup): `quality_enabled` (env `CASTLE_QUALITY_ENABLED`, default `False`), `quality_threshold_medium` (env `CASTLE_QUALITY_THRESHOLD_MEDIUM`, default `0.53`), `quality_threshold_high` (env `CASTLE_QUALITY_THRESHOLD_HIGH`, default `0.60`), `quality_boost_medium` (env `CASTLE_QUALITY_BOOST_MEDIUM`, default `1.15`), `quality_boost_high` (env `CASTLE_QUALITY_BOOST_HIGH`, default `1.25`) |
 | `cognitive_castle/searcher.py` | (a) Add `_stage_6_quality(reranked, cfg)` lazy-wrapper that imports `cognitive_castle.quality_rerank` only when invoked. (b) **Rename `_apply_stages_4_and_5` → `_apply_optional_stages`** (forward-compatible for future stages). Update all callers in this file. Also update all references in `tests/test_pipeline_order.py` in the same PR (mechanical, no semantic change). (c) Thread `quality_rerank: bool = False` through `_new_pipeline_search` and `search_memories` signatures. (d) Per-hit return dict gains `quality_score: float \| None`, `quality_tier: str \| None`, `quality_boost: float = 1.0`, `score_pre_quality: float = score`. (e) Extend `_print_search_results` to render `QUALITY:` line ONLY when `hit["quality_tier"] is not None` |
 | `cognitive_castle/cli.py` | Add `--quality-rerank` flag with kill-switch validation (`if args.quality_rerank and not cfg.quality_enabled: print(...); sys.exit(2)`, mirroring SOAR's pattern). Thread through to `search()` |
 | `cognitive_castle/mcp_server.py` | Add `quality_rerank` MCP param to `castle_search` tool + same kill-switch validation |
-| `CLAUDE.md` | Update retrieval-pipeline diagram in the Architecture section: add Stage 6 line. One-sentence description: "Stage 6 (optional, opt-in `--quality-rerank` + `CASTLE_QUALITY_ENABLED=1`): deterministic text-quality rerank via vendored `understanding/` package — three-state threshold rule with calibrated defaults" |
+| `CLAUDE.md` | Update retrieval-pipeline diagram in the Architecture section: add Stage 6 line. One-sentence description: "Stage 6 (optional, opt-in `--quality-rerank` + `CASTLE_QUALITY_ENABLED=1`): deterministic text-quality rerank via vendored `understanding/` package — two-tier threshold rule with calibrated defaults" |
 
 ### Vendored package verification
 
@@ -184,7 +184,7 @@ All files are vendored regardless (faithful drop-in mirror, sync-friendly), but 
 searcher.py
   └─→ (lazy) cognitive_castle/quality_rerank.py
                 └─→ (lazy) cognitive_castle.understanding
-                                └─→ spacy, torch, transformers (third-party only)
+                                └─→ spacy (third-party; lazy-imported within understanding)
 ```
 
 `quality_rerank` and `understanding` import nothing from Castle's other modules.
@@ -194,8 +194,8 @@ searcher.py
 | Failure | Action | Per-hit dict fields |
 |---|---|---|
 | `understanding` import fails (vendored copy broken, spaCy model missing) | `_warn_once`, skip Stage 6 entirely | `quality_score=None, quality_tier=None, quality_boost=1.0, score_pre_quality=score` |
-| `analyze_with_enhanced_metrics(text)` raises on specific hit | `_warn_once` per exception class, default that hit's fields | Same defaults |
-| `result["enhanced_metrics"]["overall_weighted_average"]` missing/non-numeric/NaN | Per-hit skip | Same defaults |
+| `analyze_with_enhanced_metrics(text)` raises on specific hit | `_warn_once` per exception class, that hit defaults | `quality_score=None, quality_tier=None, quality_boost=1.0, score_pre_quality=score` |
+| `result["enhanced_metrics"]["overall_weighted_average"]` missing/non-numeric/NaN | Per-hit skip | `quality_score=None, quality_tier=None, quality_boost=1.0, score_pre_quality=score` |
 | `KeyboardInterrupt` / `SystemExit` | Propagate | N/A |
 
 ### Concurrent-run safety
@@ -306,10 +306,11 @@ tests/test_config.py                  (EXISTING — append)
 
 1. **Vendored package's hidden dependencies** — `analyze_with_enhanced_metrics` may load files we don't list in the vendor manifest. The smoke test (real call on fixture prose) catches this if the vendor copy is incomplete
 2. **`pip install` of `en-core-web-sm` wheel** — wheel URL requires network access at install time. Plan-time verification: a developer runs `pip install -e ".[dev]"` from scratch and confirms `understanding` imports cleanly. CI behavior with wheel URLs is out of this spec's scope; failure surfaces on first PR CI run
-3. **Calibration may drift** — defaults reflect 2026-05-14 palace state. Plan must verify the user's palace hasn't materially changed between spec date and implementation date; if so, re-run calibration and adjust defaults
-4. **Stage 6 underperforms on chat-data despite calibration showing variance** — the metrics discriminate (stdev 0.113) but it's not proven that high-scoring drawers are USEFULLY high-scoring (i.e., more relevant). Acceptable risk because: (a) Stage 6 is opt-in, (b) audit trail surfaces what's being boosted so user can inspect quality, (c) thresholds are configurable for easy adjustment
-5. **CLI cold-load tax** — every CLI invocation pays +381ms for spaCy. Not a blocker (CLI usage is rare per the user's actual workflow); MCP-mode amortizes the cost
-6. **`understanding` package upgrades** — vendored copy is a snapshot. Future upgrades to the upstream `echelon` package require manual sync. The `VENDORED` docstring records the source version
+3. **Stage 6 underperforms on chat-data despite calibration showing variance** — the metrics discriminate (stdev 0.113) but it's not proven that high-scoring drawers are USEFULLY high-scoring (i.e., more relevant). Acceptable risk because: (a) Stage 6 is opt-in, (b) audit trail surfaces what's being boosted so user can inspect quality, (c) thresholds are configurable for easy adjustment
+4. **CLI cold-load tax** — every CLI invocation pays +381ms for spaCy. Not a blocker (CLI usage is rare per the user's actual workflow); MCP-mode amortizes the cost
+5. **`understanding` package upgrades** — vendored copy is a snapshot. Future upgrades to the upstream `echelon` package require manual sync. The `VENDORED` docstring records the source version
+
+(Calibration-drift handling is covered in Acceptance criteria's "Pre-merge re-calibration" item; not duplicated here.)
 
 ## Out of scope
 
@@ -334,6 +335,6 @@ tests/test_config.py                  (EXISTING — append)
 ## What this unlocks
 
 - A third post-rerank signal (alongside LLM-judge and SOAR) for further differentiating search results
-- An empirical baseline showing the `understanding` package produces non-trivial scores (stdev 0.113, range 0.194-0.756) on conversational text — calibration showed VARIANCE; whether high-scoring drawers are also USEFULLY high-scoring (i.e., more relevant) remains an open question for live use (see risk register #4)
+- An empirical baseline showing the `understanding` package produces non-trivial scores (stdev 0.113, range 0.194-0.756) on conversational text. Calibration proved VARIANCE only. Whether high-scoring drawers are also USEFULLY high-scoring (i.e., more relevant) remains open for live evaluation — see risk register #3
 - The pattern for vendoring local-only sibling packages without creating dep chains
 - A reproducibility tool (calibration script) for future threshold-tuning conversations
