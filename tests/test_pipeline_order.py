@@ -436,3 +436,162 @@ def test_query_threaded_through_soar_first_branch(monkeypatch, tmp_path):
     assert captured.get("query") == "when did we ship the migration", (
         f"Expected query forwarded to _stage_5_soar in soar_first branch; got {captured.get('query')!r}"
     )
+
+
+def test_search_memories_output_surfaces_soar_audit_fields(monkeypatch, tmp_path):
+    """search_memories output dicts must carry soar_tags / soar_boost / score_pre_soar.
+
+    Without these surfacing through _new_pipeline_search's return-dict construction,
+    callers (CLI, MCP) can't observe what SOAR did during the stress-test week.
+
+    Strategy: stub _stage_5_soar to populate the audit fields on the row dict,
+    then run the full search_memories → _new_pipeline_search path with stubs
+    for the heavy I/O (collection, embedder, reranker). Assert the audit fields
+    survive into the final output dict.
+    """
+    import cognitive_castle.searcher as searcher_mod
+
+    class FakeCollection:
+        def vector_search(self, query_vec, n_results, where=None):
+            return [
+                {
+                    "id": "hit-a",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "hit a",
+                }
+            ]
+
+        def fts_search(self, query, n_results, where=None):
+            return []
+
+        def get_by_ids(self, ids):
+            return [
+                {
+                    "id": "hit-a",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "hit a",
+                    "decay_score": 1.0,
+                    "chunk_index": 0,
+                    "metadata_json": "{}",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(),
+    )
+    monkeypatch.setattr(
+        "cognitive_castle.embedding.embed_texts",
+        lambda texts: [[0.0] * 384 for _ in texts],
+    )
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, docs, cfg: [1.0 for _ in docs],
+    )
+
+    def stub_stage_5(reranked, cfg, query=""):
+        # Mimic what _apply_soar_to_reranked does: mutate row dict + reorder
+        new = []
+        for score, row in reranked:
+            row["score_pre_soar"] = score
+            row["soar_boost"] = 1.3
+            row["soar_tags"] = ["entity-match"]
+            row["score"] = score * 1.3
+            new.append((row["score"], row))
+        return new
+
+    monkeypatch.setattr(searcher_mod, "_stage_5_soar", stub_stage_5)
+
+    result = searcher_mod.search_memories(
+        query="test",
+        palace_path=str(tmp_path),
+        n_results=5,
+        soar_boost=True,
+    )
+
+    hits = result["results"] if isinstance(result, dict) else result
+    assert len(hits) >= 1, f"Expected at least one hit, got {hits}"
+    hit = hits[0]
+    assert hit.get("soar_tags") == ["entity-match"], (
+        f"soar_tags missing or wrong; got {hit.get('soar_tags')!r}"
+    )
+    assert hit.get("soar_boost") == 1.3, (
+        f"soar_boost missing or wrong; got {hit.get('soar_boost')!r}"
+    )
+    assert "score_pre_soar" in hit, "score_pre_soar key missing from output dict"
+
+
+def test_search_memories_output_audit_fields_default_when_soar_off(monkeypatch, tmp_path):
+    """When soar_boost=False, audit fields still exist with safe defaults.
+
+    Callers should be able to read hit['soar_tags'] without a KeyError regardless
+    of whether SOAR ran. Defaults: empty list, 1.0 multiplier, score_pre_soar==score.
+    """
+    import cognitive_castle.searcher as searcher_mod
+
+    class FakeCollection:
+        def vector_search(self, query_vec, n_results, where=None):
+            return [
+                {
+                    "id": "hit-a",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "hit a",
+                }
+            ]
+
+        def fts_search(self, query, n_results, where=None):
+            return []
+
+        def get_by_ids(self, ids):
+            return [
+                {
+                    "id": "hit-a",
+                    "wing": "x",
+                    "room": "r",
+                    "source_file": "f.md",
+                    "text": "hit a",
+                    "decay_score": 1.0,
+                    "chunk_index": 0,
+                    "metadata_json": "{}",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(),
+    )
+    monkeypatch.setattr(
+        "cognitive_castle.embedding.embed_texts",
+        lambda texts: [[0.0] * 384 for _ in texts],
+    )
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, docs, cfg: [0.75 for _ in docs],
+    )
+
+    result = searcher_mod.search_memories(
+        query="test",
+        palace_path=str(tmp_path),
+        n_results=5,
+        soar_boost=False,
+    )
+
+    hits = result["results"] if isinstance(result, dict) else result
+    assert len(hits) >= 1
+    hit = hits[0]
+    assert hit.get("soar_tags") == [], (
+        f"soar_tags should default to [] when SOAR off; got {hit.get('soar_tags')!r}"
+    )
+    assert hit.get("soar_boost") == 1.0, (
+        f"soar_boost should default to 1.0 when SOAR off; got {hit.get('soar_boost')!r}"
+    )
+    assert hit.get("score_pre_soar") == hit.get("score"), (
+        "score_pre_soar should equal score when SOAR off; "
+        f"pre={hit.get('score_pre_soar')!r}, score={hit.get('score')!r}"
+    )

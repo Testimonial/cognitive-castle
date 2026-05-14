@@ -176,7 +176,13 @@ def _print_search_results(result: dict, query: str) -> None:
 
         print(f"  [{i}] {wing_name} / {room_name}")
         print(f"      Source: {source}")
-        print(f"      Match:  score={score}\n")
+        print(f"      Match:  score={score}")
+        soar_tags = hit.get("soar_tags") or []
+        if soar_tags:
+            mul = float(hit.get("soar_boost", 1.0))
+            pre = round(float(hit.get("score_pre_soar", score)), 3)
+            print(f"      SOAR:   {', '.join(soar_tags)} (×{mul:.3f}, {pre} → {score})")
+        print()
         print(f"      {text}\n")
         print(f"  {'─' * 56}")
 
@@ -609,6 +615,13 @@ def _new_pipeline_search(
             "created_at": _get_filed_at(r),
             "similarity": float(s),  # alias to score (test asserts type only)
             "entity_match": (r.get("entity_match", False) if isinstance(r, dict) else False),
+            # SOAR audit trail — populated only when --soar-boost is on (Stage 5
+            # ran). Always present so callers can rely on the key shape.
+            "soar_tags": (list(r.get("soar_tags", [])) if isinstance(r, dict) else []),
+            "soar_boost": (float(r.get("soar_boost", 1.0)) if isinstance(r, dict) else 1.0),
+            "score_pre_soar": (
+                float(r.get("score_pre_soar", s)) if isinstance(r, dict) else float(s)
+            ),
         }
         for s, r in reranked[:n_results]
     ]
