@@ -232,6 +232,9 @@ def test_cmd_init_honors_palace_flag(tmp_path, monkeypatch):
     monkeypatch.setenv("MEMPAL_PALACE_PATH", "")
     monkeypatch.delenv("MEMPALACE_PALACE_PATH")
     monkeypatch.delenv("MEMPAL_PALACE_PATH")
+    # Register CASTLE_PALACE_PATH with monkeypatch so cmd_init's os.environ write
+    # is rolled back at teardown and doesn't leak into subsequent tests.
+    monkeypatch.setenv("CASTLE_PALACE_PATH", "")
 
     args = argparse.Namespace(
         dir=str(project),

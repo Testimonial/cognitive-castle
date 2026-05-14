@@ -76,8 +76,8 @@ def test_get_model_falls_back_to_cpu_on_cuda_oom(monkeypatch):
 
     assert result is fake_cpu_model
     assert calls == [
-        ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "cuda"),
-        ("sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "cpu"),
+        ("BAAI/bge-m3", "cuda"),
+        ("BAAI/bge-m3", "cpu"),
     ]
 
 

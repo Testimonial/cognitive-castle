@@ -197,8 +197,8 @@ def test_populated_registry_improves_miner_recall(temp_registry):
     )
 
     sample = (
-        "Met with Julia Grib yesterday about the mempalace release. "
-        "Kevin Heifner pushed the hyperion-history fix."
+        "Met with Julia Grib yesterday about the cognitive-castle mempalace release. "
+        "Kevin Heifner pushed the hyperion-history fix to cognitive-castle."
     )
     result = miner._extract_entities_for_metadata(sample)
     tagged = set(result.split(";")) if result else set()
