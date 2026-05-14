@@ -108,7 +108,7 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
     monkeypatch.setattr(searcher_mod, "_stage_4_judge", fake_stage_4)
     monkeypatch.setattr(searcher_mod, "_stage_5_soar", fake_stage_5)
 
-    from cognitive_castle.searcher import _apply_stages_4_and_5
+    from cognitive_castle.searcher import _apply_optional_stages
 
     reranked = [(0.9, {"id": "a", "score": 0.9})]
     cfg_obj = type(
@@ -122,7 +122,7 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
         },
     )()
 
-    _apply_stages_4_and_5(
+    _apply_optional_stages(
         query="q",
         reranked=reranked,
         cfg=cfg_obj,
@@ -145,7 +145,7 @@ def test_soar_first_runs_soar_then_judge(monkeypatch, tmp_path):
         searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
-    from cognitive_castle.searcher import _apply_stages_4_and_5
+    from cognitive_castle.searcher import _apply_optional_stages
 
     cfg_obj = type(
         "C",
@@ -158,7 +158,7 @@ def test_soar_first_runs_soar_then_judge(monkeypatch, tmp_path):
         },
     )()
 
-    _apply_stages_4_and_5(
+    _apply_optional_stages(
         query="q",
         reranked=[(0.9, {"id": "a", "score": 0.9})],
         cfg=cfg_obj,
@@ -181,7 +181,7 @@ def test_soar_only_no_judge_call(monkeypatch, tmp_path):
         searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
-    from cognitive_castle.searcher import _apply_stages_4_and_5
+    from cognitive_castle.searcher import _apply_optional_stages
 
     cfg_obj = type(
         "C",
@@ -194,7 +194,7 @@ def test_soar_only_no_judge_call(monkeypatch, tmp_path):
         },
     )()
 
-    _apply_stages_4_and_5(
+    _apply_optional_stages(
         query="q",
         reranked=[(0.9, {"id": "a", "score": 0.9})],
         cfg=cfg_obj,
@@ -217,7 +217,7 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
         searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
 
-    from cognitive_castle.searcher import _apply_stages_4_and_5
+    from cognitive_castle.searcher import _apply_optional_stages
 
     cfg_obj = type(
         "C",
@@ -230,7 +230,7 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
         },
     )()
 
-    _apply_stages_4_and_5(
+    _apply_optional_stages(
         query="q",
         reranked=[(0.9, {"id": "a", "score": 0.9})],
         cfg=cfg_obj,
@@ -356,7 +356,7 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
     """When _new_pipeline_search is called with a query and soar_boost=True,
     _stage_5_soar receives the query via kwarg.
 
-    Verifies the plumbing in _apply_stages_4_and_5 passes query=query to
+    Verifies the plumbing in _apply_optional_stages passes query=query to
     both _stage_5_soar call sites (default-order branch + soar_first branch).
     """
     import cognitive_castle.searcher as searcher_mod
@@ -370,7 +370,7 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
 
     monkeypatch.setattr(searcher_mod, "_stage_5_soar", stub_stage_5)
 
-    # Drive _apply_stages_4_and_5 directly with a known query
+    # Drive _apply_optional_stages directly with a known query
     cfg_obj = type(
         "C",
         (),
@@ -383,7 +383,7 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
     )()
 
     reranked = [(0.9, {"id": "a", "score": 0.9})]
-    searcher_mod._apply_stages_4_and_5(
+    searcher_mod._apply_optional_stages(
         query="what did we decide about caching",
         reranked=reranked,
         cfg=cfg_obj,
@@ -424,7 +424,7 @@ def test_query_threaded_through_soar_first_branch(monkeypatch, tmp_path):
         },
     )()
 
-    searcher_mod._apply_stages_4_and_5(
+    searcher_mod._apply_optional_stages(
         query="when did we ship the migration",
         reranked=[(0.9, {"id": "a", "score": 0.9})],
         cfg=cfg_obj,
@@ -595,3 +595,125 @@ def test_search_memories_output_audit_fields_default_when_soar_off(monkeypatch, 
         "score_pre_soar should equal score when SOAR off; "
         f"pre={hit.get('score_pre_soar')!r}, score={hit.get('score')!r}"
     )
+
+
+def test_quality_runs_when_quality_rerank_flag_set(monkeypatch, tmp_path):
+    """When quality_rerank=True is passed, _stage_6_quality is invoked."""
+    import cognitive_castle.searcher as searcher_mod
+
+    invocations = []
+
+    def stub_stage_6(reranked, cfg):
+        invocations.append(reranked)
+        return reranked
+
+    monkeypatch.setattr(searcher_mod, "_stage_6_quality", stub_stage_6)
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+            "quality_enabled": True,
+        },
+    )()
+
+    reranked = [(0.9, {"id": "a", "score": 0.9})]
+    searcher_mod._apply_optional_stages(
+        query="q",
+        reranked=reranked,
+        cfg=cfg_obj,
+        llm_rerank=False,
+        soar_boost=False,
+        soar_first=False,
+        quality_rerank=True,
+    )
+
+    assert len(invocations) == 1
+
+
+def test_quality_skipped_when_flag_off(monkeypatch, tmp_path):
+    """When quality_rerank=False, _stage_6_quality is NOT invoked."""
+    import cognitive_castle.searcher as searcher_mod
+
+    invocations = []
+
+    def stub_stage_6(reranked, cfg):
+        invocations.append(reranked)
+        return reranked
+
+    monkeypatch.setattr(searcher_mod, "_stage_6_quality", stub_stage_6)
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+        },
+    )()
+
+    reranked = [(0.9, {"id": "a", "score": 0.9})]
+    searcher_mod._apply_optional_stages(
+        query="q",
+        reranked=reranked,
+        cfg=cfg_obj,
+        llm_rerank=False,
+        soar_boost=False,
+        soar_first=False,
+        quality_rerank=False,
+    )
+
+    assert len(invocations) == 0
+
+
+def test_judge_soar_quality_compound_in_default_order(monkeypatch, tmp_path):
+    """All three optional stages fire in order: 4 → 5 → 6."""
+    import cognitive_castle.searcher as searcher_mod
+
+    call_order = []
+
+    def fake_stage_4(query, reranked, cfg):
+        call_order.append("stage_4")
+        return reranked
+
+    def fake_stage_5(reranked, cfg, query=""):
+        call_order.append("stage_5")
+        return reranked
+
+    def fake_stage_6(reranked, cfg):
+        call_order.append("stage_6")
+        return reranked
+
+    monkeypatch.setattr(searcher_mod, "_stage_4_judge", fake_stage_4)
+    monkeypatch.setattr(searcher_mod, "_stage_5_soar", fake_stage_5)
+    monkeypatch.setattr(searcher_mod, "_stage_6_quality", fake_stage_6)
+
+    cfg_obj = type(
+        "C",
+        (),
+        {
+            "llm_judge_top_n": 5,
+            "soar_enabled": True,
+            "soar_rules_path": None,
+            "palace_path": str(tmp_path),
+            "quality_enabled": True,
+        },
+    )()
+
+    searcher_mod._apply_optional_stages(
+        query="q",
+        reranked=[(0.9, {"id": "a", "score": 0.9})],
+        cfg=cfg_obj,
+        llm_rerank=True,
+        soar_boost=True,
+        soar_first=False,
+        quality_rerank=True,
+    )
+
+    assert call_order == ["stage_4", "stage_5", "stage_6"]

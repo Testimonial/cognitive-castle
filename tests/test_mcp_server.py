@@ -1033,3 +1033,40 @@ def test_mcp_soar_first_without_other_flags_returns_error(monkeypatch):
     assert "error" in result
     assert "soar_first" in result["error"]
     # MCP does NOT sys.exit — it returns the error to the client
+
+
+def test_mcp_quality_rerank_param_without_kill_switch_returns_error(monkeypatch):
+    """quality_rerank=true MCP param without CASTLE_QUALITY_ENABLED=1
+    should return an MCP-level error."""
+    monkeypatch.delenv("CASTLE_QUALITY_ENABLED", raising=False)
+
+    from cognitive_castle.mcp_server import tool_search
+
+    result = tool_search(
+        query="test",
+        quality_rerank=True,
+    )
+    # Result should signal an error — exact shape depends on MCP server's
+    # convention (probably an "error" key or an exit-2 path captured)
+    assert "error" in result or "CASTLE_QUALITY_ENABLED" in str(result)
+
+
+def test_mcp_quality_rerank_param_with_kill_switch_threads_through(monkeypatch):
+    """quality_rerank=true with kill-switch active should reach search_memories."""
+    from unittest.mock import patch
+
+    monkeypatch.setenv("CASTLE_QUALITY_ENABLED", "1")
+
+    fake_result = {"results": [], "query": "test", "filters": {}}
+
+    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
+        from cognitive_castle.mcp_server import tool_search
+
+        tool_search(
+            query="test",
+            quality_rerank=True,
+        )
+
+    # search_memories was called with quality_rerank=True
+    mock_sm.assert_called_once()
+    assert mock_sm.call_args.kwargs.get("quality_rerank") is True

@@ -341,3 +341,167 @@ def test_cli_search_routes_through_new_pipeline(tmp_path, capsys):
     assert "cosine=" not in captured.out
     assert 'Results for: "authentication"' in captured.out
     assert "JWT authentication notes" in captured.out
+
+
+def test_search_memories_return_dict_has_quality_fields_when_enabled(tmp_path, monkeypatch):
+    """When quality_rerank=True, returned hits include quality_* fields."""
+    import cognitive_castle.searcher as searcher_mod
+
+    # Stub _new_pipeline_search to return a hand-crafted result
+    def stub_pipeline(query, palace_path, wing, room, n_results, cfg, **kwargs):
+        return [
+            {
+                "id": "a",
+                "text": "test",
+                "document": "test",
+                "score": 1.25,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f",
+                "created_at": "2026-05-14T00:00:00",
+                "similarity": 1.25,
+                "entity_match": False,
+                "soar_tags": [],
+                "soar_boost": 1.0,
+                "score_pre_soar": 1.0,
+                "quality_score": 0.75,
+                "quality_tier": "high",
+                "quality_boost": 1.25,
+                "score_pre_quality": 1.0,
+            }
+        ]
+
+    monkeypatch.setattr(searcher_mod, "_new_pipeline_search", stub_pipeline)
+
+    result = searcher_mod.search_memories(
+        query="test",
+        palace_path=str(tmp_path),
+        quality_rerank=True,
+    )
+    hits = result["results"] if isinstance(result, dict) else result
+    assert len(hits) == 1
+    hit = hits[0]
+    assert hit["quality_score"] == 0.75
+    assert hit["quality_tier"] == "high"
+    assert hit["quality_boost"] == 1.25
+    assert hit["score_pre_quality"] == 1.0
+
+
+def test_search_memories_return_dict_has_default_quality_fields_when_disabled(
+    tmp_path, monkeypatch
+):
+    """When quality_rerank=False, returned hits have default quality_* fields."""
+    import cognitive_castle.searcher as searcher_mod
+
+    def stub_pipeline(query, palace_path, wing, room, n_results, cfg, **kwargs):
+        return [
+            {
+                "id": "a",
+                "text": "test",
+                "document": "test",
+                "score": 1.0,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f",
+                "created_at": "2026-05-14T00:00:00",
+                "similarity": 1.0,
+                "entity_match": False,
+                "soar_tags": [],
+                "soar_boost": 1.0,
+                "score_pre_soar": 1.0,
+                "quality_score": None,
+                "quality_tier": None,
+                "quality_boost": 1.0,
+                "score_pre_quality": 1.0,
+            }
+        ]
+
+    monkeypatch.setattr(searcher_mod, "_new_pipeline_search", stub_pipeline)
+
+    result = searcher_mod.search_memories(
+        query="test",
+        palace_path=str(tmp_path),
+        quality_rerank=False,
+    )
+    hits = result["results"] if isinstance(result, dict) else result
+    assert hits[0]["quality_score"] is None
+    assert hits[0]["quality_tier"] is None
+    assert hits[0]["quality_boost"] == 1.0
+
+
+def test_print_search_results_renders_quality_high_audit_line(capsys):
+    """When quality_tier='high', the QUALITY: line is printed."""
+    from cognitive_castle.searcher import _print_search_results
+
+    result = {
+        "results": [
+            {
+                "text": "test text",
+                "score": 1.25,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f.md",
+                "quality_score": 0.78,
+                "quality_tier": "high",
+                "quality_boost": 1.25,
+                "score_pre_quality": 1.0,
+            }
+        ],
+        "filters": {},
+    }
+    _print_search_results(result, "test query")
+    captured = capsys.readouterr()
+    assert "QUALITY: high" in captured.out
+    assert "×1.250" in captured.out
+    assert "score=0.78" in captured.out
+
+
+def test_print_search_results_renders_quality_medium_audit_line(capsys):
+    """When quality_tier='medium', the QUALITY: line is printed."""
+    from cognitive_castle.searcher import _print_search_results
+
+    result = {
+        "results": [
+            {
+                "text": "test text",
+                "score": 1.15,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f.md",
+                "quality_score": 0.56,
+                "quality_tier": "medium",
+                "quality_boost": 1.15,
+                "score_pre_quality": 1.0,
+            }
+        ],
+        "filters": {},
+    }
+    _print_search_results(result, "test query")
+    captured = capsys.readouterr()
+    assert "QUALITY: medium" in captured.out
+    assert "×1.150" in captured.out
+
+
+def test_print_search_results_suppresses_quality_line_when_tier_none(capsys):
+    """When quality_tier=None, NO QUALITY: line is printed."""
+    from cognitive_castle.searcher import _print_search_results
+
+    result = {
+        "results": [
+            {
+                "text": "test text",
+                "score": 0.5,
+                "wing": "w",
+                "room": "r",
+                "source_file": "f.md",
+                "quality_score": 0.40,
+                "quality_tier": None,
+                "quality_boost": 1.0,
+                "score_pre_quality": 0.5,
+            }
+        ],
+        "filters": {},
+    }
+    _print_search_results(result, "test query")
+    captured = capsys.readouterr()
+    assert "QUALITY:" not in captured.out

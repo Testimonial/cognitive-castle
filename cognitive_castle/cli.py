@@ -587,6 +587,7 @@ def cmd_search(args):
     soar_boost = getattr(args, "soar_boost", False)
     soar_first = getattr(args, "soar_first", False)
     llm_rerank = getattr(args, "llm_rerank", False)
+    quality_rerank = getattr(args, "quality_rerank", False)
 
     # --soar-first requires both companion flags
     if soar_first:
@@ -611,6 +612,16 @@ def cmd_search(args):
         )
         sys.exit(2)
 
+    # Kill-switch check: --quality-rerank requires CASTLE_QUALITY_ENABLED=1
+    if quality_rerank and not cfg.quality_enabled:
+        print(
+            "--quality-rerank requires CASTLE_QUALITY_ENABLED=1 "
+            "(kill switch is active to prevent accidental Stage 6 invocation; "
+            "set the env var to enable Stage 6)",
+            file=sys.stderr,
+        )
+        sys.exit(2)
+
     palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
 
     try:
@@ -623,6 +634,7 @@ def cmd_search(args):
             llm_rerank=llm_rerank,
             soar_boost=soar_boost,
             soar_first=soar_first,
+            quality_rerank=quality_rerank,
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
@@ -1139,6 +1151,16 @@ def main():
             "Run SOAR (Stage 5) BEFORE LLM-as-judge (Stage 4). Requires both "
             "--llm-rerank and --soar-boost. Default order is judge-then-SOAR. "
             "Use this to let SOAR's hand-crafted rules shape what the LLM sees."
+        ),
+    )
+    p_search.add_argument(
+        "--quality-rerank",
+        action="store_true",
+        help=(
+            "Apply Stage 6 deterministic text-quality rerank via the "
+            "vendored `understanding` package (experimental; requires "
+            "spaCy + en_core_web_sm; activate via CASTLE_QUALITY_ENABLED=1). "
+            "Off by default."
         ),
     )
 

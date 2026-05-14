@@ -472,3 +472,86 @@ def test_entity_fetch_batch_size_file_config_override():
     """Test that file_config can override entity_fetch_batch_size."""
     cfg = _make_config_with_file_config({"entity_fetch_batch_size": 250})
     assert cfg.entity_fetch_batch_size == 250
+
+
+# ── Quality rerank (Stage 6) config tests ──────────────────────────────
+
+
+def test_quality_enabled_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_enabled is False
+
+
+def test_quality_enabled_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_ENABLED", "1")
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_enabled is True
+
+
+def test_quality_enabled_file_config_override():
+    cfg = _make_config_with_file_config({"quality_enabled": True})
+    assert cfg.quality_enabled is True
+
+
+def test_quality_threshold_medium_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_threshold_medium == 0.53
+
+
+def test_quality_threshold_medium_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_THRESHOLD_MEDIUM", "0.40")
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_threshold_medium == 0.40
+
+
+def test_quality_threshold_medium_file_config_override():
+    cfg = _make_config_with_file_config({"quality_threshold_medium": 0.45})
+    assert cfg.quality_threshold_medium == 0.45
+
+
+def test_quality_threshold_high_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_threshold_high == 0.60
+
+
+def test_quality_threshold_high_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_THRESHOLD_HIGH", "0.75")
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_threshold_high == 0.75
+
+
+def test_quality_threshold_high_file_config_override():
+    cfg = _make_config_with_file_config({"quality_threshold_high": 0.70})
+    assert cfg.quality_threshold_high == 0.70
+
+
+def test_quality_boost_medium_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_boost_medium == 1.15
+
+
+def test_quality_boost_medium_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_BOOST_MEDIUM", "1.10")
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_boost_medium == 1.10
+
+
+def test_quality_boost_medium_file_config_override():
+    cfg = _make_config_with_file_config({"quality_boost_medium": 1.20})
+    assert cfg.quality_boost_medium == 1.20
+
+
+def test_quality_boost_high_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_boost_high == 1.25
+
+
+def test_quality_boost_high_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_BOOST_HIGH", "1.30")
+    cfg = CognitiveCastleConfig()
+    assert cfg.quality_boost_high == 1.30
+
+
+def test_quality_boost_high_file_config_override():
+    cfg = _make_config_with_file_config({"quality_boost_high": 1.35})
+    assert cfg.quality_boost_high == 1.35
