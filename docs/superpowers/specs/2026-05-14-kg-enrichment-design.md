@@ -95,12 +95,16 @@ castle mine / castle reindex
         │       sample_ids = sorted(mention_map[name])[:SAMPLE_N]
         │       score_drawer_ids.update(sample_ids)
         │
-        │     # One bulk fetch for all scoring samples. text_by_id holds only
-        │     # the drawers needed for Stage B — typically tens of MB at most.
-        │     text_by_id = {
-        │       r["id"]: r["text"]
-        │       for r in col.get_by_ids(sorted(score_drawer_ids))
-        │     }
+        │     # Batched bulk fetch. col.get_by_ids returns full rows including
+        │     # the 1024-dim vector column (~4 KB) and metadata_json — so per-row
+        │     # footprint is ~12-15 KB. With 5K-15K unique sample ids realistic
+        │     # for a 20K-drawer palace, a single fetch can hit 60-200 MB.
+        │     # Batching keeps per-call memory bounded.
+        │     FETCH_BATCH = cfg.entity_fetch_batch_size   # NEW, default 1000
+        │     text_by_id = {}
+        │     for batch in chunked(sorted(score_drawer_ids), FETCH_BATCH):
+        │       for r in col.get_by_ids(batch):
+        │         text_by_id[r["id"]] = r["text"]   # discard vector + metadata
         │
         │     for name in candidates_to_score:
         │       sample_ids = sorted(mention_map[name])[:SAMPLE_N]
@@ -164,11 +168,15 @@ If entity X gets promoted on mine N, only drawers in mine N's `work_ids` (typica
 
 **For long-running palaces, late-discovered entities have weaker coverage.** If a user starts mentioning a new person months in, the new person gets promoted in a later mine but only earns triples for drawers added since then. Older conversations stay invisible to entity-match for that person.
 
+**Pre-registered entities only get triples where `extract_candidates` matches them.** If a user runs `castle init` and seeds "Riley" as a person, but drawer text uses lowercase "riley" or a pattern the regex doesn't match, then `mention_map["Riley"]` is empty after Stage A and Stage C writes zero triples. The registry says Riley exists, but the KG has no `mentioned_in` triples → entity-match still doesn't fire for queries about Riley.
+
+In practice this means onboarding-seeded entities only earn KG coverage proportional to how well the canonical name from the registry overlaps with how `entity_detector` extracts candidates from drawer text. Casing variation, nicknames, and partial-name mentions all reduce coverage.
+
 Mitigations (out of scope for this spec, deferred):
-- A `Stage B.5: rescan-for-newly-promoted` step that uses LanceDB FTS to find pre-existing drawers mentioning newly-promoted entities. Cheap (one FTS query per newly-promoted name) but adds complexity
+- A `Stage B.5: rescan-for-newly-promoted` step that uses LanceDB FTS to find pre-existing drawers mentioning newly-promoted entities. Cheap (one FTS query per newly-promoted name) but adds complexity. FTS-based mention indexing would ALSO fix the seeded-entity coverage gap (FTS matches substring, not entity pattern)
 - An explicit `castle kg-rescan` command for users who want to refresh coverage after registry changes
 
-This spec ships the simpler design; the bootstrap case is the common case, and the mitigation can land as a follow-up if late-discovery weakness shows up in practice.
+This spec ships the simpler design; the bootstrap case (no prior onboarding, no pre-existing entities, fresh adapter run) is the common case, and the mitigation can land as a follow-up if late-discovery or onboarding-mismatch weakness shows up in practice.
 
 ### Performance estimate
 
@@ -185,7 +193,9 @@ KG grows by ~one triple per `(entity, drawer)` mention. Worst-case 20K drawers �
 
 - `mention_map` worst case: a name in every drawer with a set of 20K drawer-id strings (~40 bytes each) = ~800 KB per name. With ~10³ names: ~800 MB upper bound. Realistic case (most names in few drawers): tens of MB
 - `freq_by_name`: ~10² to 10³ entries × ~50 bytes = KB-scale
-- `text_by_id` for Stage B: cached drawer texts ONLY for ones used to score unregistered candidates. Worst case ~10³ candidates × ~20 sample drawers (with overlap) = thousands of drawers × ~8 KB = tens of MB
+- `score_drawer_ids` set: union of per-candidate sample-id sets. Realistic 5K-15K unique drawer_ids for a 20K palace with 10³ unregistered candidates (overlap depends on candidate distribution)
+- `text_by_id` for Stage B: discards LanceDB's vector + metadata_json columns, keeping only `text`. At ~8 KB per drawer text × 10K drawers = ~80 MB realistic, ~120 MB worst case. NOT "tens of MB" as earlier drafts claimed
+- LanceDB bulk fetch is batched (default `FETCH_BATCH = 1000`) so per-call response stays bounded; the cumulative `text_by_id` after all batches is the figure above
 - No `combined_text` corpus exists in this design — the per-candidate sampling means there's no global text buffer
 - If `mention_map` proves too large at very-large-palace scale, plan can switch to a streaming Stage C that flushes triples per-batch rather than holding all mentions in memory
 
@@ -204,7 +214,7 @@ KG grows by ~one triple per `(entity, drawer)` mention. Worst-case 20K drawers �
 |---|---|
 | `cognitive_castle/miner.py` | At end of `mine()` (line 985), lazy-import + call `enrich_palace(palace_path, cfg)`. Wrap in `try/except Exception` — never re-raise. On exception, print a one-line warning and continue. On success, print one line: `KG enrichment: scanned N drawers, promoted M, wrote K triples in T.Ts` |
 | `cognitive_castle/convo_miner.py` | Same hook at end of `mine_convos()` (line 379). Inline (not via a shared helper) — the call is 4–5 lines including try/except, and a 3-line helper adds indirection without saving meaningful code |
-| `cognitive_castle/config.py` | Add `entity_promote_threshold` (env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`). Add `entity_score_sample_drawers` (env `CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS` → file_config → default `20`). If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
+| `cognitive_castle/config.py` | Add `entity_promote_threshold` (env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`). Add `entity_score_sample_drawers` (env `CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS` → file_config → default `20`). Add `entity_fetch_batch_size` (env `CASTLE_ENTITY_FETCH_BATCH_SIZE` → file_config → default `1000`). If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
 | `cognitive_castle/entity_registry.py` | Add `add_learned(name, type, confidence) -> None` method. Idempotent: if entity already exists, no-op (does not overwrite onboarding-sourced entries). Returns nothing — callers already guard with `lookup(name).get("type")` before calling |
 | `cognitive_castle/backends/base.py` | Add abstract `list_drawer_ids(self) -> list[str]` to `BaseCollection` |
 | `cognitive_castle/backends/lancedb_backend.py` | Implement via `table.to_arrow().column("id").to_pylist()` — materializes the full id list (~2 MB for 20K rows, ~10 MB for 100K) |
@@ -351,7 +361,7 @@ tests/test_convo_miner.py          (EXISTING — append)
 5. **`lookup()` return shape verified** — always returns a dict with `"type"` key ∈ `{person, project, concept, unknown}` (`entity_registry.py:443`). Spec uses explicit `!= "unknown"` checks. No risk
 6. **Stage A time estimate calibration** — 1–3 min for 20K drawers is a guess. Plan should benchmark on a representative subset before locking expectations
 7. **score_entity per-candidate behavior on small samples** — the existing `score_entity` was designed against larger combined corpora (e.g., onboarding's 50 KB). On a ~160 KB per-candidate sample, dialogue-marker heuristics that need `>=2` hits may not fire even for real persons. Plan should verify classifier behavior empirically on small samples and adjust SAMPLE_N default if needed
-8. **LanceDB bulk fetch size** — Stage B's `col.get_by_ids(sorted(score_drawer_ids))` may request thousands of ids at once. Verify LanceDB's `get_by_ids` handles that gracefully (not a sqlite IN-clause hitting a limit). Fallback: batch the bulk fetch into chunks of 1000 if needed
+8. **LanceDB bulk fetch batching** — Stage B batches `get_by_ids` calls at `entity_fetch_batch_size` (default 1000) to keep per-call response memory bounded. Plan should verify that batch size doesn't trigger LanceDB performance pathologies (e.g., per-call overhead dominating)
 
 ## Out of scope (acknowledged, deferred)
 
