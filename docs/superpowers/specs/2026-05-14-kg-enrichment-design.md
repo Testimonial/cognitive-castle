@@ -62,34 +62,47 @@ castle mine / castle reindex
         │     still be visible to this adapter's work-set.
         │
         ├── Step 2: Hydrate + Stage A — per-drawer extract + bounded corpus build
-        │     mention_map = defaultdict(set)   # name → {drawer_ids that mention it}
-        │     corpus_chunks = []                # accumulates drawer texts up to a cap
+        │     mention_map  = defaultdict(set)   # name → {drawer_ids that mention it}
+        │     corpus_freq  = Counter()           # name → freq within the corpus sample
+        │     corpus_chunks = []                 # drawer texts in the corpus sample
         │     corpus_bytes = 0
         │     CORPUS_CAP_BYTES = cfg.entity_classify_corpus_cap  # NEW, default 10 MB
         │
-        │     for batch in chunked(work_ids, 1000):
+        │     # Deterministic shuffle to avoid scan-order bias: the bounded
+        │     # corpus window otherwise covers only the first N drawers in
+        │     # LanceDB's scan order, leaving entities that appear exclusively
+        │     # in later drawers unclassified. Seed by len(work_ids) so the
+        │     # sample is stable for a given palace state (tests can assert
+        │     # deterministic outcomes) but varies as the palace grows.
+        │     work_ids_shuffled = list(work_ids)
+        │     random.Random(len(work_ids_shuffled)).shuffle(work_ids_shuffled)
+        │
+        │     for batch in chunked(work_ids_shuffled, 1000):
         │       for row in col.get_by_ids(batch):
         │         text = row["text"]
-        │         # Per-drawer extract → drives mention_map (covers ALL drawers,
-        │         # regardless of how much text fits in the classify corpus)
-        │         for name in entity_detector.extract_candidates(text, cfg.languages):
+        │         # ONE regex pass per drawer. The per-drawer extract drives
+        │         # mention_map for EVERY drawer; for drawers selected into
+        │         # the corpus window, the same per-drawer counts are summed
+        │         # into corpus_freq. No second extract on combined_text — the
+        │         # earlier design's double-regex pass is eliminated.
+        │         per_drawer = entity_detector.extract_candidates(
+        │           text, cfg.languages
+        │         )
+        │         for name in per_drawer:
         │           mention_map[name].add(row["id"])
         │
-        │         # Build a bounded combined text for Stage B scoring. Mirrors
-        │         # how detect_entities() builds combined_text from sampled files,
-        │         # but here we cap by total bytes (~10 MB ≈ 1250 drawers at 8 KB).
         │         if corpus_bytes < CORPUS_CAP_BYTES:
         │           corpus_chunks.append(text)
         │           corpus_bytes += len(text.encode("utf-8"))
+        │           for name, count in per_drawer.items():
+        │             corpus_freq[name] += count
         │
         │     combined_text = "\n".join(corpus_chunks)
         │     combined_lines = combined_text.splitlines()
-        │     # Corpus-wide candidates for Stage B (frequencies AND scoring use
-        │     # the same text, so freq + scores are consistent — no
-        │     # corpus-wide-freq vs sample-scored mismatch).
-        │     corpus_candidates = entity_detector.extract_candidates(
-        │       combined_text, cfg.languages
-        │     )
+        │     # corpus_freq IS the corpus_candidates dict — same shape, single
+        │     # source of truth. Freq + scoring both come from the same
+        │     # bounded sample, so signal stays consistent.
+        │     corpus_candidates = corpus_freq
         │
         ├── Stage B: classify + promote (consistent corpus-wide signal)
         │     registry = EntityRegistry.load()
@@ -156,10 +169,10 @@ castle mine / castle reindex
 
 ### Performance estimate
 
-- **Stage A (per-drawer extract + corpus build)**: 20K drawers × ~8 KB text. Two regex scans per drawer in the language patterns; estimate 1–5 minutes on this host. Honest range, not optimized
-- **Stage B (classify)**: name-bounded (~10²–10³ unique candidates), one `score_entity` call each against the bounded `combined_text` (≤10 MB). Seconds to ~1 minute
+- **Stage A (per-drawer extract + corpus build)**: 20K drawers × ~8 KB text. ONE `extract_candidates` regex pass per drawer (the earlier draft's double-pass on combined_text is eliminated). Estimate 1–5 minutes on this host
+- **Stage B (classify)**: `score_entity` runs multiple regex passes (dialogue, person-verbs, pronoun proximity, project-verbs, versioned, code-ref) over the FULL `combined_text` (≤10 MB) per candidate. With ~10²–10³ candidates × ~10 MB × ~5 regex passes each: realistically **1–5 minutes**, not seconds. This is the dominant cost
 - **Stage C**: `O(triples)` SQLite inserts in one transaction. Sub-second to seconds at the expected triple count (~200K worst case)
-- **Total**: 2–7 minutes for the user's 20K palace, no hard cap because Phase 2 runs post-mine. Plan can benchmark and tighten if needed
+- **Total**: **3–10 minutes** for the user's 20K palace, no hard cap because Phase 2 runs post-mine. Plan can benchmark Stage B against representative samples and tighten if needed
 
 ### Storage growth
 
@@ -285,10 +298,18 @@ tests/test_kg_enricher.py          (NEW)
     ├── drawer in language outside cfg.languages → no candidates
     ├── corrupt registry JSON → warning + skipped run, no crash
     ├── KG file missing → KnowledgeGraph constructor creates schema, succeeds
-    ├── 1000-drawer batch boundary respected (test with 2500 drawers, expect 3 batches)
-    └── corpus_cap honored — set cap to small value (e.g., 1 KB) and verify
-        combined_text doesn't exceed it; verify mention_map still covers all
-        drawers regardless of the cap
+    ├── 1000-drawer batch boundary respected — fresh palace with 2500 drawers,
+    │     work_ids = 2500, expect 3 batches of (1000, 1000, 500)
+    ├── corpus_cap honored — set cap to small value (e.g., 1 KB) and verify
+    │     combined_text doesn't exceed it; verify mention_map still covers all
+    │     drawers regardless of the cap
+    ├── deterministic shuffle — given the same work_ids set, two runs produce
+    │     the same corpus_chunks ordering (regression for the scan-order bias
+    │     surfaced during spec review)
+    └── shuffle covers entities outside scan-window — palace where entity 'X'
+          appears ONLY in drawers whose LanceDB scan position is past the cap;
+          deterministic shuffle places at least some of those drawers in the
+          window across runs (entity X gets classified, not silently dropped)
 
 tests/test_entity_registry.py      (EXISTING — append)
 ├── add_learned: idempotent when name already present
@@ -325,8 +346,9 @@ tests/test_convo_miner.py          (EXISTING — append)
 3. **LanceDB `to_arrow()` memory profile** — pulling the full id column for a 1M-drawer palace is ~100 MB, possibly fine but worth checking. If problematic, switch to chunked iteration in plan, not in spec
 4. **`extract_candidates` API shape verified** — returns `dict[name, count]` (`entity_detector.py:144`). No risk
 5. **`lookup()` return shape verified** — always returns a dict with `"type"` key ∈ `{person, project, concept, unknown}` (`entity_registry.py:443`). Spec uses explicit `!= "unknown"` checks. No risk
-6. **Stage A time estimate calibration** — 1–5 min for 20K drawers is a guess. Plan should benchmark Stage A on a representative subset before locking expectations
-7. **Memory-cap interaction with rare-but-real entities** — bounded `combined_text` (10 MB) covers ~1250 drawers out of 20K. An entity that ONLY appears in the un-sampled 18,750 drawers gets `mention_map` entries but is absent from `corpus_candidates`, so it never gets classified and (if unregistered) never gets triples. Spec section A notes this trade-off; plan should consider whether the cap is the right default or whether a higher cap is warranted for the user's palace size
+6. **Stage A + Stage B time estimate calibration** — 3–10 min total for 20K drawers is a guess. Stage B (score_entity over 10 MB combined_text per candidate) dominates. Plan should benchmark Stage B on a representative subset before locking expectations
+7. **Sampling-bias mitigation via deterministic shuffle** — random.Random seeded by `len(work_ids)` produces a stable shuffle for a given palace state. An entity that doesn't appear in the ~1250-drawer corpus window after shuffling still gets `mention_map` entries but won't be auto-promoted that run. On the NEXT mine (different `len(work_ids)`), the shuffle changes and the entity may land in-window. Plan should consider whether one mine's window is enough or whether to bump the cap higher for palaces above some size threshold
+8. **score_entity per-candidate cost** — `score_entity` runs ~5 regex passes over the FULL `combined_text` per candidate. With 1000+ candidates × 10 MB text, Stage B is the dominant cost. If profiling shows it's the bottleneck, plan can either lower the cap or cache compiled patterns more aggressively (the existing impl already compiles patterns per call — caching across calls would help)
 
 ## Out of scope (acknowledged, deferred)
 
