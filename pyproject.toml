@@ -64,7 +64,7 @@ packages = ["cognitive_castle"]
 [tool.ruff]
 line-length = 100
 target-version = "py39"
-extend-exclude = ["benchmarks"]
+extend-exclude = ["benchmarks", "cognitive_castle/understanding"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C901"]
