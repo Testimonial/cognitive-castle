@@ -192,6 +192,9 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │            --soar-first / soar_first:true flips to Stage 5 then Stage 4
     │            (requires both --llm-rerank AND --soar-boost on; loud sys.exit(2)
     │            on missing companion flags).
+    ├── Stage 6 (optional, opt-in `--quality-rerank` + `CASTLE_QUALITY_ENABLED=1`):
+    │     deterministic text-quality rerank via vendored `understanding/` package —
+    │     two-tier threshold rule with calibrated defaults (medium ×1.15, high ×1.25)
 ```
 
 ## Key Files for Common Tasks
