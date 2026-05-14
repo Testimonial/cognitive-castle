@@ -18,7 +18,7 @@ Stage 4 (optional): LLM-as-judge re-rank
 Stage 5 (optional): SOAR symbolic boost-tags (4 productions)
 ```
 
-The user maintains a separate project (`~/echelon/`) whose `understanding` submodule implements **31 deterministic text-quality metrics** across 7 categories: readability (Flesch, Gunning Fog), structure (atomicity, completeness), cognitive (sentence length, complexity), semantic (actor / action / object / outcome / trigger), testability (hard constraints, density, negative space), behavioral (scenarios, transitions, branches, observability), depth. Citations: ISO 29148 (requirements engineering), Lucassen 2017 (user-story quality), Sweller 1988 (cognitive load), Flesch 1948 (readability).
+The user maintains a separate project (`~/echelon/`) whose `understanding` submodule implements **31 deterministic text-quality metrics** across **6 categories**: 6 readability metrics, 5 structure metrics, 7 cognitive metrics, 6 semantic metrics, 3 testability metrics, 4 behavioral metrics (6+5+7+6+3+4 = 31). Citations: ISO 29148 (requirements engineering), Lucassen 2017 (user-story quality), Sweller 1988 (cognitive load), Flesch 1948 (readability). The `depth_metrics.py` file in the package exists but isn't part of the public-API metric count per the package's own docstring.
 
 The metrics package was designed for software-requirements documents. **Calibration on Castle's actual chat-drawer data showed the metrics DO discriminate** (see Calibration Evidence below), so a Stage 6 quality rerank is viable.
 
@@ -79,10 +79,6 @@ If the user's palace changes shape materially, the calibration script (`scripts/
 - **No multi-language support** — `understanding` is English-only via spaCy `en_core_web_sm`. Non-English drawers may score low; this is acknowledged, not addressed in this PR
 - **No surfacing of individual metric categories** — only the aggregate `overall_weighted_average` is consumed. The 7-category breakdown is internal to `understanding`
 
-## Pre-implementation gate: re-verify calibration
-
-Before merging, the implementation plan must include re-running the calibration script if the palace has grown materially since 2026-05-14 (e.g., >10% new drawers). The 0.53 and 0.60 thresholds reflect a specific palace state; if that state has drifted, the defaults need updating in the same PR.
-
 ## Architecture & data flow
 
 ```
@@ -128,10 +124,10 @@ Stage 3 (cross-encoder rerank)
 ### Audit line format
 
 ```
-QUALITY: high   (×1.250, score=0.78)       ← score >= 0.60, line shown
-QUALITY: medium (×1.150, score=0.56)       ← 0.53 <= score < 0.60, line shown
-                                             ← score < 0.53: NO line (suppressed)
-QUALITY: FAILED (RuntimeError: ...)        ← module-level failure, ONCE per process
+QUALITY: high (×1.250, score=0.78)        ← score >= 0.60, line shown
+QUALITY: medium (×1.150, score=0.56)      ← 0.53 <= score < 0.60, line shown
+                                            ← score < 0.53: NO line (suppressed)
+QUALITY: FAILED (RuntimeError: ...)       ← module-level failure, ONCE per process
 ```
 
 Below-threshold hits have all four `quality_*` fields populated programmatically; only the console audit line is suppressed (matches SOAR's idiom for "no tags fired").
@@ -143,7 +139,7 @@ Below-threshold hits have all four `quality_*` fields populated programmatically
 | **CLI** (`castle search --quality-rerank ...`) | 25-90ms × ~20 candidates + **+381ms one-time spaCy load** = ~0.9-2.2s | Same (each CLI invocation is a fresh process, so spaCy reloads) |
 | **MCP** (long-running `castle-mcp` server) | First query: +381ms spaCy load. Subsequent: pure rerank cost | 0.5-1.8s |
 
-For CLI-heavy users the cold-load tax is repeated. For MCP-mode (the user's primary consumption path via Claude Code), it's one-time per server process.
+Latency range bounded by the calibration measurement: **38ms/drawer mean** on the user's 100-drawer random sample (range observed 25-90ms across drawer text-length distribution). For CLI-heavy users the cold-load tax is repeated. For MCP-mode (the user's primary consumption path via Claude Code), it's one-time per server process.
 
 ## Component changes / file map
 
@@ -332,12 +328,12 @@ tests/test_config.py                  (EXISTING — append)
 - `ruff format` + `ruff check` clean
 - CLI smoke: `CUDA_VISIBLE_DEVICES="" CASTLE_QUALITY_ENABLED=1 castle search "what did we decide about the embedder" --results 5 --quality-rerank` shows `QUALITY: high (...)` or `QUALITY: medium (...)` audit lines on hits in the appropriate tiers
 - MCP smoke (via Claude Code session): `quality_rerank: true` parameter routes through Stage 6
-- Calibration script committed and runs successfully against the live palace
-- spec date verified and calibration re-run if palace has changed materially since 2026-05-14
+- Calibration script committed (`scripts/calibrate_quality_threshold.py`) and runs successfully against the live palace
+- **Pre-merge re-calibration:** before merging, if the palace has grown materially since 2026-05-14 (rule-of-thumb: >10% new drawers), re-run the calibration script and update `quality_threshold_medium` / `quality_threshold_high` defaults in the same PR to match the new p75 / p90
 
 ## What this unlocks
 
 - A third post-rerank signal (alongside LLM-judge and SOAR) for further differentiating search results
-- An empirical demonstration that the `understanding` package's metrics generalize beyond requirements documents to conversational text
+- An empirical baseline showing the `understanding` package produces non-trivial scores (stdev 0.113, range 0.194-0.756) on conversational text — calibration showed VARIANCE; whether high-scoring drawers are also USEFULLY high-scoring (i.e., more relevant) remains an open question for live use (see risk register #4)
 - The pattern for vendoring local-only sibling packages without creating dep chains
 - A reproducibility tool (calibration script) for future threshold-tuning conversations
