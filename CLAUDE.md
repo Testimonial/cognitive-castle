@@ -88,10 +88,10 @@ cognitive_castle/
 ├── knowledge_graph.py      # Temporal entity-relationship graph (SQLite)
 ├── palace.py               # Shared palace operations
 ├── palace_graph.py         # Room traversal + cross-wing tunnels
-├── backends/               # Pluggable storage backends (LanceDB default, ChromaDB legacy fallback)
+├── backends/               # Storage backend abstraction (LanceDB-only)
 │   ├── base.py             # Abstract interface — implement this for new backends
-│   ├── lancedb_backend.py  # LanceDB implementation (default)
-│   ├── chroma.py           # ChromaDB implementation (legacy fallback via CASTLE_BACKEND=chroma)
+│   ├── lancedb_backend.py  # LanceDB implementation
+│   ├── _utils.py           # Backend utility functions
 │   └── registry.py         # Backend entry-point loader and default selection
 ├── dialect.py              # AAAK compression dialect
 ├── normalize.py            # Transcript format detection + normalization
@@ -104,7 +104,6 @@ cognitive_castle/
 ├── onboarding.py           # Interactive first-run setup
 ├── repair.py               # Palace repair and consistency checks
 ├── dedup.py                # Deduplication
-├── migrate.py              # ChromaDB version migration
 ├── spellcheck.py           # Auto-correct user messages
 ├── exporter.py             # Palace data export
 ├── hooks_cli.py            # Hook management CLI
@@ -158,7 +157,7 @@ Install with `/plugin marketplace add . && /plugin install castle@cognitive-cast
 ## Architecture
 
 ```
-User → CLI / MCP Server → Storage Backend (LanceDB default, ChromaDB legacy fallback)
+User → CLI / MCP Server → Storage Backend (LanceDB)
                         → SQLite (knowledge graph)
 
 Palace structure:
@@ -172,6 +171,7 @@ Index layer (AAAK):
 
 Knowledge Graph:
   ENTITY → PREDICATE → ENTITY (with valid_from / valid_to dates)
+  (KG enrichment Phase 2 of `castle mine` / `reindex`: `kg_enricher.py` walks un-indexed drawers, auto-detects entity candidates via `entity_detector`, promotes high-confidence ones to `entity_registry.json`, writes `(entity, mentioned_in, drawer_id)` triples to `knowledge_graph.sqlite3`; unblocks the `entity-match` SOAR production)
 
 Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`):
   Query
