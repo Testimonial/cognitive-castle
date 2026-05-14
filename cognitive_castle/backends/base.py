@@ -228,6 +228,16 @@ class BaseCollection(ABC):
     @abstractmethod
     def count(self) -> int: ...
 
+    @abstractmethod
+    def list_drawer_ids(self) -> list[str]:
+        """Return every drawer id currently stored in this collection.
+
+        Used by the KG enricher to compute its work-set (all_ids − done_ids).
+        Order is not specified — callers must sort if they need determinism.
+        Returns [] for an empty collection.
+        """
+        ...
+
     # ------------------------------------------------------------------
     # Optional methods with ABC defaults (spec §1.2)
     # ------------------------------------------------------------------
