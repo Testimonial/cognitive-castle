@@ -50,6 +50,35 @@ DECISION_CYCLES = 50  # Upper bound on agent.RunSelf cycles
 RECENCY_THRESHOLD_SEC = 7 * 24 * 3600  # 7 days for "recently-accessed"
 BOOST_CLAMP = (0.1, 10.0)  # Min, max for final compound multiplier
 
+# Map drawer room names (from miners) to the singular memory_types that
+# SOAR's type-match rule expects on ^drawer-type. convo_miner emits plurals
+# ("decisions", "problems") via TOPIC_KEYWORDS; general_extractor emits
+# singulars ("decision", "preference", …). The rule's WME schema is
+# singular, so plurals are aliased here before being pushed.
+_ROOM_TO_MEMORY_TYPE: dict[str, str] = {
+    # Plurals from convo_miner.TOPIC_KEYWORDS
+    "decisions": "decision",
+    "problems": "problem",
+    "preferences": "preference",
+    "milestones": "milestone",
+    # Singulars from general_extractor (identity mappings)
+    "decision": "decision",
+    "preference": "preference",
+    "milestone": "milestone",
+    "problem": "problem",
+    "emotional": "emotional",
+}
+
+
+def _normalize_room_to_memory_type(room: str) -> Optional[str]:
+    """Return the memory_type for a drawer room, or None if room doesn't match.
+
+    Bridges convo_miner's plural topic rooms (e.g. "decisions") and
+    general_extractor's singular memory_types (e.g. "decision") to a single
+    canonical singular value matching ``query_intent.MEMORY_TYPES``.
+    """
+    return _ROOM_TO_MEMORY_TYPE.get(room)
+
 
 def _warn_once(key: str, message: str) -> None:
     """Print a stderr warning ONCE per process for the given key."""
@@ -226,7 +255,7 @@ def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict
     Returns (memory_wmes, top_level_wmes) for later WM cleanup.
     """
     # ── Import here (NOT module-level) to keep query_intent only loaded when SOAR fires ──
-    from .query_intent import MEMORY_TYPES, classify_query
+    from .query_intent import classify_query
 
     input_link = agent.GetInputLink()
     project = os.environ.get("CASTLE_PROJECT", "default")
@@ -271,11 +300,15 @@ def _push_working_memory(agent, hits: list[dict], query: str = "") -> tuple[dict
         entity_match = "true" if hit.get("entity_match") else "false"
         m.CreateStringWME("entity-match", entity_match)
 
-        # ── NEW (PR #4c-type-match): push ^memory.drawer-type when room is a known memory_type ──
-        room = hit.get("room") or ""
-        if room in MEMORY_TYPES:
-            m.CreateStringWME("drawer-type", room)
-        # If room isn't a known type, skip — rule can't fire for this hit.
+        # ── PR #4c-type-match: push ^memory.drawer-type when room maps to a memory_type ──
+        # convo_miner uses plural room names ("decisions", "problems"), while
+        # general_extractor uses singular memory_types. _normalize_room_to_memory_type
+        # bridges both schemes so type-match fires regardless of which miner produced
+        # the drawer.
+        memory_type = _normalize_room_to_memory_type(hit.get("room") or "")
+        if memory_type:
+            m.CreateStringWME("drawer-type", memory_type)
+        # If room doesn't map to a memory_type, skip — rule can't fire for this hit.
 
         memory_wmes[composite_id] = m
         top_level_wmes.append(m)
