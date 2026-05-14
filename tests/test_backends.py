@@ -89,3 +89,19 @@ def test_fts_index_is_created_alongside_vector(tmp_path):
         assert any(v == "d1" for v in first.values())
     else:
         assert "d1" in str(first)
+
+
+def test_list_drawer_ids_empty_palace(collection):
+    """list_drawer_ids returns [] for an empty collection."""
+    assert collection.list_drawer_ids() == []
+
+
+def test_list_drawer_ids_returns_all_ids(collection):
+    """list_drawer_ids returns all stored drawer ids."""
+    collection.add(
+        documents=["alpha text", "beta text", "gamma text"],
+        ids=["id-a", "id-b", "id-c"],
+        metadatas=[{"wing": "w", "room": "r"} for _ in range(3)],
+    )
+    ids = collection.list_drawer_ids()
+    assert sorted(ids) == ["id-a", "id-b", "id-c"]

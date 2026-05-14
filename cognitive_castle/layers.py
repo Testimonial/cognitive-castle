@@ -62,9 +62,7 @@ class Layer0:
             with open(self.path, "r") as f:
                 self._text = f.read().strip()
         else:
-            self._text = (
-                "## L0 — IDENTITY\nNo identity configured. Create ~/.castle/identity.txt"
-            )
+            self._text = "## L0 — IDENTITY\nNo identity configured. Create ~/.castle/identity.txt"
 
         return self._text
 

@@ -1,4 +1,5 @@
 """Tests for _read_castle_env: CASTLE_* with legacy MEMPAL_* fallback."""
+
 import pytest
 
 from cognitive_castle.hooks_cli import _read_castle_env, _DEPRECATED_LEGACY_ENV_WARNED
@@ -62,6 +63,7 @@ def test_hooks_cli_uses_read_castle_env_for_dir(monkeypatch):
     monkeypatch.setenv("MEMPAL_DIR", "/legacy/projects")
     _DEPRECATED_LEGACY_ENV_WARNED.clear()
     from cognitive_castle import hooks_cli
+
     assert hooks_cli._read_castle_env("CASTLE_DIR", "MEMPAL_DIR") == "/legacy/projects"
 
 
@@ -69,4 +71,5 @@ def test_castle_dir_takes_precedence_over_mempal_dir(monkeypatch):
     monkeypatch.setenv("CASTLE_DIR", "/new/projects")
     monkeypatch.setenv("MEMPAL_DIR", "/legacy/projects")
     from cognitive_castle import hooks_cli
+
     assert hooks_cli._read_castle_env("CASTLE_DIR", "MEMPAL_DIR") == "/new/projects"

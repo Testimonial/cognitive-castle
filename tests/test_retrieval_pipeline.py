@@ -1,4 +1,5 @@
 """End-to-end test of the new 3-stage retrieval pipeline."""
+
 import time
 from unittest.mock import patch
 
@@ -22,10 +23,17 @@ def test_pipeline_returns_results_when_flag_enabled(tmp_path, monkeypatch):
     and returns results."""
     palace = str(tmp_path / "palace")
     now = str(int(time.time()))
-    _seed(palace, [
-        ("d1", "JWT authentication for the API", {"wing": "auth", "room": "2026", "ts": now}),
-        ("d2", "the quick brown fox jumps over the lazy dog", {"wing": "misc", "room": "2026", "ts": now}),
-    ])
+    _seed(
+        palace,
+        [
+            ("d1", "JWT authentication for the API", {"wing": "auth", "room": "2026", "ts": now}),
+            (
+                "d2",
+                "the quick brown fox jumps over the lazy dog",
+                {"wing": "misc", "room": "2026", "ts": now},
+            ),
+        ],
+    )
     # Stub the reranker and embedding query vector generation so we don't need bge-m3 download.
     monkeypatch.setenv("CASTLE_USE_NEW_RETRIEVAL_PIPELINE", "true")
     with patch("cognitive_castle.embedding.embed_texts", return_value=[[0.0] * 1024]):

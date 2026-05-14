@@ -418,3 +418,57 @@ def test_embedder_identity_auto_derives_from_model(monkeypatch):
     monkeypatch.setenv("CASTLE_EMBEDDER_IDENTITY", "custom-id")
     cfg = CognitiveCastleConfig()
     assert cfg.embedder_identity == "custom-id"
+
+
+# ── KG enrichment config (Task 1: kg-enrichment-during-ingest) ──────────────
+
+
+def test_entity_promote_threshold_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_promote_threshold == 0.70
+
+
+def test_entity_promote_threshold_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_ENTITY_PROMOTE_THRESHOLD", "0.85")
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_promote_threshold == 0.85
+
+
+def test_entity_score_sample_drawers_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_score_sample_drawers == 20
+
+
+def test_entity_score_sample_drawers_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS", "5")
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_score_sample_drawers == 5
+
+
+def test_entity_fetch_batch_size_default():
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_fetch_batch_size == 1000
+
+
+def test_entity_fetch_batch_size_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_ENTITY_FETCH_BATCH_SIZE", "100")
+    cfg = CognitiveCastleConfig()
+    assert cfg.entity_fetch_batch_size == 100
+
+
+def test_entity_promote_threshold_file_config_override():
+    """Test that file_config can override entity_promote_threshold."""
+    cfg = _make_config_with_file_config({"entity_promote_threshold": 0.80})
+    assert cfg.entity_promote_threshold == 0.80
+
+
+def test_entity_score_sample_drawers_file_config_override():
+    """Test that file_config can override entity_score_sample_drawers."""
+    cfg = _make_config_with_file_config({"entity_score_sample_drawers": 7})
+    assert cfg.entity_score_sample_drawers == 7
+
+
+def test_entity_fetch_batch_size_file_config_override():
+    """Test that file_config can override entity_fetch_batch_size."""
+    cfg = _make_config_with_file_config({"entity_fetch_batch_size": 250})
+    assert cfg.entity_fetch_batch_size == 250

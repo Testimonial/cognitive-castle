@@ -401,6 +401,7 @@ def get_lock_dir() -> str:
 def clean_stale_locks(lock_dir: str, max_age_seconds: int = 86400) -> tuple[int, int]:
     """Delete lock files older than max_age_seconds. Returns (removed, kept)."""
     import time
+
     if not os.path.isdir(lock_dir):
         return 0, 0
     cutoff = time.time() - max_age_seconds

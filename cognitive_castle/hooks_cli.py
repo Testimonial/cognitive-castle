@@ -33,9 +33,7 @@ def _read_castle_env(new_name: str, old_name: str, default: str = "") -> str:
     if old_val is not None:
         if old_name not in _DEPRECATED_LEGACY_ENV_WARNED:
             _DEPRECATED_LEGACY_ENV_WARNED.add(old_name)
-            sys.stderr.write(
-                f"[castle] WARNING: {old_name} is deprecated; rename to {new_name}.\n"
-            )
+            sys.stderr.write(f"[castle] WARNING: {old_name} is deprecated; rename to {new_name}.\n")
         return old_val
     return default
 
@@ -60,8 +58,7 @@ def _state_dir() -> Path:
         if "state_dir_migration" not in _DEPRECATED_LEGACY_ENV_WARNED:
             _DEPRECATED_LEGACY_ENV_WARNED.add("state_dir_migration")
             sys.stderr.write(
-                f"[castle] NOTE: reading legacy state dir {old}; "
-                f"new writes will go to {new}.\n"
+                f"[castle] NOTE: reading legacy state dir {old}; new writes will go to {new}.\n"
             )
         return old
     new.mkdir(parents=True, exist_ok=True)

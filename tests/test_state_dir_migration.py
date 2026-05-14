@@ -17,6 +17,7 @@ def _import_fresh_state_dir():
     """Import _state_dir freshly so it picks up the current HOME env."""
     import importlib
     from cognitive_castle import hooks_cli
+
     importlib.reload(hooks_cli)
     return hooks_cli._state_dir, hooks_cli._DEPRECATED_LEGACY_ENV_WARNED
 

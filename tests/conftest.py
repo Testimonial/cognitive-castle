@@ -32,7 +32,9 @@ os.environ["HOMEPATH"] = os.path.splitdrive(_session_tmp)[1] or _session_tmp
 _original_env["HF_HOME"] = os.environ.get("HF_HOME")
 _real_home = _original_env.get("HOME")
 if _real_home:
-    os.environ["HF_HOME"] = os.environ.get("HF_HOME") or os.path.join(_real_home, ".cache/huggingface")
+    os.environ["HF_HOME"] = os.environ.get("HF_HOME") or os.path.join(
+        _real_home, ".cache/huggingface"
+    )
 
 # Now it is safe to import mempalace modules that trigger initialisation.
 import pytest  # noqa: E402
@@ -131,8 +133,7 @@ def seeded_collection(collection):
             "with connection pooling via pgbouncer.",
             "The React frontend uses TanStack Query for server state management. "
             "All API calls go through a centralized fetch wrapper.",
-            "Sprint planning: migrate auth to passkeys by Q3. "
-            "Evaluate LanceDB for vector search.",
+            "Sprint planning: migrate auth to passkeys by Q3. Evaluate LanceDB for vector search.",
         ],
         metadatas=[
             {

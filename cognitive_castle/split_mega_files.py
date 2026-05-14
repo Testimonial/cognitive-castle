@@ -260,7 +260,7 @@ def main():
         type=str,
         default=None,
         help="Source directory (default: CASTLE_SOURCE_DIR or ~/Desktop/transcripts; "
-             "MEMPALACE_SOURCE_DIR is deprecated but still honored)",
+        "MEMPALACE_SOURCE_DIR is deprecated but still honored)",
     )
     parser.add_argument(
         "--output-dir", type=str, default=None, help="Output directory (default: same as source)"

@@ -4,6 +4,7 @@ Lazy-loaded singleton. Device-aware: picks the GPU model on CUDA, the smaller
 CPU-friendly model otherwise. Public entry point `rerank` returns scores
 aligned to the input candidate order.
 """
+
 from __future__ import annotations
 
 from typing import Optional
@@ -16,6 +17,7 @@ def _cuda_available() -> bool:
     """Return True if a CUDA device is available. Isolated for test mocking."""
     try:
         import torch  # type: ignore
+
         return torch.cuda.is_available()
     except Exception:
         return False
@@ -40,6 +42,7 @@ def _get_reranker(model_name: str, device: str):
     key = (model_name, device)
     if key not in _model_cache:
         from sentence_transformers import CrossEncoder  # local import keeps test mocking simple
+
         _model_cache[key] = CrossEncoder(model_name, device=device)
     return _model_cache[key]
 
@@ -54,6 +57,7 @@ def _is_cuda_oom(exc: BaseException) -> bool:
     """
     try:
         import torch  # type: ignore
+
         if isinstance(exc, torch.cuda.OutOfMemoryError):
             return True
     except (ImportError, AttributeError):
@@ -81,6 +85,7 @@ def rerank(
         return []
     if cfg is None:
         from .config import CognitiveCastleConfig
+
         cfg = CognitiveCastleConfig()
     resolved_device = _resolve_device(device)
     model_name = _pick_model_for_device(resolved_device, cfg)
@@ -89,6 +94,7 @@ def rerank(
     except Exception as e:
         if resolved_device == "cuda" and _is_cuda_oom(e):
             import sys
+
             print(
                 f"[reranker] CUDA load failed ({type(e).__name__}: {e}); "
                 f"falling back to CPU reranker",

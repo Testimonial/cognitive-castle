@@ -539,6 +539,19 @@ class LanceCollection(BaseCollection):
     def count(self) -> int:
         return self._table.count_rows()
 
+    def list_drawer_ids(self) -> list[str]:
+        """LanceDB implementation: scan the id column via to_arrow().
+
+        Materializes the full id list. At ~40 bytes per id string this is
+        ~2 MB for 20K rows, ~10 MB for 100K. Adequate for current palace sizes.
+        """
+        if self._table is None:
+            return []
+        try:
+            return self._table.to_arrow().column("id").to_pylist()
+        except (KeyError, AttributeError):
+            return []
+
     def health(self) -> HealthStatus:
         try:
             self._table.count_rows()
