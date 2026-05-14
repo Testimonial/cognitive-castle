@@ -47,11 +47,36 @@ def enrich_palace(palace_path: str, cfg) -> dict:
 
     mention_map, freq_by_name = _walk_corpus(col, work_ids=work_ids, cfg=cfg)
 
-    # Stage B + Stage C added in Tasks 5 and 6. For now this task's
-    # contract is: work-set + walker work end-to-end; B and C return zero.
+    # ── Stage B: load registry, classify, promote ────────────────────
+    from .entity_registry import EntityRegistry
+
+    palace_dir = Path(palace_path).parent
+    registry = EntityRegistry.load(palace_dir)
+
+    # Determine which drawer_ids are needed for Stage B scoring
+    candidates_to_score = [
+        name for name in freq_by_name if registry.lookup(name).get("type") == "unknown"
+    ]
+    sample_n = cfg.entity_score_sample_drawers
+    score_drawer_ids: set[str] = set()
+    for name in candidates_to_score:
+        score_drawer_ids.update(sorted(mention_map.get(name, ()))[:sample_n])
+
+    text_by_id = _build_text_cache(col, drawer_ids=score_drawer_ids, cfg=cfg)
+
+    promoted = _classify_and_promote(
+        mention_map=mention_map,
+        freq_by_name=freq_by_name,
+        text_by_id=text_by_id,
+        registry=registry,
+        cfg=cfg,
+    )
+    registry.save()
+
+    # Stage C lands in Task 6 — triples_written stays 0 for now
     return _result(
         drawers_scanned=len(work_ids),
-        entities_promoted=0,
+        entities_promoted=len(promoted),
         triples_written=0,
         started=started,
     )
@@ -101,6 +126,67 @@ def _walk_corpus(col, *, work_ids: Iterable[str], cfg) -> tuple[dict, Counter]:
                 freq_by_name[name] += count
 
     return dict(mention_map), freq_by_name
+
+
+def _build_text_cache(col, *, drawer_ids: set[str], cfg) -> dict[str, str]:
+    """Batched bulk fetch. Returns ``{drawer_id: text}`` for the requested
+    ids. Skips the LanceDB vector + metadata columns by reading text only
+    from each returned row."""
+    if not drawer_ids:
+        return {}
+    batch_size = cfg.entity_fetch_batch_size
+    text_by_id: dict[str, str] = {}
+    for batch in batched(sorted(drawer_ids), batch_size):
+        for row in col.get_by_ids(batch):
+            text_by_id[row["id"]] = row["text"]
+    return text_by_id
+
+
+def _classify_and_promote(
+    *,
+    mention_map: dict,
+    freq_by_name: Counter,
+    text_by_id: dict,
+    registry,
+    cfg,
+) -> set[str]:
+    """Stage B: score each unregistered candidate against a per-candidate
+    sample of ~SAMPLE_N drawer texts. Classify. Promote if confident,
+    else drop from mention_map.
+
+    Returns the set of names newly added to the registry by this call.
+    Mutates ``mention_map`` (deletes rejected entries) and ``registry``
+    (adds learned entries). Caller is responsible for ``registry.save()``.
+    """
+    sample_n = cfg.entity_score_sample_drawers
+    threshold = cfg.entity_promote_threshold
+    languages = cfg.languages
+
+    candidates_to_score = [
+        name for name in freq_by_name if registry.lookup(name).get("type") == "unknown"
+    ]
+
+    promoted: set[str] = set()
+    for name in candidates_to_score:
+        sample_ids = sorted(mention_map.get(name, ()))[:sample_n]
+        sample_texts = [text_by_id[did] for did in sample_ids if did in text_by_id]
+        if not sample_texts:
+            # Defensive: no usable sample → reject
+            if name in mention_map:
+                del mention_map[name]
+            continue
+        sample = "\n".join(sample_texts)
+        scores = entity_detector.score_entity(name, sample, sample.splitlines(), languages)
+        cls = entity_detector.classify_entity(name, freq_by_name[name], scores)
+
+        if cls["type"] in ("person", "project") and cls["confidence"] >= threshold:
+            registry.add_learned(name, type=cls["type"], confidence=cls["confidence"])
+            promoted.add(name)
+        else:
+            if name in mention_map:
+                del mention_map[name]
+
+    return promoted
 
 
 def _result(

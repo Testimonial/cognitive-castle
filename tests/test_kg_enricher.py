@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Iterable
 from unittest.mock import MagicMock
 
@@ -212,3 +213,194 @@ def test_query_done_ids_returns_empty_on_corrupt_kg(tmp_path):
 
     result = kg_enricher._query_done_ids(kg_path=str(bad_kg))
     assert result == set()
+
+
+# ── Stage B tests ────────────────────────────────────────────────────────
+
+
+def test_classify_promotes_above_threshold(tmp_path, monkeypatch):
+    """Stage B: a candidate with classifier confidence >= threshold and
+    type in {person, project} gets added to the registry."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+
+    # Stub classifier to return a clean "person, 0.9" verdict for "Riley"
+    monkeypatch.setattr(
+        "cognitive_castle.entity_detector.score_entity",
+        lambda *a, **kw: {
+            "person_score": 10,
+            "project_score": 0,
+            "person_signals": ["dialogue marker (3x)", "addressed directly (2x)"],
+            "project_signals": [],
+        },
+    )
+
+    mention_map = {"Riley": {"d1"}}
+    freq_by_name = Counter({"Riley": 3})
+    text_by_id = {"d1": "Riley went to the store."}
+
+    promoted = kg_enricher._classify_and_promote(
+        mention_map=mention_map,
+        freq_by_name=freq_by_name,
+        text_by_id=text_by_id,
+        registry=registry,
+        cfg=_mock_cfg(threshold=0.70),
+    )
+
+    assert "Riley" in promoted
+    assert "Riley" in registry._data["people"]
+    assert registry._data["people"]["Riley"]["source"] == "learned"
+
+
+def test_classify_skips_unknown_uncertain(tmp_path, monkeypatch):
+    """Below-threshold or 'uncertain' classifications drop the entry from
+    mention_map (no triples will be written for them)."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+
+    # Zero scores → classify_entity returns "uncertain"
+    monkeypatch.setattr(
+        "cognitive_castle.entity_detector.score_entity",
+        lambda *a, **kw: {
+            "person_score": 0,
+            "project_score": 0,
+            "person_signals": [],
+            "project_signals": [],
+        },
+    )
+
+    mention_map = {"weakword": {"d1"}}
+    freq_by_name = Counter({"weakword": 1})
+    text_by_id = {"d1": "weakword appears here."}
+
+    promoted = kg_enricher._classify_and_promote(
+        mention_map=mention_map,
+        freq_by_name=freq_by_name,
+        text_by_id=text_by_id,
+        registry=registry,
+        cfg=_mock_cfg(threshold=0.70),
+    )
+
+    assert not promoted
+    assert "weakword" not in mention_map  # dropped
+
+
+def test_classify_skips_already_registered(tmp_path, monkeypatch):
+    """Pre-registered entities (lookup type != 'unknown') skip scoring
+    entirely; they stay in mention_map untouched."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry._data["people"]["Riley"] = {
+        "source": "onboarding",
+        "contexts": ["personal"],
+        "aliases": [],
+        "relationship": "child",
+        "confidence": 1.0,
+    }
+
+    # score_entity should not be called for Riley at all — stub to raise
+    def _should_not_be_called(*a, **kw):
+        raise AssertionError("score_entity called for known entity")
+
+    monkeypatch.setattr(
+        "cognitive_castle.entity_detector.score_entity",
+        _should_not_be_called,
+    )
+
+    mention_map = {"Riley": {"d1", "d2"}}
+    freq_by_name = Counter({"Riley": 5})
+    text_by_id = {"d1": "x", "d2": "y"}
+
+    promoted = kg_enricher._classify_and_promote(
+        mention_map=mention_map,
+        freq_by_name=freq_by_name,
+        text_by_id=text_by_id,
+        registry=registry,
+        cfg=_mock_cfg(),
+    )
+
+    # No promotion happened, but Riley remains in mention_map for Stage C
+    assert "Riley" in mention_map
+    assert "Riley" not in promoted
+
+
+def test_unknown_type_means_not_registered(tmp_path, monkeypatch):
+    """Regression: lookup() returns {'type': 'unknown'} for missing entries.
+    The check must compare against 'unknown' explicitly, not use truthiness
+    (the truthy-check would skip every entry)."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+
+    # Stub classifier to promote
+    monkeypatch.setattr(
+        "cognitive_castle.entity_detector.score_entity",
+        lambda *a, **kw: {
+            "person_score": 12,
+            "project_score": 0,
+            "person_signals": ["dialogue marker (3x)", "addressed directly (2x)"],
+            "project_signals": [],
+        },
+    )
+
+    mention_map = {"NewPerson": {"d1"}}
+    freq_by_name = Counter({"NewPerson": 3})
+    text_by_id = {"d1": "x"}
+
+    promoted = kg_enricher._classify_and_promote(
+        mention_map=mention_map,
+        freq_by_name=freq_by_name,
+        text_by_id=text_by_id,
+        registry=registry,
+        cfg=_mock_cfg(threshold=0.70),
+    )
+
+    # Promotion happened — proves lookup()['type'] == 'unknown' was recognized
+    # as "not yet registered"
+    assert "NewPerson" in promoted
+
+
+def test_build_text_cache_respects_batch_size(monkeypatch):
+    """_build_text_cache batches col.get_by_ids calls at entity_fetch_batch_size."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = [
+        {"id": f"d{i}", "text": f"text {i}", "wing": "p", "room": "r", "source_file": "f"}
+        for i in range(5)
+    ]
+    col = FakeCollection(rows)
+    call_sizes = []
+    original = col.get_by_ids
+
+    def tracking(ids):
+        ids_list = list(ids)
+        call_sizes.append(len(ids_list))
+        return original(ids_list)
+
+    col.get_by_ids = tracking
+
+    text_by_id = kg_enricher._build_text_cache(
+        col,
+        drawer_ids={f"d{i}" for i in range(5)},
+        cfg=_mock_cfg(fetch_batch=2),
+    )
+
+    # 5 ids → batches of (2, 2, 1)
+    assert sorted(call_sizes) == [1, 2, 2]
+    assert len(text_by_id) == 5
+
+
+def test_build_text_cache_empty():
+    """Empty drawer_ids → empty dict, no fetch calls."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    col = FakeCollection(rows=[])
+    text_by_id = kg_enricher._build_text_cache(col, drawer_ids=set(), cfg=_mock_cfg())
+    assert text_by_id == {}
