@@ -505,3 +505,67 @@ def test_type_match_boost_not_applied_when_types_differ(tmp_path):
         assert "type-match" not in boosted[0]["soar_tags"], (
             "Rule should not fire when query-type != drawer-type"
         )
+
+
+def test_normalize_room_to_memory_type_handles_plurals():
+    """Plural rooms from convo_miner alias to singular memory_types.
+
+    convo_miner.TOPIC_KEYWORDS emits "decisions"/"problems" (plural), while
+    SOAR's type-match rule schema and query_intent.MEMORY_TYPES use singular.
+    The aliasing layer normalizes plurals so type-match fires regardless of
+    which miner produced the drawer.
+    """
+    from cognitive_castle import soar_bridge
+
+    # Plurals from convo_miner
+    assert soar_bridge._normalize_room_to_memory_type("decisions") == "decision"
+    assert soar_bridge._normalize_room_to_memory_type("problems") == "problem"
+
+    # Singulars from general_extractor pass through (identity)
+    assert soar_bridge._normalize_room_to_memory_type("decision") == "decision"
+    assert soar_bridge._normalize_room_to_memory_type("preference") == "preference"
+    assert soar_bridge._normalize_room_to_memory_type("milestone") == "milestone"
+    assert soar_bridge._normalize_room_to_memory_type("problem") == "problem"
+    assert soar_bridge._normalize_room_to_memory_type("emotional") == "emotional"
+
+    # Non-memory-type rooms (technical/planning/architecture/general/diary)
+    # return None — rule must not fire on them
+    assert soar_bridge._normalize_room_to_memory_type("technical") is None
+    assert soar_bridge._normalize_room_to_memory_type("planning") is None
+    assert soar_bridge._normalize_room_to_memory_type("architecture") is None
+    assert soar_bridge._normalize_room_to_memory_type("general") is None
+    assert soar_bridge._normalize_room_to_memory_type("") is None
+
+
+@pytest.mark.soar
+@_requires_sml
+def test_type_match_fires_on_plural_room_from_convo_miner(tmp_path):
+    """Drawer room='decisions' (plural, from convo_miner) → type-match fires.
+
+    Regression for the bug where soar_bridge checked `room in MEMORY_TYPES`
+    directly. MEMORY_TYPES is singular ({decision, preference, ...}) but the
+    bulk of Castle palaces have rooms like "decisions" from convo_miner's
+    TOPIC_KEYWORDS plural scheme. Without aliasing, type-match never fired
+    on real convo-mined palaces.
+    """
+    from cognitive_castle import soar_bridge
+
+    hits = [
+        {
+            "id": "a",
+            "score": 1.0,
+            "wing": "x",
+            "room": "decisions",  # ← plural from convo_miner
+            "source_file": "f",
+            "entity_match": False,
+            "created_at": "2020-01-01T00:00:00Z",  # old — isolates type-match
+        }
+    ]
+    cfg = _mock_cfg(rules_path=_RULES)
+
+    boosted = soar_bridge.apply_soar_boosts(hits, cfg, query="what did we decide about X")
+
+    assert "type-match" in boosted[0]["soar_tags"], (
+        f"type-match must fire on plural room 'decisions'; "
+        f"got soar_tags={boosted[0]['soar_tags']!r}"
+    )
