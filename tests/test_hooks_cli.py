@@ -456,26 +456,23 @@ def test_maybe_auto_ingest_with_env(tmp_path):
                     assert cmd[cmd.index("--mode") + 1] == "projects"
 
 
-def test_maybe_auto_ingest_uses_castle_python(tmp_path):
-    """Spawned mine command uses _castle_python(), not bare sys.executable.
+def test_maybe_auto_ingest_uses_castle_console_script(tmp_path):
+    """Spawned mine command uses the `castle` console script, not python -m.
 
-    Hook subprocesses inherit the harness PATH which on GUI-launched
-    Claude Code may resolve to a system Python without chromadb. The
-    interpreter used here must be the same one the hook itself runs
-    under (typically the venv that owns mempalace).
+    The `castle` console script is in the same venv as the hook's Python
+    interpreter. Spawning it directly avoids the `python -m <name>` pattern
+    which cannot accept the hyphenated distribution name `cognitive-castle`.
     """
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
             with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
-                with patch(
-                    "cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"
-                ):
+                with patch("cognitive_castle.hooks_cli._castle_script", return_value="castle"):
                     with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                         _maybe_auto_ingest()
                         cmd = mock_popen.call_args[0][0]
-                        assert cmd[0] == "/fake/venv/python"
+                        assert cmd[0] == "castle"
 
 
 def test_mine_sync_with_env_uses_projects_mode(tmp_path):
@@ -491,19 +488,17 @@ def test_mine_sync_with_env_uses_projects_mode(tmp_path):
                 assert cmd[cmd.index("--mode") + 1] == "projects"
 
 
-def test_mine_sync_uses_castle_python(tmp_path):
-    """Sync mine command uses _castle_python(), not bare sys.executable."""
+def test_mine_sync_uses_castle_console_script(tmp_path):
+    """Sync mine command uses the `castle` console script, not python -m."""
     mempal_dir = tmp_path / "project"
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
-            with patch(
-                "cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"
-            ):
+            with patch("cognitive_castle.hooks_cli._castle_script", return_value="castle"):
                 with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
                     _mine_sync()
                     cmd = mock_run.call_args[0][0]
-                    assert cmd[0] == "/fake/venv/python"
+                    assert cmd[0] == "castle"
 
 
 def test_maybe_auto_ingest_ignores_transcript_arg_path(tmp_path):
