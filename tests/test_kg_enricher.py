@@ -6,7 +6,6 @@ from typing import Iterable
 from unittest.mock import MagicMock
 
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
 
@@ -161,3 +160,55 @@ def test_select_work_ids_excludes_adapter_done_drawers(tmp_path):
     assert "d1" not in work_ids
     assert "d2" in work_ids
     assert "d3" in work_ids
+
+
+def test_enrich_palace_happy_path_walks_drawers(tmp_path, monkeypatch):
+    """End-to-end through _walk_corpus when work_ids is non-empty.
+    Stage B + Stage C are not implemented in Task 4 — promoted/written stay 0."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = [
+        {
+            "id": "d1",
+            "text": "Riley went home. Riley said hi. Riley laughed.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f1",
+        },
+        {
+            "id": "d2",
+            "text": "Riley discussed code. Riley typed fast. Riley waved.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f2",
+        },
+    ]
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(rows=rows),
+    )
+
+    # Use a fresh palace dir so kg_path doesn't exist yet → done_ids = empty
+    palace_dir = tmp_path / ".castle" / "palace"
+    palace_dir.mkdir(parents=True)
+
+    result = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    assert result["drawers_scanned"] == 2
+    assert result["entities_promoted"] == 0  # Stage B not yet implemented
+    assert result["triples_written"] == 0  # Stage C not yet implemented
+    assert isinstance(result["elapsed_s"], float)
+    assert result["elapsed_s"] >= 0
+
+
+def test_query_done_ids_returns_empty_on_corrupt_kg(tmp_path):
+    """SQLite read errors degrade gracefully — _query_done_ids returns
+    set() instead of raising."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    # Write garbage bytes that aren't a valid SQLite file
+    bad_kg = tmp_path / "knowledge_graph.sqlite3"
+    bad_kg.write_bytes(b"not a sqlite db at all")
+
+    result = kg_enricher._query_done_ids(kg_path=str(bad_kg))
+    assert result == set()
