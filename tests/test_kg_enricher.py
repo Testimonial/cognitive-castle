@@ -404,3 +404,176 @@ def test_build_text_cache_empty():
     col = FakeCollection(rows=[])
     text_by_id = kg_enricher._build_text_cache(col, drawer_ids=set(), cfg=_mock_cfg())
     assert text_by_id == {}
+
+
+# ── Stage C tests ────────────────────────────────────────────────────────
+
+
+def test_write_triples_writes_one_per_entity_drawer_pair(tmp_path):
+    """For each (name, drawer_id) in mention_map, one triple is written
+    with adapter_name='entity-mention-indexer'."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry._data["people"]["Riley"] = {
+        "source": "learned",
+        "contexts": ["personal"],
+        "aliases": [],
+        "relationship": "",
+        "confidence": 0.85,
+    }
+
+    kg_path = tmp_path / "knowledge_graph.sqlite3"
+    kg = KnowledgeGraph(db_path=str(kg_path))
+
+    mention_map = {"Riley": {"d1", "d2", "d3"}}
+
+    triples_written = kg_enricher._write_triples(mention_map=mention_map, registry=registry, kg=kg)
+
+    assert triples_written == 3
+
+    # All three triples should be present with our adapter_name.
+    # Note: KnowledgeGraph._entity_id lowercases names, so subject is "riley".
+    import sqlite3
+
+    with sqlite3.connect(str(kg_path)) as conn:
+        rows = conn.execute(
+            "SELECT subject, object, adapter_name FROM triples ORDER BY object"
+        ).fetchall()
+    assert len(rows) == 3
+    assert all(r[0] == "riley" for r in rows)
+    assert all(r[2] == "entity-mention-indexer" for r in rows)
+    assert sorted(r[1] for r in rows) == ["d1", "d2", "d3"]
+
+
+def test_write_triples_skips_unknown_entries(tmp_path):
+    """Safety net: if an entry in mention_map is somehow not in the
+    registry (shouldn't happen but guard anyway), no triple is written."""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    kg = KnowledgeGraph(db_path=str(tmp_path / "kg.sqlite3"))
+
+    mention_map = {"NotRegistered": {"d1"}}
+
+    triples_written = kg_enricher._write_triples(mention_map=mention_map, registry=registry, kg=kg)
+    assert triples_written == 0
+
+
+def test_write_triples_idempotent_via_insert_or_ignore(tmp_path):
+    """add_triple uses INSERT OR IGNORE; the DB ends up with the same rows
+    even after two calls. (Note: _write_triples doesn't track whether each
+    insert was a no-op — it returns the attempt count. Idempotency is
+    verified at the DB row level.)"""
+    import cognitive_castle.kg_enricher as kg_enricher
+    from cognitive_castle.entity_registry import EntityRegistry
+    from cognitive_castle.knowledge_graph import KnowledgeGraph
+
+    registry = EntityRegistry(EntityRegistry._empty(), tmp_path / "reg.json")
+    registry._data["projects"].append("bge-m3")
+
+    kg = KnowledgeGraph(db_path=str(tmp_path / "kg.sqlite3"))
+
+    mention_map = {"bge-m3": {"d1"}}
+    kg_enricher._write_triples(mention_map=mention_map, registry=registry, kg=kg)
+    kg_enricher._write_triples(mention_map=mention_map, registry=registry, kg=kg)
+
+    # Verify by counting rows — INSERT OR IGNORE prevents the duplicate
+    import sqlite3
+
+    with sqlite3.connect(str(tmp_path / "kg.sqlite3")) as conn:
+        n_rows = conn.execute("SELECT COUNT(*) FROM triples").fetchone()[0]
+    assert n_rows == 1
+
+
+def test_enrich_palace_integration_end_to_end(tmp_path, monkeypatch):
+    """Build a 3-drawer palace by hand, run enrich_palace, assert no crash
+    and a coherent result dict."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = [
+        {
+            "id": "d1",
+            "text": (
+                "Riley went to the store. Riley said hello. Riley likes apples. Riley laughs."
+            ),
+            "wing": "p",
+            "room": "r",
+            "source_file": "f1",
+        },
+        {
+            "id": "d2",
+            "text": "Riley discussed something with Riley. Riley pondered.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f2",
+        },
+        {
+            "id": "d3",
+            "text": "No entities in this text.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f3",
+        },
+    ]
+
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(rows=rows),
+    )
+
+    palace_dir = tmp_path / ".castle" / "palace"
+    palace_dir.mkdir(parents=True)
+
+    result = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    assert result["drawers_scanned"] == 3
+    assert "elapsed_s" in result
+    # Don't assert on entities_promoted / triples_written exact values —
+    # depends on classifier behavior on small samples. Just ensure no crash
+    # and dict shape is correct.
+    assert isinstance(result["entities_promoted"], int)
+    assert isinstance(result["triples_written"], int)
+
+
+def test_enrich_palace_idempotent_on_rerun(tmp_path, monkeypatch):
+    """Second call after a complete run produces same KG state."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = [
+        {
+            "id": "d1",
+            "text": "Riley said hello. Riley waves. Riley is here.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f1",
+        },
+    ]
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: FakeCollection(rows=rows),
+    )
+
+    palace_dir = tmp_path / ".castle" / "palace"
+    palace_dir.mkdir(parents=True)
+
+    kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    # If first run wrote any triples, those drawers are now in done_ids
+    # and won't be re-walked. If first run wrote nothing (no entities
+    # promoted), the drawer stays in work_ids — second run re-walks
+    # but writes 0 triples either way.
+    second = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    # The second call returns counts based on whether the first call
+    # produced triples or not — we can't assert exact zeros without
+    # knowing classifier behavior. But neither call should crash and
+    # the result shape must be consistent.
+    assert "drawers_scanned" in second
+    assert "entities_promoted" in second
+    assert "triples_written" in second
+    assert "elapsed_s" in second

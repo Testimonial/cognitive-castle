@@ -73,11 +73,16 @@ def enrich_palace(palace_path: str, cfg) -> dict:
     )
     registry.save()
 
-    # Stage C lands in Task 6 — triples_written stays 0 for now
+    # ── Stage C: write triples for everything remaining in mention_map ─
+    from .knowledge_graph import KnowledgeGraph
+
+    kg = KnowledgeGraph(db_path=kg_path)
+    triples_written = _write_triples(mention_map=mention_map, registry=registry, kg=kg)
+
     return _result(
         drawers_scanned=len(work_ids),
         entities_promoted=len(promoted),
-        triples_written=0,
+        triples_written=triples_written,
         started=started,
     )
 
@@ -187,6 +192,31 @@ def _classify_and_promote(
                 del mention_map[name]
 
     return promoted
+
+
+def _write_triples(*, mention_map: dict, registry, kg) -> int:
+    """Stage C: write one triple per (name, drawer_id) pair. Returns the
+    count attempted (DB de-duplicates via INSERT OR IGNORE — re-runs are
+    safe even though this counter doesn't know about no-ops).
+
+    Skips entries where the registry lookup returns ``"unknown"`` — a
+    defensive safety net that shouldn't fire in normal Stage B flow but
+    guards against logic regressions.
+    """
+    count = 0
+    for name, drawer_ids in mention_map.items():
+        if registry.lookup(name).get("type") == "unknown":
+            continue
+        for drawer_id in drawer_ids:
+            kg.add_triple(
+                name,
+                "mentioned_in",
+                drawer_id,
+                source_drawer_id=drawer_id,
+                adapter_name=ADAPTER_NAME,
+            )
+            count += 1
+    return count
 
 
 def _result(
