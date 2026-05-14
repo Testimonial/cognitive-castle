@@ -378,6 +378,7 @@ def tool_search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
+    quality_rerank: bool = False,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -408,6 +409,11 @@ def tool_search(
             "error": "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost",
             "soar_boost_skipped": True,
         }
+    # Kill-switch check: quality_rerank requires CASTLE_QUALITY_ENABLED=1
+    if quality_rerank and not _config.quality_enabled:
+        return {
+            "error": "quality_rerank requires CASTLE_QUALITY_ENABLED=1 (kill switch is active to prevent accidental Stage 6 invocation)",
+        }
     result = search_memories(
         sanitized["clean_query"],
         palace_path=_config.palace_path,
@@ -418,6 +424,7 @@ def tool_search(
         llm_rerank=llm_rerank,
         soar_boost=soar_boost,
         soar_first=soar_first,
+        quality_rerank=quality_rerank,
     )
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:
@@ -1458,6 +1465,15 @@ TOOLS = {
                         "Apply SOAR symbolic-rule boost-tags to final scores "
                         "(experimental; requires Soar 9.6+ + SML Python bindings "
                         "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
+                    ),
+                },
+                "quality_rerank": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": (
+                        "Apply Stage 6 deterministic quality rerank via the "
+                        "vendored `understanding` package. Requires CASTLE_QUALITY_ENABLED=1. "
+                        "Off by default."
                     ),
                 },
             },
