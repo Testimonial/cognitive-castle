@@ -106,7 +106,22 @@ def rerank(
         else:
             raise
     pairs = [(query, doc) for doc in candidates]
-    raw_scores = model.predict(pairs)
+    try:
+        raw_scores = model.predict(pairs)
+    except Exception as e:
+        if resolved_device == "cuda" and _is_cuda_oom(e):
+            import sys
+
+            print(
+                f"[reranker] CUDA inference OOM ({type(e).__name__}); falling back to CPU reranker",
+                file=sys.stderr,
+            )
+            resolved_device = "cpu"
+            model_name = _pick_model_for_device(resolved_device, cfg)
+            model = _get_reranker(model_name, resolved_device)
+            raw_scores = model.predict(pairs)
+        else:
+            raise
     return [float(s) for s in raw_scores]
 
 

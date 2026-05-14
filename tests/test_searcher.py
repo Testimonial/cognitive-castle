@@ -244,6 +244,12 @@ def test_search_memories_llm_rerank_false_skips_stage_4(
 
     spy = MagicMock()
     monkeypatch.setattr("cognitive_castle.judge.judge", spy)
+    # Stub the cross-encoder (Stage 3) so these Stage-4 tests never touch the GPU.
+    # Returns a deterministic descending score per candidate position.
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, candidates, **kw: [1.0 - i * 0.1 for i in range(len(candidates))],
+    )
 
     result = search_memories(query="authentication tokens", palace_path=palace_path, n_results=5)
 
@@ -260,6 +266,11 @@ def test_search_memories_llm_rerank_true_calls_judge(
 
     spy = MagicMock(return_value=list(range(10)))
     monkeypatch.setattr("cognitive_castle.judge.judge", spy)
+    # Stub the cross-encoder (Stage 3) so these Stage-4 tests never touch the GPU.
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, candidates, **kw: [1.0 - i * 0.1 for i in range(len(candidates))],
+    )
 
     result = search_memories(
         query="authentication tokens",
@@ -287,6 +298,11 @@ def test_search_memories_llm_rerank_identity_fallback_preserves_stage3_order(
 ):
     """Identity-ordering from judge means final result equals llm_rerank=False output."""
     monkeypatch.setattr("cognitive_castle.judge.judge", lambda *a, **kw: list(range(10)))
+    # Stub the cross-encoder (Stage 3) so these Stage-4 tests never touch the GPU.
+    monkeypatch.setattr(
+        "cognitive_castle.reranker.rerank",
+        lambda query, candidates, **kw: [1.0 - i * 0.1 for i in range(len(candidates))],
+    )
 
     no_llm = search_memories(
         query="authentication tokens", palace_path=palace_path, n_results=5, llm_rerank=False
