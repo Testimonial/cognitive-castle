@@ -61,65 +61,57 @@ castle mine / castle reindex
         │     from a different adapter (e.g., manual castle_kg_add) must
         │     still be visible to this adapter's work-set.
         │
-        ├── Step 2: Hydrate + Stage A — per-drawer extract + bounded corpus build
+        ├── Step 2: Stage A — corpus-wide extract (single regex pass per drawer)
         │     mention_map  = defaultdict(set)   # name → {drawer_ids that mention it}
-        │     corpus_freq  = Counter()           # name → freq within the corpus sample
-        │     corpus_chunks = []                 # drawer texts in the corpus sample
-        │     corpus_bytes = 0
-        │     CORPUS_CAP_BYTES = cfg.entity_classify_corpus_cap  # NEW, default 10 MB
+        │     freq_by_name = Counter()           # name → corpus-wide frequency
         │
-        │     # Deterministic shuffle to avoid scan-order bias: the bounded
-        │     # corpus window otherwise covers only the first N drawers in
-        │     # LanceDB's scan order, leaving entities that appear exclusively
-        │     # in later drawers unclassified. Seed by len(work_ids) so the
-        │     # sample is stable for a given palace state (tests can assert
-        │     # deterministic outcomes) but varies as the palace grows.
-        │     work_ids_shuffled = list(work_ids)
-        │     random.Random(len(work_ids_shuffled)).shuffle(work_ids_shuffled)
-        │
-        │     for batch in chunked(work_ids_shuffled, 1000):
+        │     for batch in chunked(work_ids, 1000):
         │       for row in col.get_by_ids(batch):
-        │         text = row["text"]
-        │         # ONE regex pass per drawer. The per-drawer extract drives
-        │         # mention_map for EVERY drawer; for drawers selected into
-        │         # the corpus window, the same per-drawer counts are summed
-        │         # into corpus_freq. No second extract on combined_text — the
-        │         # earlier design's double-regex pass is eliminated.
         │         per_drawer = entity_detector.extract_candidates(
-        │           text, cfg.languages
+        │           row["text"], cfg.languages
         │         )
-        │         for name in per_drawer:
+        │         for name, count in per_drawer.items():
         │           mention_map[name].add(row["id"])
+        │           freq_by_name[name] += count
         │
-        │         if corpus_bytes < CORPUS_CAP_BYTES:
-        │           corpus_chunks.append(text)
-        │           corpus_bytes += len(text.encode("utf-8"))
-        │           for name, count in per_drawer.items():
-        │             corpus_freq[name] += count
+        │     # No combined_text, no shuffle, no sample window. Every drawer
+        │     # contributes to both mention_map and freq_by_name.
         │
-        │     combined_text = "\n".join(corpus_chunks)
-        │     combined_lines = combined_text.splitlines()
-        │     # corpus_freq IS the corpus_candidates dict — same shape, single
-        │     # source of truth. Freq + scoring both come from the same
-        │     # bounded sample, so signal stays consistent.
-        │     corpus_candidates = corpus_freq
-        │
-        ├── Stage B: classify + promote (consistent corpus-wide signal)
+        ├── Stage B: classify + promote (per-candidate sampling for scoring)
         │     registry = EntityRegistry.load()
-        │     threshold = cfg.entity_promote_threshold   # NEW config, default 0.70
+        │     threshold = cfg.entity_promote_threshold       # NEW, default 0.70
+        │     SAMPLE_N  = cfg.entity_score_sample_drawers    # NEW, default 20
         │
-        │     for name, freq in corpus_candidates.items():
-        │       # lookup() ALWAYS returns a dict with "type" ∈
-        │       # {person, project, concept, unknown}. Check explicitly against
-        │       # "unknown" — truthiness check would mis-classify all names.
-        │       if registry.lookup(name).get("type") != "unknown":
-        │         continue   # already known → keep mention_map entry for Stage C
+        │     # Collect drawer_ids needed for Stage B scoring. Only fetch
+        │     # drawers used to score UNREGISTERED candidates — registered
+        │     # entities skip scoring entirely.
+        │     candidates_to_score = [
+        │       name for name in freq_by_name
+        │       if registry.lookup(name).get("type") == "unknown"
+        │     ]
+        │     score_drawer_ids = set()
+        │     for name in candidates_to_score:
+        │       # Sort the drawer-id set for determinism; take first SAMPLE_N.
+        │       sample_ids = sorted(mention_map[name])[:SAMPLE_N]
+        │       score_drawer_ids.update(sample_ids)
         │
+        │     # One bulk fetch for all scoring samples. text_by_id holds only
+        │     # the drawers needed for Stage B — typically tens of MB at most.
+        │     text_by_id = {
+        │       r["id"]: r["text"]
+        │       for r in col.get_by_ids(sorted(score_drawer_ids))
+        │     }
+        │
+        │     for name in candidates_to_score:
+        │       sample_ids = sorted(mention_map[name])[:SAMPLE_N]
+        │       sample_texts = [text_by_id[did] for did in sample_ids]
+        │       sample = "\n".join(sample_texts)
         │       scores = entity_detector.score_entity(
-        │         name, combined_text, combined_lines, cfg.languages
+        │         name, sample, sample.splitlines(), cfg.languages
         │       )
-        │       cls = entity_detector.classify_entity(name, freq, scores)
-        │
+        │       cls = entity_detector.classify_entity(
+        │         name, freq_by_name[name], scores
+        │       )
         │       if cls["type"] in ("person", "project") and cls["confidence"] ≥ threshold:
         │         registry.add_learned(
         │           name, type=cls["type"], confidence=cls["confidence"]
@@ -127,21 +119,15 @@ castle mine / castle reindex
         │       else:
         │         del mention_map[name]   # uncertain / rejected → no triples
         │
-        │     # Names that appeared ONLY in drawers outside the classify-corpus
-        │     # window are absent from corpus_candidates. They stay in mention_map
-        │     # but only get Stage C triples if they were already registered.
-        │     # This is intentional: unregistered names with too-weak corpus
-        │     # presence to score reliably should not auto-promote.
-        │     for name in list(mention_map):
-        │       if name not in corpus_candidates and \
-        │          registry.lookup(name).get("type") == "unknown":
-        │         del mention_map[name]
-        │
         │     registry.save()
         │
+        │     # No cleanup loop. Every candidate gets scored against drawers
+        │     # that actually mention it; no name is silently dropped due to
+        │     # falling outside a corpus window.
+        │
         └── Stage C: write triples for every entity remaining in mention_map
-              # Includes pre-onboarded entities, not just newly-promoted ones.
-              # Both flow through the same mention_map → KG path.
+              # Includes pre-onboarded entities (skipped scoring in Stage B
+              # but still mapped to drawer_ids) AND newly-promoted ones.
               for name, drawer_ids in mention_map.items():
                 if registry.lookup(name).get("type") == "unknown":
                   continue   # safety net: only emit for confirmed entities
@@ -165,14 +151,31 @@ castle mine / castle reindex
 - **Adapter-scoped** — work-set filter is per-`adapter_name`, so manual `castle_kg_add` entries don't mask un-indexed drawers
 - **Local-only** — regex + signal-counting + JSON registry + SQLite KG. No LLM, no network. `cfg.languages` controls i18n
 - **Stale-tolerant** — drawer_id changes after re-chunking → stale triples reference dead ids; `col.get_by_ids` drops missing rows on read (graceful degradation, no garbage collection)
-- **Signal-consistent** — corpus-wide frequencies AND scoring come from the same `combined_text` (bounded). No mismatch between corpus-wide freq and per-name sample-based scoring
+- **Bias-free sampling** — every candidate gets scored against drawers that actually mention it. No name is silently dropped due to falling outside a corpus window. freq is corpus-wide; scoring sample is per-candidate and consistent with the entity itself
+- **Deterministic** — same palace state produces the same triples. Sampling uses `sorted(mention_map[name])[:N]`, no RNG
+
+### Coverage semantics (known limitation)
+
+The work-set query treats a drawer as "done" if it has any triple from this adapter. Combined with mid-stream entity promotion, this produces a coverage gap:
+
+If entity X gets promoted on mine N, only drawers in mine N's `work_ids` (typically new drawers since the last mine) get `mentioned_in` triples for X. Drawers indexed in earlier mines stay un-tripled for X, even if X appears in them.
+
+**For the bootstrap scenario this is fine.** The first mine after this spec ships has `done_ids = ∅`, so `work_ids = all_ids`. Every entity promoted in that first mine gets full palace coverage. The user's current 20K-drawer palace gets bootstrapped completely on next mine.
+
+**For long-running palaces, late-discovered entities have weaker coverage.** If a user starts mentioning a new person months in, the new person gets promoted in a later mine but only earns triples for drawers added since then. Older conversations stay invisible to entity-match for that person.
+
+Mitigations (out of scope for this spec, deferred):
+- A `Stage B.5: rescan-for-newly-promoted` step that uses LanceDB FTS to find pre-existing drawers mentioning newly-promoted entities. Cheap (one FTS query per newly-promoted name) but adds complexity
+- An explicit `castle kg-rescan` command for users who want to refresh coverage after registry changes
+
+This spec ships the simpler design; the bootstrap case is the common case, and the mitigation can land as a follow-up if late-discovery weakness shows up in practice.
 
 ### Performance estimate
 
-- **Stage A (per-drawer extract + corpus build)**: 20K drawers × ~8 KB text. ONE `extract_candidates` regex pass per drawer (the earlier draft's double-pass on combined_text is eliminated). Estimate 1–5 minutes on this host
-- **Stage B (classify)**: `score_entity` runs multiple regex passes (dialogue, person-verbs, pronoun proximity, project-verbs, versioned, code-ref) over the FULL `combined_text` (≤10 MB) per candidate. With ~10²–10³ candidates × ~10 MB × ~5 regex passes each: realistically **1–5 minutes**, not seconds. This is the dominant cost
+- **Stage A (per-drawer extract)**: 20K drawers × ~8 KB text. ONE `extract_candidates` regex pass per drawer. Estimate **1–3 minutes** on this host
+- **Stage B (classify with per-candidate sampling)**: ~10²–10³ candidates × `score_entity` against a per-candidate sample of ~20 drawer texts (~160 KB each). With ~5 regex passes per call × 160 KB × 1000 candidates: realistically **5–30 seconds**, dominated by the bulk drawer fetch (one LanceDB query). Order of magnitude faster than v3's full-`combined_text` scoring
 - **Stage C**: `O(triples)` SQLite inserts in one transaction. Sub-second to seconds at the expected triple count (~200K worst case)
-- **Total**: **3–10 minutes** for the user's 20K palace, no hard cap because Phase 2 runs post-mine. Plan can benchmark Stage B against representative samples and tighten if needed
+- **Total**: **1–4 minutes** for the user's 20K palace, no hard cap because Phase 2 runs post-mine. Plan can benchmark and tighten if needed
 
 ### Storage growth
 
@@ -181,7 +184,9 @@ KG grows by ~one triple per `(entity, drawer)` mention. Worst-case 20K drawers �
 ### Memory profile
 
 - `mention_map` worst case: a name in every drawer with a set of 20K drawer-id strings (~40 bytes each) = ~800 KB per name. With ~10³ names: ~800 MB upper bound. Realistic case (most names in few drawers): tens of MB
-- `combined_text`: bounded to `cfg.entity_classify_corpus_cap` (default 10 MB)
+- `freq_by_name`: ~10² to 10³ entries × ~50 bytes = KB-scale
+- `text_by_id` for Stage B: cached drawer texts ONLY for ones used to score unregistered candidates. Worst case ~10³ candidates × ~20 sample drawers (with overlap) = thousands of drawers × ~8 KB = tens of MB
+- No `combined_text` corpus exists in this design — the per-candidate sampling means there's no global text buffer
 - If `mention_map` proves too large at very-large-palace scale, plan can switch to a streaming Stage C that flushes triples per-batch rather than holding all mentions in memory
 
 ## Component changes / file map
@@ -199,7 +204,7 @@ KG grows by ~one triple per `(entity, drawer)` mention. Worst-case 20K drawers �
 |---|---|
 | `cognitive_castle/miner.py` | At end of `mine()` (line 985), lazy-import + call `enrich_palace(palace_path, cfg)`. Wrap in `try/except Exception` — never re-raise. On exception, print a one-line warning and continue. On success, print one line: `KG enrichment: scanned N drawers, promoted M, wrote K triples in T.Ts` |
 | `cognitive_castle/convo_miner.py` | Same hook at end of `mine_convos()` (line 379). Inline (not via a shared helper) — the call is 4–5 lines including try/except, and a 3-line helper adds indirection without saving meaningful code |
-| `cognitive_castle/config.py` | Add `entity_promote_threshold` (env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`). Add `entity_classify_corpus_cap` (env `CASTLE_ENTITY_CLASSIFY_CORPUS_CAP` → file_config → default `10_485_760` bytes / 10 MB). If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
+| `cognitive_castle/config.py` | Add `entity_promote_threshold` (env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`). Add `entity_score_sample_drawers` (env `CASTLE_ENTITY_SCORE_SAMPLE_DRAWERS` → file_config → default `20`). If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
 | `cognitive_castle/entity_registry.py` | Add `add_learned(name, type, confidence) -> None` method. Idempotent: if entity already exists, no-op (does not overwrite onboarding-sourced entries). Returns nothing — callers already guard with `lookup(name).get("type")` before calling |
 | `cognitive_castle/backends/base.py` | Add abstract `list_drawer_ids(self) -> list[str]` to `BaseCollection` |
 | `cognitive_castle/backends/lancedb_backend.py` | Implement via `table.to_arrow().column("id").to_pylist()` — materializes the full id list (~2 MB for 20K rows, ~10 MB for 100K) |
@@ -269,10 +274,10 @@ tests/test_kg_enricher.py          (NEW)
 │   ├── correctly treats "unknown" type as not-yet-registered (regression for
 │   │     the truthy-check bug surfaced during spec review)
 │   ├── drops mention_map entries for rejected candidates
-│   ├── drops mention_map entries for names that appear ONLY outside the
-│   │     classify-corpus window (when unregistered)
-│   ├── KEEPS mention_map entries for names that appear outside the window
-│   │     when ALREADY registered (so onboarded entities still get triples)
+│   ├── per-candidate sample uses sorted(mention_map[name])[:SAMPLE_N] —
+│   │     deterministic across runs
+│   ├── bulk fetch — score_drawer_ids union pre-computed, one col.get_by_ids
+│   │     call (no per-candidate LanceDB round-trip)
 │   └── promotes only types "person"/"project" (not "uncertain"/"concept")
 │
 ├── write_triples (Stage C)
@@ -300,16 +305,14 @@ tests/test_kg_enricher.py          (NEW)
     ├── KG file missing → KnowledgeGraph constructor creates schema, succeeds
     ├── 1000-drawer batch boundary respected — fresh palace with 2500 drawers,
     │     work_ids = 2500, expect 3 batches of (1000, 1000, 500)
-    ├── corpus_cap honored — set cap to small value (e.g., 1 KB) and verify
-    │     combined_text doesn't exceed it; verify mention_map still covers all
-    │     drawers regardless of the cap
-    ├── deterministic shuffle — given the same work_ids set, two runs produce
-    │     the same corpus_chunks ordering (regression for the scan-order bias
-    │     surfaced during spec review)
-    └── shuffle covers entities outside scan-window — palace where entity 'X'
-          appears ONLY in drawers whose LanceDB scan position is past the cap;
-          deterministic shuffle places at least some of those drawers in the
-          window across runs (entity X gets classified, not silently dropped)
+    ├── per-candidate sample size honored — set SAMPLE_N=2 and verify
+    │     score_entity receives a sample built from at most 2 drawers per name
+    ├── rare entities still get classified — palace where entity 'X' appears
+    │     in exactly 1 drawer; mention_map[X] = {one_id}; X is included in
+    │     candidates_to_score; sample is that one drawer's text (no bias-driven
+    │     silent drop, regression for the v3 scan-window bias)
+    └── coverage-gap acknowledged — entity promoted on mine 2 does NOT get
+          triples for drawers added on mine 1 (documented limitation, not bug)
 
 tests/test_entity_registry.py      (EXISTING — append)
 ├── add_learned: idempotent when name already present
@@ -346,15 +349,17 @@ tests/test_convo_miner.py          (EXISTING — append)
 3. **LanceDB `to_arrow()` memory profile** — pulling the full id column for a 1M-drawer palace is ~100 MB, possibly fine but worth checking. If problematic, switch to chunked iteration in plan, not in spec
 4. **`extract_candidates` API shape verified** — returns `dict[name, count]` (`entity_detector.py:144`). No risk
 5. **`lookup()` return shape verified** — always returns a dict with `"type"` key ∈ `{person, project, concept, unknown}` (`entity_registry.py:443`). Spec uses explicit `!= "unknown"` checks. No risk
-6. **Stage A + Stage B time estimate calibration** — 3–10 min total for 20K drawers is a guess. Stage B (score_entity over 10 MB combined_text per candidate) dominates. Plan should benchmark Stage B on a representative subset before locking expectations
-7. **Sampling-bias mitigation via deterministic shuffle** — random.Random seeded by `len(work_ids)` produces a stable shuffle for a given palace state. An entity that doesn't appear in the ~1250-drawer corpus window after shuffling still gets `mention_map` entries but won't be auto-promoted that run. On the NEXT mine (different `len(work_ids)`), the shuffle changes and the entity may land in-window. Plan should consider whether one mine's window is enough or whether to bump the cap higher for palaces above some size threshold
-8. **score_entity per-candidate cost** — `score_entity` runs ~5 regex passes over the FULL `combined_text` per candidate. With 1000+ candidates × 10 MB text, Stage B is the dominant cost. If profiling shows it's the bottleneck, plan can either lower the cap or cache compiled patterns more aggressively (the existing impl already compiles patterns per call — caching across calls would help)
+6. **Stage A time estimate calibration** — 1–3 min for 20K drawers is a guess. Plan should benchmark on a representative subset before locking expectations
+7. **score_entity per-candidate behavior on small samples** — the existing `score_entity` was designed against larger combined corpora (e.g., onboarding's 50 KB). On a ~160 KB per-candidate sample, dialogue-marker heuristics that need `>=2` hits may not fire even for real persons. Plan should verify classifier behavior empirically on small samples and adjust SAMPLE_N default if needed
+8. **LanceDB bulk fetch size** — Stage B's `col.get_by_ids(sorted(score_drawer_ids))` may request thousands of ids at once. Verify LanceDB's `get_by_ids` handles that gracefully (not a sqlite IN-clause hitting a limit). Fallback: batch the bulk fetch into chunks of 1000 if needed
 
 ## Out of scope (acknowledged, deferred)
 
 - **`same-project` SOAR production unblock** — needs per-project wing detection during ingest (folder, git remote, …). Separate spec
 - **`stale-penalty` SOAR production** — needs "what counts as access" design + access-count persistence in KG/SMem. Separate spec
 - **Real entity-entity triple extraction** — would enable `fact_checker.py`, temporal queries, real KG reasoning. Adds LLM dependency to ingest. Future spec if/when the simpler entity-mention indexing proves insufficient
+- **Stage B.5 rescan-for-newly-promoted** — fixes the coverage-semantics limitation (late-discovered entities miss old drawers). FTS-based rescan would be cheap (one query per newly-promoted name) but adds a stage. Ship the simpler design first; add this if late-discovery weakness shows up in practice
+- **`castle kg-rescan` command** — explicit user-triggered re-processing after registry edits. Same motivation as Stage B.5; same out-of-scope rationale
 
 ## What this unlocks
 
