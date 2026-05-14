@@ -61,44 +61,68 @@ castle mine / castle reindex
         │     from a different adapter (e.g., manual castle_kg_add) must
         │     still be visible to this adapter's work-set.
         │
-        ├── Step 2: Hydrate + Stage A — corpus-wide signal accumulation
-        │     mention_map  = defaultdict(set)   # name → {drawer_ids that mention it}
-        │     freq_by_name = Counter()          # name → total occurrences across corpus
+        ├── Step 2: Hydrate + Stage A — per-drawer extract + bounded corpus build
+        │     mention_map = defaultdict(set)   # name → {drawer_ids that mention it}
+        │     corpus_chunks = []                # accumulates drawer texts up to a cap
+        │     corpus_bytes = 0
+        │     CORPUS_CAP_BYTES = cfg.entity_classify_corpus_cap  # NEW, default 10 MB
         │
         │     for batch in chunked(work_ids, 1000):
         │       for row in col.get_by_ids(batch):
         │         text = row["text"]
-        │         candidates = entity_detector.extract_candidates(text, cfg.languages)
-        │         for name, count in candidates.items():
+        │         # Per-drawer extract → drives mention_map (covers ALL drawers,
+        │         # regardless of how much text fits in the classify corpus)
+        │         for name in entity_detector.extract_candidates(text, cfg.languages):
         │           mention_map[name].add(row["id"])
-        │           freq_by_name[name] += count
         │
-        │     RATIONALE: corpus-wide walker (not EntityRegistry.learn_from_text)
-        │     because cross-drawer signal aggregation matters. A name with weak
-        │     signal in each of 100 drawers should promote; learn_from_text()
-        │     runs per-text and would reject each occurrence in isolation.
+        │         # Build a bounded combined text for Stage B scoring. Mirrors
+        │         # how detect_entities() builds combined_text from sampled files,
+        │         # but here we cap by total bytes (~10 MB ≈ 1250 drawers at 8 KB).
+        │         if corpus_bytes < CORPUS_CAP_BYTES:
+        │           corpus_chunks.append(text)
+        │           corpus_bytes += len(text.encode("utf-8"))
         │
-        ├── Stage B: classify + promote
+        │     combined_text = "\n".join(corpus_chunks)
+        │     combined_lines = combined_text.splitlines()
+        │     # Corpus-wide candidates for Stage B (frequencies AND scoring use
+        │     # the same text, so freq + scores are consistent — no
+        │     # corpus-wide-freq vs sample-scored mismatch).
+        │     corpus_candidates = entity_detector.extract_candidates(
+        │       combined_text, cfg.languages
+        │     )
+        │
+        ├── Stage B: classify + promote (consistent corpus-wide signal)
         │     registry = EntityRegistry.load()
         │     threshold = cfg.entity_promote_threshold   # NEW config, default 0.70
         │
-        │     for name, freq in freq_by_name.items():
-        │       if registry.lookup(name).get("type"):
-        │         continue   # already known — fall through to Stage C
+        │     for name, freq in corpus_candidates.items():
+        │       # lookup() ALWAYS returns a dict with "type" ∈
+        │       # {person, project, concept, unknown}. Check explicitly against
+        │       # "unknown" — truthiness check would mis-classify all names.
+        │       if registry.lookup(name).get("type") != "unknown":
+        │         continue   # already known → keep mention_map entry for Stage C
         │
-        │       # score_entity needs a representative sample, not every text.
-        │       # Use a concatenated sample of up to N=5 drawer texts.
-        │       sample = sample_texts(mention_map[name], rows_index, max=5)
-        │       scores = entity_detector.score_entity(name, sample,
-        │                                             sample.splitlines(),
-        │                                             cfg.languages)
+        │       scores = entity_detector.score_entity(
+        │         name, combined_text, combined_lines, cfg.languages
+        │       )
         │       cls = entity_detector.classify_entity(name, freq, scores)
         │
         │       if cls["type"] in ("person", "project") and cls["confidence"] ≥ threshold:
-        │         registry.add_learned(name, type=cls["type"],
-        │                              confidence=cls["confidence"])
+        │         registry.add_learned(
+        │           name, type=cls["type"], confidence=cls["confidence"]
+        │         )
         │       else:
         │         del mention_map[name]   # uncertain / rejected → no triples
+        │
+        │     # Names that appeared ONLY in drawers outside the classify-corpus
+        │     # window are absent from corpus_candidates. They stay in mention_map
+        │     # but only get Stage C triples if they were already registered.
+        │     # This is intentional: unregistered names with too-weak corpus
+        │     # presence to score reliably should not auto-promote.
+        │     for name in list(mention_map):
+        │       if name not in corpus_candidates and \
+        │          registry.lookup(name).get("type") == "unknown":
+        │         del mention_map[name]
         │
         │     registry.save()
         │
@@ -106,7 +130,7 @@ castle mine / castle reindex
               # Includes pre-onboarded entities, not just newly-promoted ones.
               # Both flow through the same mention_map → KG path.
               for name, drawer_ids in mention_map.items():
-                if not registry.lookup(name).get("type"):
+                if registry.lookup(name).get("type") == "unknown":
                   continue   # safety net: only emit for confirmed entities
                 for drawer_id in drawer_ids:
                   kg.add_triple(
@@ -128,13 +152,24 @@ castle mine / castle reindex
 - **Adapter-scoped** — work-set filter is per-`adapter_name`, so manual `castle_kg_add` entries don't mask un-indexed drawers
 - **Local-only** — regex + signal-counting + JSON registry + SQLite KG. No LLM, no network. `cfg.languages` controls i18n
 - **Stale-tolerant** — drawer_id changes after re-chunking → stale triples reference dead ids; `col.get_by_ids` drops missing rows on read (graceful degradation, no garbage collection)
+- **Signal-consistent** — corpus-wide frequencies AND scoring come from the same `combined_text` (bounded). No mismatch between corpus-wide freq and per-name sample-based scoring
 
 ### Performance estimate
 
-- 20K drawers × ~8 KB text = 160 MB regex scan. CPU-bound, expect <60s for Stage A on this host
-- Stage B is name-bounded (~10²–10³ unique candidates, ~5 sample-texts each), seconds
-- Stage C is `O(triples)` SQLite inserts in one transaction
-- Total bound: a few minutes for the user's 20K palace, no hard cap because Phase 2 runs post-mine
+- **Stage A (per-drawer extract + corpus build)**: 20K drawers × ~8 KB text. Two regex scans per drawer in the language patterns; estimate 1–5 minutes on this host. Honest range, not optimized
+- **Stage B (classify)**: name-bounded (~10²–10³ unique candidates), one `score_entity` call each against the bounded `combined_text` (≤10 MB). Seconds to ~1 minute
+- **Stage C**: `O(triples)` SQLite inserts in one transaction. Sub-second to seconds at the expected triple count (~200K worst case)
+- **Total**: 2–7 minutes for the user's 20K palace, no hard cap because Phase 2 runs post-mine. Plan can benchmark and tighten if needed
+
+### Storage growth
+
+KG grows by ~one triple per `(entity, drawer)` mention. Worst-case 20K drawers × ~10 unique entities each = 200K triples. At ~100 bytes per SQLite row that's ~20 MB added to `knowledge_graph.sqlite3`. Registry JSON grows by entries for each newly-promoted entity (small — KB-scale at most).
+
+### Memory profile
+
+- `mention_map` worst case: a name in every drawer with a set of 20K drawer-id strings (~40 bytes each) = ~800 KB per name. With ~10³ names: ~800 MB upper bound. Realistic case (most names in few drawers): tens of MB
+- `combined_text`: bounded to `cfg.entity_classify_corpus_cap` (default 10 MB)
+- If `mention_map` proves too large at very-large-palace scale, plan can switch to a streaming Stage C that flushes triples per-batch rather than holding all mentions in memory
 
 ## Component changes / file map
 
@@ -151,7 +186,7 @@ castle mine / castle reindex
 |---|---|
 | `cognitive_castle/miner.py` | At end of `mine()` (line 985), lazy-import + call `enrich_palace(palace_path, cfg)`. Wrap in `try/except Exception` — never re-raise. On exception, print a one-line warning and continue. On success, print one line: `KG enrichment: scanned N drawers, promoted M, wrote K triples in T.Ts` |
 | `cognitive_castle/convo_miner.py` | Same hook at end of `mine_convos()` (line 379). Inline (not via a shared helper) — the call is 4–5 lines including try/except, and a 3-line helper adds indirection without saving meaningful code |
-| `cognitive_castle/config.py` | Add `entity_promote_threshold` property: env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`. If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
+| `cognitive_castle/config.py` | Add `entity_promote_threshold` (env `CASTLE_ENTITY_PROMOTE_THRESHOLD` → file_config → default `0.70`). Add `entity_classify_corpus_cap` (env `CASTLE_ENTITY_CLASSIFY_CORPUS_CAP` → file_config → default `10_485_760` bytes / 10 MB). If `cfg.languages` doesn't already exist, add it with env `CASTLE_LANGUAGES` (comma-separated) → file_config → default `("en",)` |
 | `cognitive_castle/entity_registry.py` | Add `add_learned(name, type, confidence) -> None` method. Idempotent: if entity already exists, no-op (does not overwrite onboarding-sourced entries). Returns nothing — callers already guard with `lookup(name).get("type")` before calling |
 | `cognitive_castle/backends/base.py` | Add abstract `list_drawer_ids(self) -> list[str]` to `BaseCollection` |
 | `cognitive_castle/backends/lancedb_backend.py` | Implement via `table.to_arrow().column("id").to_pylist()` — materializes the full id list (~2 MB for 20K rows, ~10 MB for 100K) |
@@ -217,9 +252,15 @@ tests/test_kg_enricher.py          (NEW)
 ├── classify_and_promote (Stage B)
 │   ├── promotes candidates with confidence ≥ threshold
 │   ├── skips candidates below threshold
-│   ├── skips entities already in registry (does not re-classify)
+│   ├── skips entities already in registry (lookup type ≠ "unknown")
+│   ├── correctly treats "unknown" type as not-yet-registered (regression for
+│   │     the truthy-check bug surfaced during spec review)
 │   ├── drops mention_map entries for rejected candidates
-│   └── promotes only types "person"/"project" (not "uncertain")
+│   ├── drops mention_map entries for names that appear ONLY outside the
+│   │     classify-corpus window (when unregistered)
+│   ├── KEEPS mention_map entries for names that appear outside the window
+│   │     when ALREADY registered (so onboarded entities still get triples)
+│   └── promotes only types "person"/"project" (not "uncertain"/"concept")
 │
 ├── write_triples (Stage C)
 │   ├── writes one triple per (entity, drawer_id) pair
@@ -244,7 +285,10 @@ tests/test_kg_enricher.py          (NEW)
     ├── drawer in language outside cfg.languages → no candidates
     ├── corrupt registry JSON → warning + skipped run, no crash
     ├── KG file missing → KnowledgeGraph constructor creates schema, succeeds
-    └── 1000-drawer batch boundary respected (test with 2500 drawers, expect 3 batches)
+    ├── 1000-drawer batch boundary respected (test with 2500 drawers, expect 3 batches)
+    └── corpus_cap honored — set cap to small value (e.g., 1 KB) and verify
+        combined_text doesn't exceed it; verify mention_map still covers all
+        drawers regardless of the cap
 
 tests/test_entity_registry.py      (EXISTING — append)
 ├── add_learned: idempotent when name already present
@@ -279,8 +323,10 @@ tests/test_convo_miner.py          (EXISTING — append)
 1. **`classify_entity` return-type surface forms** — the `cls["type"]` value may include surface forms beyond `"person"` / `"project"` / `"uncertain"` (possibly `"persona"` from the `_tag_as_persona` path in `entity_detector.py:550`). Plan should grep entity_detector for actual return-type values before locking the "promote only person/project" condition
 2. **Empty registry on disk** — the user's machine has no `entity_registry.json` today (onboarding never run). Test fixtures must create it (or rely on `EntityRegistry.load()` empty-default path). Plan should verify that path works without onboarding having been run
 3. **LanceDB `to_arrow()` memory profile** — pulling the full id column for a 1M-drawer palace is ~100 MB, possibly fine but worth checking. If problematic, switch to chunked iteration in plan, not in spec
-4. **`extract_candidates` API shape** — section 1 assumes `extract_candidates(text, languages) -> dict[name, count]`. Plan should verify the actual return shape matches (vs. e.g., `list[name]`) and adjust the walker pseudocode accordingly
-5. **`score_entity` text+lines parameter** — the walker passes a sample text and `sample.splitlines()` separately. Plan should verify that's the expected call shape (some signal-counting heuristics may need pre-tokenized text)
+4. **`extract_candidates` API shape verified** — returns `dict[name, count]` (`entity_detector.py:144`). No risk
+5. **`lookup()` return shape verified** — always returns a dict with `"type"` key ∈ `{person, project, concept, unknown}` (`entity_registry.py:443`). Spec uses explicit `!= "unknown"` checks. No risk
+6. **Stage A time estimate calibration** — 1–5 min for 20K drawers is a guess. Plan should benchmark Stage A on a representative subset before locking expectations
+7. **Memory-cap interaction with rare-but-real entities** — bounded `combined_text` (10 MB) covers ~1250 drawers out of 20K. An entity that ONLY appears in the un-sampled 18,750 drawers gets `mention_map` entries but is absent from `corpus_candidates`, so it never gets classified and (if unregistered) never gets triples. Spec section A notes this trade-off; plan should consider whether the cap is the right default or whether a higher cap is warranted for the user's palace size
 
 ## Out of scope (acknowledged, deferred)
 
@@ -292,7 +338,7 @@ tests/test_convo_miner.py          (EXISTING — append)
 
 After this spec ships:
 
-- `entity-match` SOAR production fires on real queries against entity-rich drawers (currently 100% dormant)
+- `entity-match` SOAR production fires when **a query mentions a named entity** (person/project/concept) that the registry knows about. Technical-topic queries with no entity names (e.g., "SOAR boost-tags retrieval pipeline") still won't trigger it — that's an inherent limit of the rule's design, not a bug
 - KG-hop retrieval (Stage 1 of the search pipeline) starts contributing actual results instead of always returning empty
 - The user's `~/.castle/palace` self-heals on next `castle mine`, retroactively indexing the 20K-drawer corpus that's been silent for `entity-match` since reindex
 - Future onboarding flows can continue to seed the registry; this spec's adapter respects pre-existing entries and only adds learned ones
