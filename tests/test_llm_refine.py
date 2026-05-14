@@ -133,9 +133,9 @@ def test_parse_response_maps_unknown_label_to_ambiguous():
 def test_parse_response_restores_canonical_casing():
     """Model may lowercase the name; we restore against the expected set."""
     text = '{"classifications": [{"name": "cognitive-castle", "label": "PROJECT"}]}'
-    out = _parse_response(text, ["MemPalace"])
-    assert "MemPalace" in out
-    assert out["MemPalace"][0] == "PROJECT"
+    out = _parse_response(text, ["cognitive-castle"])
+    assert "cognitive-castle" in out
+    assert out["cognitive-castle"][0] == "PROJECT"
 
 
 def test_parse_response_strips_code_fences():

@@ -344,7 +344,7 @@ class TestHyphenatedWingNormalization:
 
         palace_graph.create_tunnel("castle_public", "auth", "wing_people", "users")
 
-        assert len(palace_graph.list_tunnels("mempalace-public")) == 1
+        assert len(palace_graph.list_tunnels("castle-public")) == 1
         assert len(palace_graph.list_tunnels("castle_public")) == 1
 
     def test_follow_tunnels_matches_hyphenated_wing(self, tmp_path, monkeypatch):
@@ -352,7 +352,7 @@ class TestHyphenatedWingNormalization:
 
         palace_graph.create_tunnel("castle_public", "auth", "wing_people", "users")
 
-        by_hyphen = palace_graph.follow_tunnels("mempalace-public", "auth")
+        by_hyphen = palace_graph.follow_tunnels("castle-public", "auth")
         by_under = palace_graph.follow_tunnels("castle_public", "auth")
         assert len(by_hyphen) == 1
         assert len(by_under) == 1

@@ -396,7 +396,7 @@ def test_merge_primary_wins_case_insensitive():
         "projects": [],
         "uncertain": [
             {
-                "name": "MemPalace",
+                "name": "Cognitive-Castle",
                 "type": "uncertain",
                 "confidence": 0.4,
                 "frequency": 6,
@@ -405,7 +405,7 @@ def test_merge_primary_wins_case_insensitive():
         ],
     }
     merged = _merge_detected(primary, secondary)
-    # `MemPalace` (uncertain) is deduped against `mempalace` (project) case-insensitively
+    # `Cognitive-Castle` (uncertain) is deduped against `cognitive-castle` (project) case-insensitively
     assert len(merged["projects"]) == 1
     assert len(merged["uncertain"]) == 0
 
