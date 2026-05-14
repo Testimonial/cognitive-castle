@@ -286,8 +286,12 @@ tests/test_kg_enricher.py          (NEW)
 │   ├── drops mention_map entries for rejected candidates
 │   ├── per-candidate sample uses sorted(mention_map[name])[:SAMPLE_N] —
 │   │     deterministic across runs
-│   ├── bulk fetch — score_drawer_ids union pre-computed, one col.get_by_ids
-│   │     call (no per-candidate LanceDB round-trip)
+│   ├── bulk fetch — score_drawer_ids union pre-computed, batched
+│   │     col.get_by_ids calls (no per-candidate LanceDB round-trip;
+│   │     batch size bounded by entity_fetch_batch_size)
+│   ├── entity_fetch_batch_size honored — set to 2, populate >2
+│   │     score_drawer_ids, assert multiple get_by_ids invocations
+│   │     and that each batch contains ≤2 ids
 │   └── promotes only types "person"/"project" (not "uncertain"/"concept")
 │
 ├── write_triples (Stage C)
@@ -362,6 +366,7 @@ tests/test_convo_miner.py          (EXISTING — append)
 6. **Stage A time estimate calibration** — 1–3 min for 20K drawers is a guess. Plan should benchmark on a representative subset before locking expectations
 7. **score_entity per-candidate behavior on small samples** — the existing `score_entity` was designed against larger combined corpora (e.g., onboarding's 50 KB). On a ~160 KB per-candidate sample, dialogue-marker heuristics that need `>=2` hits may not fire even for real persons. Plan should verify classifier behavior empirically on small samples and adjust SAMPLE_N default if needed
 8. **LanceDB bulk fetch batching** — Stage B batches `get_by_ids` calls at `entity_fetch_batch_size` (default 1000) to keep per-call response memory bounded. Plan should verify that batch size doesn't trigger LanceDB performance pathologies (e.g., per-call overhead dominating)
+9. **Pattern compilation caching in `entity_detector`** — `score_entity` calls `_build_patterns(name, langs)` per call, which likely compiles regexes from scratch. Stage B invokes `score_entity` ~10²-10³ times; if patterns aren't cached across calls, those compilations could dominate Stage B's wall-clock time. Plan should grep `entity_detector.py` for `_build_patterns` and verify either it caches internally or our enricher caches per-language compiled patterns externally. If neither, add a `@functools.lru_cache` to `_build_patterns` as a small optimization
 
 ## Out of scope (acknowledged, deferred)
 
