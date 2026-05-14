@@ -182,6 +182,11 @@ def _print_search_results(result: dict, query: str) -> None:
             mul = float(hit.get("soar_boost", 1.0))
             pre = round(float(hit.get("score_pre_soar", score)), 3)
             print(f"      SOAR:   {', '.join(soar_tags)} (×{mul:.3f}, {pre} → {score})")
+        quality_tier = hit.get("quality_tier")
+        if quality_tier is not None:
+            q_score = float(hit.get("quality_score", 0.0))
+            q_boost = float(hit.get("quality_boost", 1.0))
+            print(f"      QUALITY: {quality_tier} (×{q_boost:.3f}, score={q_score:.2f})")
         print()
         print(f"      {text}\n")
         print(f"  {'─' * 56}")
@@ -196,6 +201,7 @@ def search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
+    quality_rerank: bool = False,
 ):
     """CLI entry point.
 
@@ -207,6 +213,8 @@ def search(
     Args:
         llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
             cross-encoder (Stage 3). Default False — no behavior change.
+        quality_rerank: When True, appends Stage 6 deterministic quality rerank
+            after Stages 4 and 5. Default False.
 
     Raises SearchError if the pipeline fails. Returns None either way (this is
     a print-only function — programmatic callers should use `search_memories`).
@@ -223,6 +231,7 @@ def search(
             llm_rerank=llm_rerank,
             soar_boost=soar_boost,
             soar_first=soar_first,
+            quality_rerank=quality_rerank,
         )
     except EmbedderIdentityMismatchError:
         # Surface the friendly migration prompt — don't wrap as SearchError.
@@ -246,6 +255,7 @@ def search_memories(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
+    quality_rerank: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -272,6 +282,8 @@ def search_memories(
             cross-encoder (Stage 3). Default False — no behavior change.
         soar_boost: When True, appends Stage 5 SOAR symbolic boost-tags after
             Stage 4 (or Stage 3 if llm_rerank is False). Default False.
+        quality_rerank: When True, appends Stage 6 deterministic quality rerank
+            after Stages 4 and 5. Default False.
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
@@ -287,6 +299,7 @@ def search_memories(
         llm_rerank=llm_rerank,
         soar_boost=soar_boost,
         soar_first=soar_first,
+        quality_rerank=quality_rerank,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
@@ -420,6 +433,23 @@ def _stage_5_soar(
     return soar_bridge._apply_soar_to_reranked(reranked, cfg, query=query)
 
 
+def _stage_6_quality(
+    reranked: list[tuple[float, dict]],
+    cfg,
+) -> list[tuple[float, dict]]:
+    """Stage 6: deterministic text-quality rerank.
+
+    Delegates to quality_rerank.apply_quality_rerank. Lazy-imports
+    quality_rerank so the module is only loaded when quality_rerank is on
+    (preserves the "no Stage 6 overhead by default" invariant).
+
+    Never raises. Same graceful-fallback behavior as soar_bridge.
+    """
+    from . import quality_rerank
+
+    return quality_rerank.apply_quality_rerank(reranked, cfg)
+
+
 def _apply_optional_stages(
     query: str,
     reranked: list[tuple[float, dict]],
@@ -429,8 +459,8 @@ def _apply_optional_stages(
     soar_first: bool,
     quality_rerank: bool = False,
 ) -> list[tuple[float, dict]]:
-    """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank) in the
-    requested order.
+    """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank) in
+    the requested order.
 
     Default order (soar_first=False): Stage 4 → Stage 5 → Stage 6.
 
@@ -438,18 +468,24 @@ def _apply_optional_stages(
     reranked list, then judge truncates to top-N, then quality reranks).
     Stage 6 always runs last.
 
-    quality_rerank must be False for now — Stage 6 wiring lands in a
-    subsequent commit. This param is added here so the call-site signature
-    is stable while Stage 6 implementation arrives.
+    Each stage is gated by its own boolean flag — any combination of
+    on/off works. Stages are mutually composable; their score multipliers
+    compound multiplicatively.
     """
     if soar_first:
-        reranked = _stage_5_soar(reranked, cfg, query=query)
-        reranked = _stage_4_judge(query, reranked, cfg)
-        return reranked
-    if llm_rerank:
-        reranked = _stage_4_judge(query, reranked, cfg)
-    if soar_boost:
-        reranked = _stage_5_soar(reranked, cfg, query=query)
+        if soar_boost:
+            reranked = _stage_5_soar(reranked, cfg, query=query)
+        if llm_rerank:
+            reranked = _stage_4_judge(query, reranked, cfg)
+    else:
+        if llm_rerank:
+            reranked = _stage_4_judge(query, reranked, cfg)
+        if soar_boost:
+            reranked = _stage_5_soar(reranked, cfg, query=query)
+
+    if quality_rerank:
+        reranked = _stage_6_quality(reranked, cfg)
+
     return reranked
 
 
@@ -464,6 +500,7 @@ def _new_pipeline_search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
+    quality_rerank: bool = False,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -594,7 +631,7 @@ def _new_pipeline_search(
     rerank_scores = rerank(query, docs, cfg=cfg)
     reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
 
-    # ── Stage 4 + Stage 5 (optional, composable order) ────────────────────
+    # ── Stage 4 + Stage 5 + Stage 6 (optional, composable order) ────────────
     reranked = _apply_optional_stages(
         query=query,
         reranked=reranked,
@@ -602,7 +639,7 @@ def _new_pipeline_search(
         llm_rerank=llm_rerank,
         soar_boost=soar_boost,
         soar_first=soar_first,
-        quality_rerank=False,
+        quality_rerank=quality_rerank,
     )
 
     return [
@@ -626,6 +663,14 @@ def _new_pipeline_search(
             "soar_boost": (float(r.get("soar_boost", 1.0)) if isinstance(r, dict) else 1.0),
             "score_pre_soar": (
                 float(r.get("score_pre_soar", s)) if isinstance(r, dict) else float(s)
+            ),
+            # Quality audit trail — populated only when --quality-rerank is on
+            # (Stage 6 ran). Always present so callers can rely on the key shape.
+            "quality_score": (r.get("quality_score") if isinstance(r, dict) else None),
+            "quality_tier": (r.get("quality_tier") if isinstance(r, dict) else None),
+            "quality_boost": (float(r.get("quality_boost", 1.0)) if isinstance(r, dict) else 1.0),
+            "score_pre_quality": (
+                float(r.get("score_pre_quality", s)) if isinstance(r, dict) else float(s)
             ),
         }
         for s, r in reranked[:n_results]
