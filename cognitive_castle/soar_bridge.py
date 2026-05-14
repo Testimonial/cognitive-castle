@@ -18,6 +18,7 @@ schema rather than carry stub values that could fire bad rules.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -514,6 +515,22 @@ def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
     return hits + _annotate_unboosted(truncated_remainder)
 
 
+def _extract_filed_at(row: dict) -> str:
+    """Parse filed_at out of a raw-pipeline row's metadata_json JSON blob.
+
+    Mirrors searcher._get_filed_at but inlined here to avoid a circular import
+    (searcher already lazy-imports soar_bridge). Returns "" when filed_at is
+    missing, metadata_json is missing/non-string, or JSON is malformed.
+    """
+    raw = row.get("metadata_json")
+    if not isinstance(raw, str):
+        return ""
+    try:
+        return str(json.loads(raw).get("filed_at", ""))
+    except (json.JSONDecodeError, TypeError):
+        return ""
+
+
 def _apply_soar_to_reranked(
     reranked: list[tuple[float, dict]],
     cfg,
@@ -541,6 +558,11 @@ def _apply_soar_to_reranked(
     hits_view = []
     for score, row in reranked:
         row["score"] = score
+        # Pipeline rows carry filed_at inside metadata_json (JSON blob) but
+        # apply_soar_boosts reads hit["created_at"] for recency. Without this
+        # promotion, recency-boost never fires on raw-pipeline rows.
+        if not row.get("created_at"):
+            row["created_at"] = _extract_filed_at(row)
         hits_view.append(row)
 
     # Delegate to the existing public API; it mutates hits_view in place

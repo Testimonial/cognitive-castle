@@ -326,6 +326,64 @@ def test_apply_soar_to_reranked_returns_sorted_tuples(tmp_path):
     assert scores == sorted(scores, reverse=True), f"Expected descending sort, got {scores}"
 
 
+def test_extract_filed_at_parses_metadata_json():
+    """_extract_filed_at pulls filed_at out of the metadata_json JSON blob.
+
+    Pipeline rows carry filed_at inside metadata_json (not promoted to a
+    hoisted column). SOAR's recency rules need it at top-level created_at.
+    """
+    import json as _json
+    from cognitive_castle import soar_bridge
+
+    row = {"metadata_json": _json.dumps({"filed_at": "2026-05-14T07:21:34"})}
+    assert soar_bridge._extract_filed_at(row) == "2026-05-14T07:21:34"
+
+    # Missing / malformed metadata_json → empty string, never crash
+    assert soar_bridge._extract_filed_at({}) == ""
+    assert soar_bridge._extract_filed_at({"metadata_json": None}) == ""
+    assert soar_bridge._extract_filed_at({"metadata_json": "not json"}) == ""
+    assert soar_bridge._extract_filed_at({"metadata_json": "{}"}) == ""
+
+
+@pytest.mark.soar
+@_requires_sml
+def test_apply_soar_to_reranked_promotes_filed_at_for_recency(tmp_path):
+    """Pipeline-shape rows (filed_at inside metadata_json) get recency-boost.
+
+    Regression for the bug where _apply_soar_to_reranked passed raw pipeline
+    rows to apply_soar_boosts without first promoting filed_at → created_at,
+    causing recency-boost to never fire on real-world pipeline output (rows
+    coming from get_by_ids).
+    """
+    import json as _json
+    from cognitive_castle import soar_bridge
+
+    rules = tmp_path / "rules.soar"
+    _write_minimal_rules(rules)
+    cfg = _mock_cfg(rules_path=str(rules))
+
+    recent_iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(time.time() - 3600))
+    # Pipeline-shape row: filed_at is buried in metadata_json, NOT at top level.
+    row = {
+        "id": "a",
+        "wing": "p",
+        "room": "r",
+        "source_file": "f",
+        "metadata_json": _json.dumps({"filed_at": recent_iso}),
+    }
+    reranked = [(1.0, row)]
+
+    result = soar_bridge._apply_soar_to_reranked(reranked, cfg)
+    _, boosted_row = result[0]
+    assert "recency-boost" in boosted_row.get("soar_tags", []), (
+        f"recency-boost should fire on pipeline-shape rows; "
+        f"got soar_tags={boosted_row.get('soar_tags')!r}"
+    )
+    assert boosted_row["created_at"] == recent_iso, (
+        "filed_at should be promoted to top-level created_at"
+    )
+
+
 def test_entity_match_boost_applied_when_flag_true(tmp_path):
     """A hit with entity_match=True fires the entity-match rule.
 
