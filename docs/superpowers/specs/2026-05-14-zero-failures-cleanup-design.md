@@ -13,7 +13,7 @@ This spec catalogs all 18, groups them by root cause, and ships one PR per clust
 ## Goals
 
 - Reduce full-suite failure count from 18 to 0 on `develop`
-- Each PR is independently reviewable and mergeable (no inter-PR dependencies)
+- Each PR is independently reviewable; landing order matters only between Clusters C and D (file overlap, see Implementation order)
 - Restore CI signal: a single new failure on any future PR is now informative
 - Preserve test intent: fix or delete based on whether the asserted behavior still applies, never `xfail` to defer
 
@@ -73,7 +73,7 @@ FAILED tests/test_retrieval_pipeline.py::test_pipeline_returns_results_when_flag
 
 **No production code changes expected** — if any do surface, scope them tight and call them out in the commit.
 
-**Acceptance:** All 4 tests pass. `grep -rn "MemPalace" tests/` returns zero matches (or only intentional historical-context strings, flagged in commits).
+**Acceptance:** All 4 tests pass. `grep -rn "MemPalace" cognitive_castle/ tests/` returns zero matches in BOTH directories — covers stale production code (real bugs masked by stale tests) AND stale test fixtures. The only allowed matches are intentional historical-context strings, each one flagged in commits.
 
 ## Cluster B — Hooks now use `castle` console script (2 failures)
 
@@ -141,7 +141,7 @@ These need individual investigation rather than a single recipe.
 
 **Approach (intent-preserving):** The test's intent is to verify CUDA-OOM triggers CPU fallback correctly. Updating the model-name assertion alone isn't enough — confirm that the OOM-fallback code path still works with bge-m3 as the default (the failure path may have model-specific assumptions that broke during the cutover). If the fallback is healthy, update the assertion. If it isn't, the test is revealing a real production bug — fix it under the production-bug policy above. Do not rubber-stamp the assertion without verifying the fallback behavior.
 
-**E.3 `test_known_entities_registry.py::test_populated_registry_improves_miner_recall`** — Test asserts `'cognitive-castle' in extracted_entities` but the entity_detector returned `{'Julia Grib', 'Kevin Heifner', 'hyperion-history'}`. Either the test fixture's source text changed, or the entity_detector's recall changed. Approach: read the test, the fixture, and entity_detector behavior. Likely a fixture issue — the source text probably needs to actually contain "cognitive-castle" enough times (3+ per the discovery from KG enrichment work).
+**E.3 `test_known_entities_registry.py::test_populated_registry_improves_miner_recall`** — Test asserts `'cognitive-castle' in extracted_entities` but the entity_detector returned `{'Julia Grib', 'Kevin Heifner', 'hyperion-history'}`. Either the test fixture's source text changed, or the entity_detector's recall changed. Approach: read the test, the fixture, and entity_detector behavior. Likely a fixture issue — the source text probably needs to actually contain "cognitive-castle" 3+ times (`entity_detector.extract_candidates` filters out names with fewer than 3 mentions per text — see `entity_detector.py:144`).
 
 **E.4 `test_retrieval_pipeline.py::test_pipeline_returns_results_when_flag_enabled`** — Tests the `CASTLE_USE_NEW_RETRIEVAL_PIPELINE` env-var feature flag. **Verified: the flag is dead.** `cognitive_castle/searcher.py` unconditionally calls `_new_pipeline_search` (line 279); no code reads the env var. The file `test_retrieval_pipeline.py` contains **two tests** — the failing one plus `test_pipeline_disabled_falls_back_to_old_path` (currently passing by happenstance because both branches now run the same code path). Approach: **delete both tests**. If the file becomes empty after deletion, delete the file too.
 
@@ -157,7 +157,7 @@ These need individual investigation rather than a single recipe.
 4. **E** (misc) — 2-3 hr, 4 tests. Each one's own diagnosis. E.1 root cause already diagnosed (env var leak); other three need investigation per their sub-sections.
 5. **C** (closets) — 2-4 hr, 6 tests. Most investigation, possibly the biggest deletions.
 
-Total estimated effort: ~6-9 hours of focused work across 5 PRs. Each PR ~5 min reviewer time.
+Total estimated effort: ~6-9 hours of focused work across 5 PRs. Reviewer time: ~5 min per PR for B, A, D, E; ~10-15 min for C (need to verify the closet-boost feature is genuinely removed from production, not just from tests).
 
 **File-overlap note:** Clusters C and D both touch `tests/test_readme_claims.py` (different classes — C touches `TestClosetFirstSearch`, D touches `TestReadmeToolsExistInCode` and `TestNoUnlistedTools`). The recommended order (D before C) lands D first; C then deletes its classes from the file. Reverse order works too, but the second PR will rebase against the first. **Don't develop C and D in parallel branches** — rebase friction.
 
