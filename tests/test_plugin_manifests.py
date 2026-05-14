@@ -1,4 +1,5 @@
 """Structural tests for .claude-plugin/ manifest files."""
+
 import json
 from pathlib import Path
 
@@ -61,6 +62,7 @@ def test_hooks_json_references_castle_wrappers():
 def test_version_sync_with_package():
     """plugin.json and marketplace.json should match cognitive_castle.version."""
     from cognitive_castle.version import __version__
+
     plugin_data = _load(PLUGIN_DIR / "plugin.json")
     marketplace_data = _load(PLUGIN_DIR / "marketplace.json")
     assert plugin_data["version"] == __version__, (
@@ -74,6 +76,7 @@ def test_version_sync_with_package():
 def test_wrapper_scripts_exist_and_executable():
     """Renamed hook wrapper scripts are present and executable."""
     import os
+
     stop = PLUGIN_DIR / "hooks" / "castle-stop-hook.sh"
     precompact = PLUGIN_DIR / "hooks" / "castle-precompact-hook.sh"
     assert stop.exists()

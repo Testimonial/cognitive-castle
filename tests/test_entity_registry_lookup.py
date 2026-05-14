@@ -1,4 +1,5 @@
 """Tests for EntityRegistry.lookup_in_text."""
+
 import pytest
 
 from cognitive_castle.entity_registry import EntityRegistry, EntityMatch  # noqa: F401
@@ -9,10 +10,20 @@ def registry(tmp_path):
     reg = EntityRegistry(EntityRegistry._empty(), path=tmp_path / "entities.json")
     # Seed directly via _data — no set_people/set_projects methods exist.
     reg._data["people"] = {
-        "Alice": {"source": "onboarding", "contexts": ["personal"], "aliases": [],
-                  "relationship": "friend", "confidence": 1.0},
-        "Bob": {"source": "onboarding", "contexts": ["personal"], "aliases": [],
-                "relationship": "colleague", "confidence": 1.0},
+        "Alice": {
+            "source": "onboarding",
+            "contexts": ["personal"],
+            "aliases": [],
+            "relationship": "friend",
+            "confidence": 1.0,
+        },
+        "Bob": {
+            "source": "onboarding",
+            "contexts": ["personal"],
+            "aliases": [],
+            "relationship": "colleague",
+            "confidence": 1.0,
+        },
     }
     reg._data["projects"] = ["cognitive-castle", "deep-learning-course"]
     reg.save()

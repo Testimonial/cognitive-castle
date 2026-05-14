@@ -1,4 +1,5 @@
 """Tests for KnowledgeGraph.find_drawers_by_entities."""
+
 import pytest
 
 from cognitive_castle.knowledge_graph import KnowledgeGraph

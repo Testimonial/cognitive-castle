@@ -1,4 +1,4 @@
-"""Tests for cognitive_castle.kg_enricher (Phase 2 of mine())."""
+"""Tests for cognitive_castle.kg_enricher (KG enrichment stage of mine())."""
 
 from __future__ import annotations
 

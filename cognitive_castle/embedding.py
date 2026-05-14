@@ -41,6 +41,7 @@ def _is_cuda_oom(exc: BaseException) -> bool:
     """
     try:
         import torch  # type: ignore
+
         if isinstance(exc, torch.cuda.OutOfMemoryError):
             return True
     except (ImportError, AttributeError):
@@ -59,15 +60,14 @@ def _get_model(device: str = "auto", cfg=None):
     try:
         from sentence_transformers import SentenceTransformer
     except ImportError:
-        raise RuntimeError(
-            "sentence-transformers is required: pip install sentence-transformers"
-        )
+        raise RuntimeError("sentence-transformers is required: pip install sentence-transformers")
 
     try:
         model = SentenceTransformer(name, device=resolved)
     except Exception as e:
         if resolved == "cuda" and _is_cuda_oom(e):
             import sys
+
             print(
                 f"[embedding] CUDA load failed ({type(e).__name__}: {e}); "
                 f"falling back to CPU embedder",

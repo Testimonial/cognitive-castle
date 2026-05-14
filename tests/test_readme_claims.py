@@ -586,13 +586,13 @@ class TestBackendAbstraction:
         """Claim: pluggable backends.
         backends/base.py must define an abstract base class."""
         path = MEMPALACE_PKG / "backends" / "base.py"
-        assert (
-            path.is_file()
-        ), "mempalace/backends/base.py does not exist. Backend abstraction layer is missing."
+        assert path.is_file(), (
+            "mempalace/backends/base.py does not exist. Backend abstraction layer is missing."
+        )
         src = _read(path)
-        assert (
-            "ABC" in src or "abstractmethod" in src
-        ), "backends/base.py does not define an abstract base class."
+        assert "ABC" in src or "abstractmethod" in src, (
+            "backends/base.py does not define an abstract base class."
+        )
 
     def test_lancedb_backend_exists(self):
         """Claim: LanceDB backend implementation.
@@ -600,9 +600,9 @@ class TestBackendAbstraction:
         path = MEMPALACE_PKG / "backends" / "lancedb_backend.py"
         assert path.is_file(), "mempalace/backends/lancedb_backend.py does not exist."
         src = _read(path)
-        assert (
-            "BaseCollection" in src or "base" in src
-        ), "backends/lancedb_backend.py does not reference the base class."
+        assert "BaseCollection" in src or "base" in src, (
+            "backends/lancedb_backend.py does not reference the base class."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -631,9 +631,9 @@ class TestI18n:
     def test_english_baseline_exists(self):
         """en.json must exist as the baseline language file."""
         path = MEMPALACE_PKG / "i18n" / "en.json"
-        assert (
-            path.is_file()
-        ), "mempalace/i18n/en.json does not exist. English baseline is required."
+        assert path.is_file(), (
+            "mempalace/i18n/en.json does not exist. English baseline is required."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -718,9 +718,9 @@ class TestReadmeToolCountConsistency:
         counts = re.findall(r"(\d+)\s+tools", readme)
         if len(counts) > 1:
             unique = set(counts)
-            assert (
-                len(unique) == 1
-            ), f"README mentions different tool counts: {counts}. All occurrences must agree."
+            assert len(unique) == 1, (
+                f"README mentions different tool counts: {counts}. All occurrences must agree."
+            )
 
 
 # ---------------------------------------------------------------------------

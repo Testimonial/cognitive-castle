@@ -170,7 +170,9 @@ def _capture_hook_output(hook_fn, data, harness="claude-code", state_dir=None):
     from unittest.mock import PropertyMock
 
     buf = io.StringIO()
-    patches = [patch("cognitive_castle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))]
+    patches = [
+        patch("cognitive_castle.hooks_cli._output", side_effect=lambda d: buf.write(json.dumps(d)))
+    ]
     if state_dir:
         patches.append(patch("cognitive_castle.hooks_cli.STATE_DIR", state_dir))
     # Mock CognitiveCastleConfig so tests don't depend on user's ~/.mempalace/config.json
@@ -226,7 +228,9 @@ def test_stop_hook_saves_silently_at_interval(tmp_path):
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
     save_result = {"count": 15, "themes": ["hooks", "notifications"]}
-    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
+    with patch(
+        "cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result
+    ) as mock_save:
         result = _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
@@ -249,7 +253,9 @@ def test_stop_hook_derives_wing_from_transcript_path(tmp_path):
         [{"message": {"role": "user", "content": f"msg {i}"}} for i in range(SAVE_INTERVAL)],
     )
     save_result = {"count": 15, "themes": []}
-    with patch("cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result) as mock_save:
+    with patch(
+        "cognitive_castle.hooks_cli._save_diary_direct", return_value=save_result
+    ) as mock_save:
         _capture_hook_output(
             hook_stop,
             {"session_id": "test", "stop_hook_active": False, "transcript_path": str(transcript)},
@@ -491,7 +497,9 @@ def test_mine_sync_uses_castle_python(tmp_path):
     mempal_dir.mkdir()
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
-            with patch("cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"):
+            with patch(
+                "cognitive_castle.hooks_cli._castle_python", return_value="/fake/venv/python"
+            ):
                 with patch("cognitive_castle.hooks_cli.subprocess.run") as mock_run:
                     _mine_sync()
                     cmd = mock_run.call_args[0][0]
@@ -543,7 +551,9 @@ def test_maybe_auto_ingest_oserror(tmp_path):
     with patch.dict("os.environ", {"MEMPAL_DIR": str(mempal_dir)}):
         with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
             with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", tmp_path / "mine.pid"):
-                with patch("cognitive_castle.hooks_cli.subprocess.Popen", side_effect=OSError("fail")):
+                with patch(
+                    "cognitive_castle.hooks_cli.subprocess.Popen", side_effect=OSError("fail")
+                ):
                     _maybe_auto_ingest()  # should not raise
 
 

@@ -1,4 +1,5 @@
 """Tests for the cross-encoder reranker wrapper."""
+
 from unittest.mock import MagicMock, patch
 
 from cognitive_castle import reranker as rr
@@ -77,8 +78,10 @@ def test_rerank_falls_back_to_cpu_on_cuda_oom():
             raise RuntimeError("CUDA error: out of memory")
         return fake_cpu_ce
 
-    with patch("cognitive_castle.reranker._cuda_available", return_value=True), \
-         patch("cognitive_castle.reranker._get_reranker", side_effect=fake_get_reranker):
+    with (
+        patch("cognitive_castle.reranker._cuda_available", return_value=True),
+        patch("cognitive_castle.reranker._get_reranker", side_effect=fake_get_reranker),
+    ):
         scores = rr.rerank("q", ["a", "b"], device="auto", cfg=cfg)
 
     assert scores == [0.7, 0.3]
@@ -91,8 +94,12 @@ def test_rerank_does_not_fall_back_on_non_oom_cuda_error():
     cfg.reranker_model_gpu = "model-gpu"
     cfg.reranker_model_cpu = "model-cpu"
 
-    with patch("cognitive_castle.reranker._cuda_available", return_value=True), \
-         patch("cognitive_castle.reranker._get_reranker", side_effect=RuntimeError("unrelated error")):
+    with (
+        patch("cognitive_castle.reranker._cuda_available", return_value=True),
+        patch(
+            "cognitive_castle.reranker._get_reranker", side_effect=RuntimeError("unrelated error")
+        ),
+    ):
         try:
             rr.rerank("q", ["a"], device="auto", cfg=cfg)
             raise AssertionError("expected RuntimeError")

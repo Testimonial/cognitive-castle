@@ -54,7 +54,9 @@ class TestSpellerEdgeCases:
             return "WRONG"
 
         with patch("cognitive_castle.spellcheck._get_speller", return_value=fake_speller):
-            with patch("cognitive_castle.spellcheck._get_system_words", return_value={"coherently"}):
+            with patch(
+                "cognitive_castle.spellcheck._get_system_words", return_value={"coherently"}
+            ):
                 with patch("cognitive_castle.spellcheck._load_known_names", return_value=set()):
                     result = spellcheck_user_text("coherently")
                     assert "coherently" in result

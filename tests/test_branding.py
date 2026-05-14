@@ -1,5 +1,6 @@
 # tests/test_branding.py
 """Ensure all user-facing strings say 'Cognitive Castle', never 'MemPalace'."""
+
 import subprocess
 import sys
 
@@ -7,7 +8,8 @@ import sys
 def _run(args):
     return subprocess.run(
         [sys.executable, "-m", "cognitive_castle.cli"] + args,
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -31,6 +33,7 @@ def test_mcp_output_no_mempalace(tmp_path, monkeypatch):
     import io
     import contextlib
     from cognitive_castle.cli import cmd_mcp
+
     args = argparse.Namespace(palace=None)
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
