@@ -1035,38 +1035,55 @@ def test_mcp_soar_first_without_other_flags_returns_error(monkeypatch):
     # MCP does NOT sys.exit — it returns the error to the client
 
 
-def test_mcp_quality_rerank_param_without_kill_switch_returns_error(monkeypatch):
-    """quality_rerank=true MCP param without CASTLE_QUALITY_ENABLED=1
-    should return an MCP-level error."""
-    monkeypatch.delenv("CASTLE_QUALITY_ENABLED", raising=False)
-
-    from cognitive_castle.mcp_server import tool_search
-
-    result = tool_search(
-        query="test",
-        quality_rerank=True,
-    )
-    # Result should signal an error — exact shape depends on MCP server's
-    # convention (probably an "error" key or an exit-2 path captured)
-    assert "error" in result or "CASTLE_QUALITY_ENABLED" in str(result)
-
-
-def test_mcp_quality_rerank_param_with_kill_switch_threads_through(monkeypatch):
-    """quality_rerank=true with kill-switch active should reach search_memories."""
+def test_mcp_default_runs_quality_rerank(monkeypatch):
+    """Default MCP call (no quality_rerank param, no CASTLE_QUALITY_DISABLED) →
+    search_memories receives quality_rerank=True (Stage 6 is opt-out)."""
     from unittest.mock import patch
 
-    monkeypatch.setenv("CASTLE_QUALITY_ENABLED", "1")
+    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
 
     fake_result = {"results": [], "query": "test", "filters": {}}
 
     with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
         from cognitive_castle.mcp_server import tool_search
 
-        tool_search(
-            query="test",
-            quality_rerank=True,
-        )
+        tool_search(query="test")
 
-    # search_memories was called with quality_rerank=True
     mock_sm.assert_called_once()
     assert mock_sm.call_args.kwargs.get("quality_rerank") is True
+
+
+def test_mcp_quality_rerank_false_disables_stage_6(monkeypatch):
+    """quality_rerank=false MCP param → search_memories receives
+    quality_rerank=False (per-call opt-out)."""
+    from unittest.mock import patch
+
+    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
+
+    fake_result = {"results": [], "query": "test", "filters": {}}
+
+    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
+        from cognitive_castle.mcp_server import tool_search
+
+        tool_search(query="test", quality_rerank=False)
+
+    mock_sm.assert_called_once()
+    assert mock_sm.call_args.kwargs.get("quality_rerank") is False
+
+
+def test_mcp_castle_quality_disabled_env_overrides_param(monkeypatch):
+    """CASTLE_QUALITY_DISABLED=1 → quality_rerank=False even when the MCP
+    caller explicitly passed quality_rerank=True (global kill switch wins)."""
+    from unittest.mock import patch
+
+    monkeypatch.setenv("CASTLE_QUALITY_DISABLED", "1")
+
+    fake_result = {"results": [], "query": "test", "filters": {}}
+
+    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
+        from cognitive_castle.mcp_server import tool_search
+
+        tool_search(query="test", quality_rerank=True)
+
+    mock_sm.assert_called_once()
+    assert mock_sm.call_args.kwargs.get("quality_rerank") is False

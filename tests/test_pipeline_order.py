@@ -129,6 +129,7 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
         llm_rerank=True,
         soar_boost=True,
         soar_first=False,
+        quality_rerank=False,
     )
     assert call_order == ["stage_4", "stage_5"]
 
@@ -165,6 +166,7 @@ def test_soar_first_runs_soar_then_judge(monkeypatch, tmp_path):
         llm_rerank=True,
         soar_boost=True,
         soar_first=True,
+        quality_rerank=False,
     )
     assert call_order == ["stage_5", "stage_4"]
 
@@ -201,6 +203,7 @@ def test_soar_only_no_judge_call(monkeypatch, tmp_path):
         llm_rerank=False,
         soar_boost=True,
         soar_first=False,
+        quality_rerank=False,
     )
     assert call_order == ["stage_5"]
 
@@ -237,6 +240,7 @@ def test_judge_only_no_soar_call(monkeypatch, tmp_path):
         llm_rerank=True,
         soar_boost=False,
         soar_first=False,
+        quality_rerank=False,
     )
     assert call_order == ["stage_4"]
 
@@ -390,6 +394,7 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
         llm_rerank=False,
         soar_boost=True,
         soar_first=False,
+        quality_rerank=False,
     )
 
     assert captured.get("query") == "what did we decide about caching", (
@@ -431,6 +436,7 @@ def test_query_threaded_through_soar_first_branch(monkeypatch, tmp_path):
         llm_rerank=True,
         soar_boost=True,
         soar_first=True,
+        quality_rerank=False,
     )
 
     assert captured.get("query") == "when did we ship the migration", (

@@ -587,7 +587,10 @@ def cmd_search(args):
     soar_boost = getattr(args, "soar_boost", False)
     soar_first = getattr(args, "soar_first", False)
     llm_rerank = getattr(args, "llm_rerank", False)
-    quality_rerank = getattr(args, "quality_rerank", False)
+    # Stage 6 is ON by default. CLI flag --no-quality-rerank or env
+    # CASTLE_QUALITY_DISABLED=1 (read via cfg.quality_disabled) turns it OFF.
+    no_quality_rerank = getattr(args, "no_quality_rerank", False)
+    quality_rerank = not no_quality_rerank and not cfg.quality_disabled
 
     # --soar-first requires both companion flags
     if soar_first:
@@ -608,16 +611,6 @@ def cmd_search(args):
     if soar_boost and not cfg.soar_enabled:
         print(
             "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost",
-            file=sys.stderr,
-        )
-        sys.exit(2)
-
-    # Kill-switch check: --quality-rerank requires CASTLE_QUALITY_ENABLED=1
-    if quality_rerank and not cfg.quality_enabled:
-        print(
-            "--quality-rerank requires CASTLE_QUALITY_ENABLED=1 "
-            "(kill switch is active to prevent accidental Stage 6 invocation; "
-            "set the env var to enable Stage 6)",
             file=sys.stderr,
         )
         sys.exit(2)
@@ -1154,13 +1147,13 @@ def main():
         ),
     )
     p_search.add_argument(
-        "--quality-rerank",
+        "--no-quality-rerank",
         action="store_true",
         help=(
-            "Apply Stage 6 deterministic text-quality rerank via the "
-            "vendored `understanding` package (experimental; requires "
-            "spaCy + en_core_web_sm; activate via CASTLE_QUALITY_ENABLED=1). "
-            "Off by default."
+            "Disable Stage 6 deterministic text-quality rerank for this query. "
+            "Stage 6 is ON by default — pass this flag to skip the quality "
+            "boost for one query, or set CASTLE_QUALITY_DISABLED=1 to disable "
+            "globally."
         ),
     )
 
