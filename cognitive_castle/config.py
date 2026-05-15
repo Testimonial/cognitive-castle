@@ -470,12 +470,9 @@ class CognitiveCastleConfig:
     def llm_model(self):
         """Model name passed to the LLM provider.
 
-        Default: ``"gemma3:4b"`` (matches ``cmd_init``'s default at
-        ``cli.py:267``). NOTE: this default is a known pre-existing
-        broken tag — the model does not exist in Ollama's registry.
-        Both defaults will be fixed together in a follow-up PR. Until
-        then, users who want a working LLM-as-judge path must override
-        via ``CASTLE_LLM_MODEL`` env var or ``llm_model`` in castle.yaml.
+        Default: ``"qwen3.5:latest"`` (matches ``cmd_init``'s default).
+        Users can override via ``CASTLE_LLM_MODEL`` env var or ``llm_model``
+        in castle.yaml.
 
         Reads from ``CASTLE_LLM_MODEL`` env var first, then config file,
         then default.
@@ -483,7 +480,7 @@ class CognitiveCastleConfig:
         env_val = os.environ.get("CASTLE_LLM_MODEL")
         if env_val:
             return env_val.strip()
-        return str(self._file_config.get("llm_model", "gemma3:4b")).strip()
+        return str(self._file_config.get("llm_model", "qwen3.5:latest")).strip()
 
     @property
     def llm_endpoint(self):
