@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass
 from typing import Optional
 from urllib.error import HTTPError, URLError
@@ -393,6 +395,90 @@ class AnthropicProvider(LLMProvider):
         return LLMResponse(text=text, model=self.model, provider=self.name, raw=data)
 
 
+# ==================== CLAUDE CLI ====================
+
+
+class ClaudeCliProvider(LLMProvider):
+    """Shell out to the locally-installed ``claude`` CLI (Claude Code).
+
+    Reuses whatever auth the CLI is already configured with — OAuth
+    subscription, keychain, or ANTHROPIC_API_KEY — so Castle never sees the
+    key directly. External service: prompts and candidate text are sent to
+    api.anthropic.com via the CLI.
+    """
+
+    name = "claude-cli"
+    DEFAULT_BIN = "claude"
+
+    def __init__(
+        self,
+        model: str,
+        timeout: int = 120,
+        endpoint: Optional[str] = None,
+        **_: object,
+    ):
+        super().__init__(model=model, endpoint=endpoint, timeout=timeout)
+
+    @property
+    def is_external_service(self) -> bool:
+        return True
+
+    def check_available(self) -> tuple[bool, str]:
+        if not shutil.which(self.DEFAULT_BIN):
+            return False, f"'{self.DEFAULT_BIN}' CLI not found on PATH"
+        return True, "ok"
+
+    def classify(self, system: str, user: str, json_mode: bool = True) -> LLMResponse:
+        sys_prompt = system
+        if json_mode:
+            sys_prompt += "\n\nRespond with valid JSON only, no prose, no markdown fences."
+        cmd = [
+            self.DEFAULT_BIN,
+            "-p",
+            "--output-format",
+            "json",
+            "--model",
+            self.model,
+            "--disable-slash-commands",
+            "--no-session-persistence",
+            "--append-system-prompt",
+            sys_prompt,
+            user,
+        ]
+        try:
+            proc = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as e:
+            raise LLMError(f"claude CLI timed out after {self.timeout}s") from e
+        except OSError as e:
+            raise LLMError(f"Failed to spawn claude CLI: {e}") from e
+        if proc.returncode != 0:
+            err = proc.stderr.strip() or proc.stdout.strip()
+            raise LLMError(f"claude CLI exited {proc.returncode}: {err[:300]}")
+        try:
+            data = json.loads(proc.stdout)
+        except json.JSONDecodeError as e:
+            raise LLMError(
+                f"Malformed JSON from claude CLI: {e}; stdout[:300]={proc.stdout[:300]!r}"
+            ) from e
+        if data.get("is_error"):
+            raise LLMError(f"claude CLI returned error: {str(data.get('result', ''))[:300]}")
+        text = data.get("result", "") or ""
+        if not text:
+            raise LLMError(f"Empty result from claude CLI (model={self.model})")
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.splitlines()
+            if lines and lines[0].startswith("```") and lines[-1].strip() == "```":
+                text = "\n".join(lines[1:-1])
+        return LLMResponse(text=text, model=self.model, provider=self.name, raw=data)
+
+
 # ==================== FACTORY ====================
 
 
@@ -400,6 +486,7 @@ PROVIDERS: dict[str, type[LLMProvider]] = {
     "ollama": OllamaProvider,
     "openai-compat": OpenAICompatProvider,
     "anthropic": AnthropicProvider,
+    "claude-cli": ClaudeCliProvider,
 }
 
 

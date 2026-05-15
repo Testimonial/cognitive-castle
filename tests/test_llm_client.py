@@ -12,6 +12,7 @@ import pytest
 
 from cognitive_castle.llm_client import (
     AnthropicProvider,
+    ClaudeCliProvider,
     LLMError,
     OllamaProvider,
     OpenAICompatProvider,
@@ -39,6 +40,12 @@ def test_get_provider_anthropic():
     p = get_provider("anthropic", "claude-haiku", api_key="sk-xxx")
     assert isinstance(p, AnthropicProvider)
     assert p.api_key == "sk-xxx"
+
+
+def test_get_provider_claude_cli():
+    p = get_provider("claude-cli", "haiku")
+    assert isinstance(p, ClaudeCliProvider)
+    assert p.model == "haiku"
 
 
 def test_get_provider_unknown_raises():
@@ -483,3 +490,187 @@ def test_ollama_api_key_source_is_none():
     p = OllamaProvider(model="gemma3:e4b")
     assert p.api_key is None
     assert p.api_key_source is None
+
+
+# ── ClaudeCliProvider ───────────────────────────────────────────────────
+#
+# Shells out to `claude -p --output-format json`. Tests mock the
+# subprocess boundary (`subprocess.run`) and the PATH probe
+# (`shutil.which`) — no real `claude` CLI required to run these.
+
+
+def _fake_completed_process(stdout: str, returncode: int = 0, stderr: str = ""):
+    """Build a CompletedProcess-shaped mock for subprocess.run."""
+    proc = MagicMock()
+    proc.stdout = stdout
+    proc.stderr = stderr
+    proc.returncode = returncode
+    return proc
+
+
+def _ok_payload(text: str) -> str:
+    """Serialize a successful `claude -p --output-format json` response."""
+    return json.dumps({"is_error": False, "result": text, "total_cost_usd": 0.001})
+
+
+def test_claude_cli_check_available_missing_binary():
+    with patch("cognitive_castle.llm_client.shutil.which", return_value=None):
+        p = ClaudeCliProvider(model="haiku")
+        ok, msg = p.check_available()
+    assert not ok
+    assert "claude" in msg.lower()
+
+
+def test_claude_cli_check_available_ok():
+    with patch("cognitive_castle.llm_client.shutil.which", return_value="/usr/local/bin/claude"):
+        p = ClaudeCliProvider(model="haiku")
+        ok, msg = p.check_available()
+    assert ok
+    assert msg == "ok"
+
+
+def test_claude_cli_is_external_service():
+    """Always external — the CLI talks to api.anthropic.com regardless of
+    endpoint config. Users opting into claude-cli must see the privacy
+    warning the same as ``anthropic`` provider."""
+    p = ClaudeCliProvider(model="haiku")
+    assert p.is_external_service is True
+
+
+def test_claude_cli_classify_success():
+    fake = _fake_completed_process(_ok_payload('{"ranked_indices": [0, 1]}'))
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        resp = p.classify("system prompt", "user prompt")
+    assert resp.text == '{"ranked_indices": [0, 1]}'
+    assert resp.provider == "claude-cli"
+    assert resp.model == "haiku"
+
+
+def test_claude_cli_classify_strips_markdown_fences():
+    """Claude often wraps JSON in ```json ... ``` fences. The provider
+    must strip those so callers (e.g. judge.py) can json.loads the text
+    directly."""
+    fenced = '```json\n{"ok": true}\n```'
+    fake = _fake_completed_process(_ok_payload(fenced))
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        resp = p.classify("s", "u")
+    assert resp.text == '{"ok": true}'
+
+
+def test_claude_cli_classify_passes_expected_args():
+    """Subprocess args MUST include the flags that make `claude -p`
+    behave as a stateless judge-style backend:
+    --output-format json, --model, --append-system-prompt,
+    --disable-slash-commands, --no-session-persistence.
+    """
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        captured["cmd"] = cmd
+        captured["timeout"] = kwargs.get("timeout")
+        return _fake_completed_process(_ok_payload('{"ok": true}'))
+
+    with patch("cognitive_castle.llm_client.subprocess.run", side_effect=fake_run):
+        p = ClaudeCliProvider(model="haiku", timeout=42)
+        p.classify("sys", "usr")
+    cmd = captured["cmd"]
+    assert cmd[0] == "claude"
+    assert "-p" in cmd
+    assert "--output-format" in cmd and cmd[cmd.index("--output-format") + 1] == "json"
+    assert "--model" in cmd and cmd[cmd.index("--model") + 1] == "haiku"
+    assert "--disable-slash-commands" in cmd
+    assert "--no-session-persistence" in cmd
+    assert "--append-system-prompt" in cmd
+    assert cmd[-1] == "usr"  # user prompt is the final positional arg
+    assert captured["timeout"] == 42
+
+
+def test_claude_cli_classify_json_mode_appends_json_instruction():
+    """When ``json_mode=True``, the system prompt sent to claude must
+    end with an instruction to emit JSON only. Mirrors the contract the
+    other providers honor (Ollama's ``format: json``, OpenAI-compat's
+    ``response_format``, Anthropic's prompt-level note)."""
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        i = cmd.index("--append-system-prompt")
+        captured["sys"] = cmd[i + 1]
+        return _fake_completed_process(_ok_payload('{"ok": true}'))
+
+    with patch("cognitive_castle.llm_client.subprocess.run", side_effect=fake_run):
+        p = ClaudeCliProvider(model="haiku")
+        p.classify("base system", "u", json_mode=True)
+    assert "base system" in captured["sys"]
+    assert "JSON" in captured["sys"]
+
+
+def test_claude_cli_classify_json_mode_false_omits_json_instruction():
+    captured = {}
+
+    def fake_run(cmd, **kwargs):
+        i = cmd.index("--append-system-prompt")
+        captured["sys"] = cmd[i + 1]
+        return _fake_completed_process(_ok_payload("free-form text"))
+
+    with patch("cognitive_castle.llm_client.subprocess.run", side_effect=fake_run):
+        p = ClaudeCliProvider(model="haiku")
+        p.classify("base system", "u", json_mode=False)
+    assert captured["sys"] == "base system"
+
+
+def test_claude_cli_classify_is_error_raises():
+    """An ``is_error: true`` payload (e.g. "Not logged in") must surface
+    as LLMError, not be returned as a successful response."""
+    payload = json.dumps({"is_error": True, "result": "Not logged in · Please run /login"})
+    fake = _fake_completed_process(payload)
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        with pytest.raises(LLMError, match="claude CLI returned error"):
+            p.classify("s", "u")
+
+
+def test_claude_cli_classify_nonzero_returncode_raises():
+    fake = _fake_completed_process("", returncode=2, stderr="boom")
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        with pytest.raises(LLMError, match="exited 2"):
+            p.classify("s", "u")
+
+
+def test_claude_cli_classify_malformed_json_raises():
+    fake = _fake_completed_process("not json at all")
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        with pytest.raises(LLMError, match="Malformed JSON"):
+            p.classify("s", "u")
+
+
+def test_claude_cli_classify_empty_result_raises():
+    fake = _fake_completed_process(json.dumps({"is_error": False, "result": ""}))
+    with patch("cognitive_castle.llm_client.subprocess.run", return_value=fake):
+        p = ClaudeCliProvider(model="haiku")
+        with pytest.raises(LLMError, match="Empty result"):
+            p.classify("s", "u")
+
+
+def test_claude_cli_classify_timeout_raises():
+    import subprocess as real_subprocess
+
+    def fake_run(cmd, **kwargs):
+        raise real_subprocess.TimeoutExpired(cmd=cmd, timeout=kwargs.get("timeout", 60))
+
+    with patch("cognitive_castle.llm_client.subprocess.run", side_effect=fake_run):
+        p = ClaudeCliProvider(model="haiku", timeout=5)
+        with pytest.raises(LLMError, match="timed out"):
+            p.classify("s", "u")
+
+
+def test_claude_cli_classify_oserror_raises():
+    """OSError on spawn (e.g. binary deleted between check_available and
+    classify) must surface as LLMError, not bubble up raw."""
+    with patch("cognitive_castle.llm_client.subprocess.run", side_effect=OSError("no exec")):
+        p = ClaudeCliProvider(model="haiku")
+        with pytest.raises(LLMError, match="Failed to spawn"):
+            p.classify("s", "u")
