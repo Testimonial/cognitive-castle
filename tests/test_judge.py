@@ -98,3 +98,44 @@ def test_judge_falls_back_on_bool_indices(monkeypatch, capsys, _mock_cfg):
     result = judge("q", [f"doc {i}" for i in range(10)], _mock_cfg)
     assert result == list(range(10))
     assert "non-int" in capsys.readouterr().err.lower()
+
+
+def test_stage_4_judge_status_on_successful_reorder(_mock_cfg):
+    """When judge reorders, _stage_4_judge stashes a status dict on hits[0]."""
+    from unittest.mock import patch
+    from cognitive_castle import searcher
+    fake_reorder = [2, 0, 1]
+    reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(3)]
+    with patch("cognitive_castle.judge.judge", return_value=fake_reorder):
+        out = searcher._stage_4_judge("q", reranked, _mock_cfg)
+    status = out[0][1]["judge_status"]
+    assert status["reordered"] is True
+    assert status["n"] == 3
+    assert status["model"] == "qwen3.5:latest"
+    assert isinstance(status["elapsed_s"], float)
+
+
+def test_stage_4_judge_status_on_failure_is_identity_fallback(_mock_cfg):
+    """ConnectionError (or any Exception) → identity-order return + error stash."""
+    from unittest.mock import patch
+    from cognitive_castle import searcher
+    reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(3)]
+    with patch("cognitive_castle.judge.judge", side_effect=ConnectionError("ollama down")):
+        out = searcher._stage_4_judge("q", reranked, _mock_cfg)
+    assert out == reranked  # identity-order fallback
+    assert out[0][1]["judge_status"] == {"error": "ConnectionError: ollama down"}
+
+
+def test_stage_4_judge_preserves_hits_beyond_top_n(_mock_cfg_top_n_3):
+    """With 5 hits and top_n=3, output keeps all 5 — top-3 reordered, hits
+    4 and 5 untouched at the end. Behavior change from live code which
+    discards reranked[top_n:]."""
+    from unittest.mock import patch
+    from cognitive_castle import searcher
+    fake_reorder = [2, 0, 1]
+    reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(5)]
+    with patch("cognitive_castle.judge.judge", return_value=fake_reorder):
+        out = searcher._stage_4_judge("q", reranked, _mock_cfg_top_n_3)
+    assert len(out) == 5
+    assert [r[1]["text"] for r in out[:3]] == ["t2", "t0", "t1"]  # reordered top-3
+    assert [r[1]["text"] for r in out[3:]] == ["t3", "t4"]  # tail preserved

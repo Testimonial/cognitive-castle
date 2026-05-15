@@ -28,11 +28,13 @@ def test_stage_4_judge_helper_exists_and_reorders(monkeypatch):
     monkeypatch.setattr(judge_mod, "judge", lambda q, docs, cfg: [2, 0, 1])
 
     result = _stage_4_judge("test query", reranked, FakeCfg())
-    # Top-3 reordered as [2, 0, 1] of the top-3 input
-    assert len(result) == 3
+    # Top-3 reordered as [2, 0, 1] of the top-3 input; tail (D, E) preserved
+    assert len(result) == 5
     assert result[0][1]["id"] == "c"
     assert result[1][1]["id"] == "a"
     assert result[2][1]["id"] == "b"
+    assert result[3][1]["id"] == "d"
+    assert result[4][1]["id"] == "e"
 
 
 def test_stage_5_soar_helper_exists_and_applies_boosts(tmp_path, monkeypatch):

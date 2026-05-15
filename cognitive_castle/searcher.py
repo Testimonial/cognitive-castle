@@ -191,6 +191,19 @@ def _print_search_results(result: dict, query: str) -> None:
         print(f"      {text}\n")
         print(f"  {'─' * 56}")
 
+    # JUDGE audit line — driven by judge_status stashed on hits[0] by
+    # _stage_4_judge. Absent for identity-order success (no surprise to
+    # surface) or when mode < max (Stage 4 didn't run).
+    status = hits[0].get("judge_status") if hits else None
+    if status:
+        if "error" in status:
+            print(f"\n  JUDGE: FAILED ({status['error']}) — identity-order fallback")
+        elif status.get("reordered"):
+            print(
+                f"\n  JUDGE: reordered {status['n']} hits "
+                f"({status['model']}, {status['elapsed_s']}s)"
+            )
+
 
 def search(
     query: str,
@@ -398,20 +411,53 @@ def _stage_4_judge(
 ) -> list[tuple[float, dict]]:
     """Stage 4: LLM-as-judge re-rank.
 
-    Truncates ``reranked`` to ``cfg.llm_judge_top_n``, then asks the LLM to
-    reorder. Returns the reordered top-N tuples (the rest are discarded —
-    same behavior as the inline block this replaces).
+    Asks the LLM to reorder the top ``cfg.llm_judge_top_n`` hits. The
+    rest of the input list is preserved unchanged at the tail of the
+    return value.
 
-    On any LLM failure, the underlying ``judge.judge()`` returns identity
-    order, so this helper preserves the input top-N order.
+    On any LLM failure (timeout, connection error, malformed reorder),
+    returns ``reranked`` unchanged in identity order and stashes
+    ``{"error": "<ExceptionClass>: <msg>"}`` on the first hit's dict so
+    the CLI printer can surface a JUDGE audit line.
+
+    On successful reorder, stashes ``{"reordered": True, "n": top_n,
+    "model": cfg.llm_model, "elapsed_s": <float>}`` on the first hit's
+    dict. If the judge returns identity order, no dict is stashed.
+
+    The stashed ``judge_status`` is dropped by callers unless it appears
+    in the result serializer allowlist in ``search_memories``.
     """
+    import time
     from .judge import judge
 
-    top_n = cfg.llm_judge_top_n
-    judge_pool = reranked[:top_n]
-    judge_docs = [_extract_text(r) for _, r in judge_pool]
-    new_order = judge(query, judge_docs, cfg)
-    return [judge_pool[i] for i in new_order]
+    if not reranked:
+        return reranked
+
+    started = time.time()
+    try:
+        top_n = cfg.llm_judge_top_n
+        judge_pool = reranked[:top_n]
+        judge_docs = [_extract_text(r) for _, r in judge_pool]
+        new_order = judge(query, judge_docs, cfg)
+        elapsed = round(time.time() - started, 2)
+
+        if new_order != list(range(len(new_order))):
+            reordered_top = [judge_pool[i] for i in new_order]
+            new_reranked = reordered_top + reranked[top_n:]
+            new_reranked[0][1]["judge_status"] = {
+                "reordered": True,
+                "n": len(judge_pool),
+                "model": cfg.llm_model,
+                "elapsed_s": elapsed,
+            }
+            return new_reranked
+
+        # Identity order — return original list, no status stash
+        return reranked
+
+    except Exception as e:  # noqa: BLE001 — deliberate broad catch for graceful fallback
+        reranked[0][1]["judge_status"] = {"error": f"{type(e).__name__}: {e}"}
+        return reranked
 
 
 def _stage_5_soar(
@@ -672,6 +718,10 @@ def _new_pipeline_search(
             "score_pre_quality": (
                 float(r.get("score_pre_quality", s)) if isinstance(r, dict) else float(s)
             ),
+            # LLM judge audit trail — populated only when Stage 4 ran AND
+            # either reordered hits or hit an error. Absent otherwise (no
+            # audit line emitted for identity-order success).
+            "judge_status": (r.get("judge_status") if isinstance(r, dict) else None),
         }
         for s, r in reranked[:n_results]
     ]
