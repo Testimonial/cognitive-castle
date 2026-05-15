@@ -522,6 +522,18 @@ of that design:
   system prompt at session start (PR #48)
 - **`claude-cli` LLM provider** — reuses the parent Claude Code's auth
   for Stage 4 judge instead of a separate Messages API key (PR #49)
+- **Stage 6 deterministic text-quality re-rank** — applies 31 standards-based
+  metrics (IEEE 830, ISO 29148, readability formulas, cognitive load theory)
+  as a quality axis on top of relevance ranking. Two-tier threshold:
+  medium ×1.15, high ×1.25.
+
+Stage 6 is powered by the vendored
+[**`understanding`**](https://github.com/Testimonial/understanding)
+package (v3.7.0, MIT, Ladislav Bihari) — copied in-tree as
+`cognitive_castle/understanding/` to avoid a Castle → echelon →
+MemPalace dependency chain. Castle's contribution is the integration
+pattern (using deterministic quality metrics as a retrieval re-rank
+stage), not the metrics themselves.
 
 Original benchmark methodology and the "wings/rooms/drawers" naming
 preserved with credit to the upstream authors.
