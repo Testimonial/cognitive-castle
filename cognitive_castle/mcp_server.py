@@ -1709,6 +1709,7 @@ def handle_request(request):
                 "protocolVersion": negotiated,
                 "capabilities": {"tools": {}},
                 "serverInfo": {"name": "cognitive-castle", "version": __version__},
+                "instructions": _build_instructions(),
             },
         }
     elif method == "ping":

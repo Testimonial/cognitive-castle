@@ -1025,6 +1025,7 @@ def test_palace_protocol_has_no_circular_wakeup_rule():
     instruct the AI to call castle_status (the protocol's source) on
     wake-up — that's the very thing the injection replaces."""
     from cognitive_castle.mcp_server import PALACE_PROTOCOL
+
     assert "ON WAKE-UP" not in PALACE_PROTOCOL
     assert "Call castle_status" not in PALACE_PROTOCOL
 
@@ -1036,6 +1037,7 @@ def test_aaak_spec_uses_generic_placeholders():
     mappings (*warm*=joy, *fierce*=determined) stay — those define the
     AAAK dialect itself, not user data."""
     from cognitive_castle.mcp_server import AAAK_SPEC
+
     # Personal names removed
     for personal in ("Alice", "Jordan", "Riley", "Max=Max", "BEN=Ben"):
         assert personal not in AAAK_SPEC, (
@@ -1087,3 +1089,49 @@ def test_palace_state_line_with_drawers(monkeypatch):
     assert "42 drawers" in line
     # 3 distinct wings: wing_castle, wing_alice, "unknown" (None → fallback)
     assert "3 wings" in line
+
+
+def test_initialize_response_includes_instructions():
+    """The initialize response carries the `instructions` field, which
+    MCP-compliant clients inject into the system prompt at session
+    start. This is the foundational guarantee that AIs see Castle's
+    protocol every session."""
+    from cognitive_castle.mcp_server import handle_request
+
+    response = handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    assert "instructions" in response["result"]
+    assert isinstance(response["result"]["instructions"], str)
+    assert len(response["result"]["instructions"]) > 100
+
+
+def test_initialize_instructions_contains_protocol_and_aaak():
+    """Verify the injected text carries the behavioral protocol markers
+    and the AAAK dialect spec. Substring assertions (not exact wording)
+    so the protocol can evolve without test churn."""
+    from cognitive_castle.mcp_server import handle_request
+
+    response = handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    text = response["result"]["instructions"]
+    # Behavioral protocol markers
+    assert "castle_search" in text
+    assert "castle_add_drawer" in text
+    assert "castle_diary_write" in text
+    assert "castle_kg_invalidate" in text
+    assert "Never guess" in text
+    # AAAK marker
+    assert "AAAK" in text
+    assert "ENTITIES:" in text
