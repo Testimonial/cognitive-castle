@@ -26,12 +26,14 @@ That's `2^4 = 16` combinatorial surface for users to reason about, of which only
 
 ### What the consolidated interface looks like
 
-| Mode | Stages run | Latency tax | Use case |
+| Mode | Stages run | Latency tax (informational, not enforced) | Use case |
 |---|---|---:|---|
 | `fast`       | 3            | ~0 ms          | Hook-driven background pulls; lowest latency |
 | `standard`   | 3, 6         | ~760 ms        | Default-quality interactive search w/o LLM |
 | `boosted`    | 3, 5, 6      | ~770 ms        | Add SOAR symbolic boost-tags (deterministic) |
 | `max`        | 3, 4, 5, 6   | ~1.8–2.8 s     | Full pipeline incl. LLM judge (default) |
+
+Latency numbers are pre-PR measurements on the user's hardware. No test enforces them; they are documentation, not acceptance criteria.
 
 The default is `max`. Stage 4 already has graceful identity-order fallback on any LLM failure, so picking `max` cannot break searches — at worst it transparently degrades to `boosted`-equivalent and surfaces a JUDGE audit line.
 
@@ -109,12 +111,7 @@ result = searcher.search(
 
 Same pattern in any other CLI subcommand that calls `searcher.search()` (e.g., `cmd_hook`). Plan-time grep: `args.llm_rerank|args.soar_boost|args.soar_first|args.no_quality_rerank` across `cli.py`.
 
-**`cmd_init` changes:**
-
-- Argparse `--llm-model` default: `"gemma3:4b"` → `"qwen3.5:latest"`.
-- Body fallback `or "gemma3:4b"` → `or "qwen3.5:latest"`.
-
-Rationale: `gemma3:4b` is not in the Ollama registry; the user's installed models include `qwen3.5:latest` but not `gemma3:4b`. The docstring at `config.py:476` already flagged this.
+**`cmd_init` changes:** _(out of scope — see Section 6)_
 
 #### `cognitive_castle/mcp_server.py`
 
@@ -164,21 +161,28 @@ def search(query, *, mode: str = "max", ...): ...
 def _new_pipeline_search(query, ..., mode: str = "max"): ...
 ```
 
-`_apply_stages_4_and_5` → renamed `_apply_optional_stages`. Body becomes a mode-dispatched if/elif/else:
+`_apply_optional_stages` keeps its name (already correct in `searcher.py:453`). Only its signature changes: replace the four boolean flags with a single `mode` string. Body becomes a mode-dispatched if/elif/else.
+
+Stage helper signatures (verified against `searcher.py:394-450`):
+- `_stage_4_judge(query, reranked, cfg)` — query first
+- `_stage_5_soar(reranked, cfg, query="")` — query is keyword-only, last
+- `_stage_6_quality(reranked, cfg)` — no query argument
+
+The new body must respect these:
 
 ```python
 def _apply_optional_stages(query, reranked, cfg, mode):
     if mode == "fast":
         return reranked
     if mode == "standard":
-        return _stage_6_quality(query, reranked, cfg)
+        return _stage_6_quality(reranked, cfg)
     if mode == "boosted":
-        reranked = _stage_5_soar(query, reranked, cfg)
-        return _stage_6_quality(query, reranked, cfg)
+        reranked = _stage_5_soar(reranked, cfg, query=query)
+        return _stage_6_quality(reranked, cfg)
     if mode == "max":
         reranked = _stage_4_judge(query, reranked, cfg)
-        reranked = _stage_5_soar(query, reranked, cfg)
-        return _stage_6_quality(query, reranked, cfg)
+        reranked = _stage_5_soar(reranked, cfg, query=query)
+        return _stage_6_quality(reranked, cfg)
     raise ValueError(f"invalid mode '{mode}'")
 ```
 
@@ -228,7 +232,6 @@ def _stage_4_judge(query, reranked, cfg):
 
 - Delete `cfg.soar_enabled` property (lines ~550–556).
 - Delete `cfg.quality_disabled` property (added 1 day ago in PR #45 — net-zero churn).
-- Change `cfg.llm_model` default at line ~476: `"gemma3:4b"` → `"qwen3.5:latest"`.
 
 #### `cognitive_castle/soar_bridge.py`
 
@@ -259,13 +262,13 @@ The consolidation is a flag-shape refactor. The four pipeline stages (3 / 4 / 5 
 | File | Delete | Update | Add |
 |---|--:|--:|--:|
 | `tests/test_pipeline_order.py`             | 2  | 12 | 2 |
-| `tests/test_cli.py`                        | 6  | 8  | 4 |
+| `tests/test_cli.py`                        | 6  | 8  | 3 |
 | `tests/test_mcp_server.py`                 | 3  | 6  | 3 |
 | `tests/test_config.py`                     | 6  | 0  | 1 |
 | `tests/test_searcher.py`                   | 0  | 4  | 3 |
 | `tests/test_quality_rerank.py`             | 1  | 2  | 0 |
 | `tests/test_soar_bridge.py`                | 1  | 1  | 0 |
-| `tests/test_judge.py`                      | 0  | 0  | 3 |
+| `tests/test_judge.py`                      | 0  | 0  | 4 |
 | **Totals**                                 | 19 | 33 | 16 |
 
 ### Prerequisite refactor
@@ -301,17 +304,40 @@ def test_apply_optional_stages_dispatches_by_mode(
     assert q.called is expect_quality
 ```
 
-`_mock_cfg` is a fixture at the top of `test_pipeline_order.py` — a minimal `CognitiveCastleConfig` with `llm_model="qwen3.5:latest"`, `llm_judge_top_n=10`.
+`_mock_cfg` and `_mock_cfg_top_n_3` are pytest fixtures defined at the top of `test_pipeline_order.py` and `test_judge.py` (or once in `conftest.py` and reused). Note: the existing `_mock_cfg` in `test_judge.py:10` is a plain function (no `@pytest.fixture` decorator) — it must be redefined as a fixture for Section 3's tests to collect:
+
+```python
+# In tests/conftest.py (preferred — shared between test files):
+@pytest.fixture
+def _mock_cfg():
+    cfg = SimpleNamespace()
+    cfg.llm_model = "qwen3.5:latest"
+    cfg.llm_judge_top_n = 10
+    return cfg
+
+@pytest.fixture
+def _mock_cfg_top_n_3(_mock_cfg):
+    _mock_cfg.llm_judge_top_n = 3
+    return _mock_cfg
+```
+
+If `_mock_cfg` is redefined as a fixture in `conftest.py`, the existing plain-function caller at `test_judge.py:10` and its call sites must be updated in the same commit — turning function calls (`_mock_cfg()`) into fixture parameter references.
 
 **2. Mode ordering in `max`** — `tests/test_pipeline_order.py`
 
 ```python
 def test_max_mode_calls_stages_in_order_4_5_6(_mock_cfg):
     calls = []
+    # Stage 4 sig: (query, reranked, cfg)         — return reranked unchanged
+    # Stage 5 sig: (reranked, cfg, query=...)     — return reranked unchanged
+    # Stage 6 sig: (reranked, cfg)                — return reranked unchanged
     with (
-        patch("cognitive_castle.searcher._stage_4_judge", side_effect=lambda *a: calls.append("4") or a[1]),
-        patch("cognitive_castle.searcher._stage_5_soar",  side_effect=lambda *a: calls.append("5") or a[1]),
-        patch("cognitive_castle.searcher._stage_6_quality", side_effect=lambda *a: calls.append("6") or a[1]),
+        patch("cognitive_castle.searcher._stage_4_judge",
+              side_effect=lambda q, r, c: calls.append("4") or r),
+        patch("cognitive_castle.searcher._stage_5_soar",
+              side_effect=lambda r, c, query="": calls.append("5") or r),
+        patch("cognitive_castle.searcher._stage_6_quality",
+              side_effect=lambda r, c: calls.append("6") or r),
     ):
         searcher._apply_optional_stages("q", [("d1", {"text": "x"})], _mock_cfg, "max")
     assert calls == ["4", "5", "6"]
@@ -351,18 +377,7 @@ def test_search_default_mode_is_max():
     assert args.mode == "max"
 ```
 
-**6. `cmd_init` --llm-model default** — `tests/test_cli.py`
-
-```python
-def test_cmd_init_llm_model_default_is_qwen35():
-    parser = cli.build_parser()
-    args = parser.parse_args(["init", "/tmp/test_palace"])
-    assert args.llm_model == "qwen3.5:latest"
-```
-
-Three-line regression test for the `gemma3:4b` → `qwen3.5:latest` swap.
-
-**7. MCP mode validation (3 tests)** — `tests/test_mcp_server.py`
+**6. MCP mode validation (3 tests)** — `tests/test_mcp_server.py`
 
 ```python
 def test_mcp_tool_search_default_mode_is_max():
@@ -384,7 +399,7 @@ def test_mcp_tool_search_rejects_invalid_mode():
 
 MCP validation lives in `tool_search` body (3-line guard), NOT in the JSON schema.
 
-**8. Config: removed properties (parametrized)** — `tests/test_config.py`
+**7. Config: removed properties (parametrized)** — `tests/test_config.py`
 
 ```python
 @pytest.mark.parametrize("attr", ["soar_enabled", "quality_disabled"])
@@ -395,7 +410,7 @@ def test_removed_config_properties_are_absent(attr):
 
 Six existing tests around these two properties are deleted.
 
-**9. Programmatic `mode=` parity (3 tests)** — `tests/test_searcher.py`
+**8. Programmatic `mode=` parity (3 tests)** — `tests/test_searcher.py`
 
 ```python
 def _mock_recall_layer():
@@ -406,40 +421,43 @@ def _mock_recall_layer():
         return_value=fake_hits,
     )
 
-def test_search_memories_default_mode_runs_all_stages(tmp_palace):
+def test_search_memories_default_mode_runs_all_stages(palace_path):
     """Programmatic callers get max by default — closes the PR #45 P2 gap."""
     with (
         _mock_recall_layer(),
-        patch("cognitive_castle.searcher._stage_4_judge", side_effect=lambda q, r, c: r) as j,
-        patch("cognitive_castle.searcher._stage_5_soar",  side_effect=lambda q, r, c: r) as s,
-        patch("cognitive_castle.searcher._stage_6_quality", side_effect=lambda q, r, c: r) as q,
+        patch("cognitive_castle.searcher._stage_4_judge",
+              side_effect=lambda q, r, c: r) as j,
+        patch("cognitive_castle.searcher._stage_5_soar",
+              side_effect=lambda r, c, query="": r) as s,
+        patch("cognitive_castle.searcher._stage_6_quality",
+              side_effect=lambda r, c: r) as q,
     ):
-        searcher.search_memories(query="q", palace_path=str(tmp_palace))
+        searcher.search_memories(query="q", palace_path=palace_path)
     assert j.called and s.called and q.called
 
-def test_search_memories_mode_fast_skips_all_optional_stages(tmp_palace):
+def test_search_memories_mode_fast_skips_all_optional_stages(palace_path):
     with (
         _mock_recall_layer(),
         patch("cognitive_castle.searcher._stage_4_judge") as j,
         patch("cognitive_castle.searcher._stage_5_soar")  as s,
         patch("cognitive_castle.searcher._stage_6_quality") as q,
     ):
-        searcher.search_memories(query="q", palace_path=str(tmp_palace), mode="fast")
+        searcher.search_memories(query="q", palace_path=palace_path, mode="fast")
     assert not j.called and not s.called and not q.called
 
-def test_search_memories_invalid_mode_raises(tmp_palace):
+def test_search_memories_invalid_mode_raises(palace_path):
     with _mock_recall_layer():
         with pytest.raises(ValueError, match="invalid mode"):
-            searcher.search_memories(query="q", palace_path=str(tmp_palace), mode="full")
+            searcher.search_memories(query="q", palace_path=palace_path, mode="full")
 ```
 
-`tmp_palace` is the existing fixture in `tests/conftest.py` that creates a minimal LanceDB-backed palace.
+`palace_path` is the existing fixture in `tests/conftest.py` (returns a string path to an empty palace dir).
 
 **Plan-time verification:** `_mock_recall_layer` patches `cognitive_castle.searcher._stage_3_rerank`. The actual function name in `searcher.py` may differ (`_stage_3`, `_rerank`, `cross_encoder_rerank`, etc.). Before writing this test, grep `searcher.py` for the Stage 3 rerank function and update the patch path. Same applies to the `_stage_4_judge`, `_stage_5_soar`, `_stage_6_quality` patch paths used throughout Section 3 — if any of these helpers have different names in the current code, update consistently across all tests.
 
-Test 9.1 explicitly closes the P2 review gap flagged on PR #45 — programmatic callers no longer execute Stage 6 silently.
+Test 8.1 explicitly closes the P2 review gap flagged on PR #45 — programmatic callers no longer execute Stage 6 silently.
 
-**10. JUDGE audit line — happy + error path (2 tests)** — `tests/test_judge.py`
+**9. JUDGE audit line — happy + error + top_n preservation (3 tests)** — `tests/test_judge.py`
 
 ```python
 def test_judge_status_on_successful_reorder(_mock_cfg):
@@ -459,13 +477,55 @@ def test_judge_status_on_failure_is_identity_fallback(_mock_cfg):
         out = searcher._stage_4_judge("q", reranked, _mock_cfg)
     assert out == reranked  # identity-order fallback
     assert out[0][1]["judge_status"] == {"error": "ConnectionError: ollama down"}
+
+def test_judge_preserves_hits_beyond_top_n(_mock_cfg_top_n_3):
+    """Spec changes _stage_4_judge to preserve reranked[top_n:] (live code
+    truncates). Lock the new behavior: with 5 hits and top_n=3, output keeps
+    all 5 — top-3 reordered, hits 4 and 5 untouched at the end."""
+    fake_reorder = [2, 0, 1]
+    with patch("cognitive_castle.judge.judge", return_value=fake_reorder):
+        reranked = [(f"d{i}", {"text": f"t{i}"}) for i in range(5)]
+        out = searcher._stage_4_judge("q", reranked, _mock_cfg_top_n_3)
+    assert len(out) == 5
+    # Top-3 reordered:
+    assert [r[0] for r in out[:3]] == ["d2", "d0", "d1"]
+    # Tail preserved in original order:
+    assert [r[0] for r in out[3:]] == ["d3", "d4"]
 ```
+
+`_mock_cfg_top_n_3` is a sibling fixture identical to `_mock_cfg` but with `llm_judge_top_n=3` so the truncation boundary is testable.
+
+**Behavior change note:** Live `_stage_4_judge` (`searcher.py:410-414`) returns `[judge_pool[i] for i in new_order]` — discarding `reranked[top_n:]`. The spec deliberately changes this to preserve the tail. The docstring at `searcher.py:401-403` ("the rest are discarded — same behavior as the inline block this replaces") must be updated to reflect the new "tail preserved" behavior.
 
 Edge case: empty `reranked` returns `[]` immediately; no audit line emitted; no test crash. Implicitly covered by the existing `test_searcher_handles_empty_hits` integration test.
 
-**11. Slow smoke (LLM end-to-end)** — `tests/test_judge.py`, marked `@pytest.mark.slow`
+This brings test_judge.py additions to 4 (was 3): success-reorder, failure-fallback, top_n preservation, slow smoke. Update the surface table accordingly.
+
+**10. Slow smoke (LLM end-to-end)** — `tests/test_judge.py`, marked `@pytest.mark.slow`
+
+Both the helper and the fixture must be defined alongside the test (neither exists today):
 
 ```python
+def _ollama_reachable() -> bool:
+    """True if Ollama is responding on localhost:11434."""
+    import urllib.request, urllib.error
+    try:
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        return True
+    except (urllib.error.URLError, TimeoutError, ConnectionError):
+        return False
+
+@pytest.fixture
+def real_palace_fixture(palace_path):
+    """A palace seeded with three drawers so search returns enough hits to
+    exercise Stage 4."""
+    from cognitive_castle import miner
+    # Seed three drawers with text the judge can reorder.
+    miner.add_drawer(palace_path, wing="test", room="r1", text="Retrieval weights: dense 0.5, sparse 0.3, kg 0.2.")
+    miner.add_drawer(palace_path, wing="test", room="r1", text="We chose recency tau of 30 days.")
+    miner.add_drawer(palace_path, wing="test", room="r1", text="Unrelated content about cooking pasta.")
+    return palace_path
+
 @pytest.mark.slow
 def test_max_mode_end_to_end_with_real_judge(real_palace_fixture):
     """Reaches actual Ollama. Skipped in CI; run locally before PR merge."""
@@ -482,7 +542,7 @@ def test_max_mode_end_to_end_with_real_judge(real_palace_fixture):
     assert status is None or "reordered" in status or "error" in status
 ```
 
-Catches: Ollama URL changes, default-model-not-installed regressions, prompt template breakage. Excluded from CI; runs locally before PR merge.
+Plan-time verification: the seeding call (`miner.add_drawer`) is illustrative — replace with whatever helper Castle's existing test suite uses to add drawers (grep `tests/` for `add_drawer` or look at how `seeded_collection` fixture builds its content). Catches: Ollama URL changes, default-model-not-installed regressions, prompt template breakage. Excluded from CI; runs locally before PR merge.
 
 ### Coverage targets
 
@@ -495,9 +555,10 @@ Catches: Ollama URL changes, default-model-not-installed regressions, prompt tem
 
 | # | Risk | Likelihood | Mitigation |
 |---|---|---|---|
-| 1 | `_apply_optional_stages` callers in `_new_pipeline_search` get out-of-sync signatures | Medium | Rename + signature change in a single commit; grep-verify all 3 callers compile before commit. |
+| 1 | `_apply_optional_stages` callers in `_new_pipeline_search` get out-of-sync signatures | Medium | Signature change + caller updates in a single commit; grep-verify all callers compile before commit. |
 | 2 | Slow smoke passes locally but Ollama default model differs in CI | Low | Marked `@pytest.mark.slow`, excluded from CI. Unit tests under #10 catch success/error shapes deterministically. |
 | 3 | Programmatic callers in third-party plugins break on missing `mode=` kwarg | Very Low | `mode` defaults to `"max"` in `search_memories()` signature — no caller is required to pass it. |
+| 4 | `cfg.soar_enabled` deletion + `soar_bridge.py` early-return removal must land together | Medium | Same commit. If `config.py` change lands first, any test that reaches `_stage_5_soar` raises `AttributeError`. Grep `soar_enabled` across the repo before the deletion commit. |
 
 ### Non-goals
 
@@ -529,3 +590,21 @@ feat(search)!: consolidate four search flags into --mode {fast,standard,boosted,
 ```
 
 No deprecation window — single-user system, the user is the only caller, and Castle has no external plugin consumers.
+
+---
+
+## 6. Out of scope — follow-up PR
+
+The default LLM model swap (`cmd_init` `--llm-model` default and `config.py:476` fallback: `"gemma3:4b"` → `"qwen3.5:latest"`) was originally scoped here but is being split out. Rationale: `gemma3:4b` is not in the Ollama registry; the user's installed models include `qwen3.5:latest` but not `gemma3:4b`. The docstring at `config.py:476` already flags this.
+
+Splitting keeps this PR's diff focused on flag-shape changes and makes the LLM-default change independently revertable. Suggested follow-up commit:
+
+```
+fix(config): default cmd_init --llm-model to qwen3.5:latest
+
+gemma3:4b is not in the Ollama registry. qwen3.5:latest is one of the
+user's installed models and the spec audit found this discrepancy
+during the search-mode consolidation review.
+```
+
+Scope: change three lines (argparse default + body fallback + config.py default) and one regression test (`test_cmd_init_llm_model_default_is_qwen35` from the original spec — moved to the follow-up PR).
