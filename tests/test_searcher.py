@@ -260,9 +260,7 @@ def test_search_memories_standard_mode_skips_stage_4(
     assert "results" in result
 
 
-def test_search_memories_max_mode_calls_judge(
-    monkeypatch, palace_path, large_seeded_collection
-):
+def test_search_memories_max_mode_calls_judge(monkeypatch, palace_path, large_seeded_collection):
     """mode='max': judge.judge is called with top-N candidates."""
     from unittest.mock import MagicMock
 

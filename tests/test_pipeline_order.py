@@ -9,27 +9,23 @@ import cognitive_castle.searcher as searcher_mod
 @pytest.mark.parametrize(
     "mode,expect_judge,expect_soar,expect_quality",
     [
-        ("fast",     False, False, False),
+        ("fast", False, False, False),
         ("standard", False, False, True),
-        ("boosted",  False, True,  True),
-        ("max",      True,  True,  True),
+        ("boosted", False, True, True),
+        ("max", True, True, True),
     ],
 )
 def test_apply_optional_stages_dispatches_by_mode(
     mode, expect_judge, expect_soar, expect_quality, _mock_cfg
 ):
     from unittest.mock import patch
+
     with (
-        patch("cognitive_castle.searcher._stage_4_judge",
-              side_effect=lambda q, r, c: r) as j,
-        patch("cognitive_castle.searcher._stage_5_soar",
-              side_effect=lambda r, c, query="": r) as s,
-        patch("cognitive_castle.searcher._stage_6_quality",
-              side_effect=lambda r, c: r) as q,
+        patch("cognitive_castle.searcher._stage_4_judge", side_effect=lambda q, r, c: r) as j,
+        patch("cognitive_castle.searcher._stage_5_soar", side_effect=lambda r, c, query="": r) as s,
+        patch("cognitive_castle.searcher._stage_6_quality", side_effect=lambda r, c: r) as q,
     ):
-        searcher_mod._apply_optional_stages(
-            "q", [(1.0, {"text": "x"})], _mock_cfg, mode
-        )
+        searcher_mod._apply_optional_stages("q", [(1.0, {"text": "x"})], _mock_cfg, mode)
     assert j.called is expect_judge
     assert s.called is expect_soar
     assert q.called is expect_quality
@@ -37,18 +33,23 @@ def test_apply_optional_stages_dispatches_by_mode(
 
 def test_max_mode_calls_stages_in_order_4_5_6(_mock_cfg):
     from unittest.mock import patch
+
     calls = []
     with (
-        patch("cognitive_castle.searcher._stage_4_judge",
-              side_effect=lambda q, r, c: calls.append("4") or r),
-        patch("cognitive_castle.searcher._stage_5_soar",
-              side_effect=lambda r, c, query="": calls.append("5") or r),
-        patch("cognitive_castle.searcher._stage_6_quality",
-              side_effect=lambda r, c: calls.append("6") or r),
+        patch(
+            "cognitive_castle.searcher._stage_4_judge",
+            side_effect=lambda q, r, c: calls.append("4") or r,
+        ),
+        patch(
+            "cognitive_castle.searcher._stage_5_soar",
+            side_effect=lambda r, c, query="": calls.append("5") or r,
+        ),
+        patch(
+            "cognitive_castle.searcher._stage_6_quality",
+            side_effect=lambda r, c: calls.append("6") or r,
+        ),
     ):
-        searcher_mod._apply_optional_stages(
-            "q", [(1.0, {"text": "x"})], _mock_cfg, "max"
-        )
+        searcher_mod._apply_optional_stages("q", [(1.0, {"text": "x"})], _mock_cfg, "max")
     assert calls == ["4", "5", "6"]
 
 
@@ -189,9 +190,7 @@ def test_boosted_mode_runs_soar_not_judge(monkeypatch, tmp_path):
     monkeypatch.setattr(
         searcher_mod, "_stage_5_soar", lambda r, c, query="": call_order.append("stage_5") or r
     )
-    monkeypatch.setattr(
-        searcher_mod, "_stage_6_quality", lambda r, c: r
-    )
+    monkeypatch.setattr(searcher_mod, "_stage_6_quality", lambda r, c: r)
 
     from cognitive_castle.searcher import _apply_optional_stages
 

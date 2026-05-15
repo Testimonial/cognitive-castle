@@ -875,9 +875,9 @@ def test_search_rejects_invalid_mode(bad, capsys):
     assert "invalid choice" in err
 
 
-@pytest.mark.parametrize("flag", [
-    "--llm-rerank", "--soar-boost", "--soar-first", "--no-quality-rerank"
-])
+@pytest.mark.parametrize(
+    "flag", ["--llm-rerank", "--soar-boost", "--soar-first", "--no-quality-rerank"]
+)
 def test_removed_flags_rejected(flag, capsys):
     parser = cli.build_parser().parser
     with pytest.raises(SystemExit):

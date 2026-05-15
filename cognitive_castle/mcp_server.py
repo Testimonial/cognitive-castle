@@ -380,12 +380,7 @@ def tool_search(
     # Mode validation in the function body (not the JSON schema) so the
     # error message is specific to Castle.
     if mode not in ("fast", "standard", "boosted", "max"):
-        return {
-            "error": (
-                f"invalid mode '{mode}'. "
-                "Must be one of: fast, standard, boosted, max"
-            )
-        }
+        return {"error": (f"invalid mode '{mode}'. Must be one of: fast, standard, boosted, max")}
 
     limit = max(1, min(limit, _MAX_RESULTS))
     try:

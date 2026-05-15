@@ -990,6 +990,7 @@ class TestCacheInvalidation:
 def test_mcp_tool_search_default_mode_is_max():
     from unittest.mock import patch
     from cognitive_castle import mcp_server
+
     with patch(
         "cognitive_castle.mcp_server.search_memories",
         return_value={"results": []},
@@ -1001,6 +1002,7 @@ def test_mcp_tool_search_default_mode_is_max():
 def test_mcp_tool_search_accepts_valid_modes():
     from unittest.mock import patch
     from cognitive_castle import mcp_server
+
     for mode in ("fast", "standard", "boosted", "max"):
         with patch(
             "cognitive_castle.mcp_server.search_memories",
@@ -1012,6 +1014,7 @@ def test_mcp_tool_search_accepts_valid_modes():
 
 def test_mcp_tool_search_rejects_invalid_mode():
     from cognitive_castle import mcp_server
+
     result = mcp_server.tool_search(query="q", mode="full")
     assert "error" in result
     assert "invalid mode" in result["error"].lower()
