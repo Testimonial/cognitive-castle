@@ -54,6 +54,19 @@ The default is `max`. Stage 4 already has graceful identity-order fallback on an
 
 This PR **resolves the open P2 gap from PR #45** ("global quality-rerank disable path unenforced for direct search API calls"). The fix is by removal: `cfg.quality_disabled` ceases to exist; programmatic callers pass `mode=` and get exactly the stages they asked for.
 
+### Migration regression: SOAR-without-quality
+
+The map above is correct for each flag *alone*, but **combinations have no exact equivalent**:
+
+| Old combination | What you got | Closest new mode | Difference |
+|---|---|---|---|
+| `--soar-boost --no-quality-rerank`           | Stages 3, 5         | `--mode boosted` (adds Stage 6) or `--mode fast` (drops SOAR) | Either gain quality rerank or lose SOAR |
+| `--llm-rerank --no-quality-rerank`           | Stages 3, 4         | `--mode max` (adds 5, 6) or `--mode fast` (drops judge) | Either gain SOAR+quality or lose judge |
+| `--llm-rerank --soar-boost --no-quality-rerank` | Stages 3, 4, 5    | `--mode max` (adds Stage 6) | Always gains quality rerank |
+| `CASTLE_QUALITY_DISABLED=1` + any combo      | (combo with Stage 6 stripped) | (closest mode) | Quality rerank either gained or stages dropped |
+
+This is a deliberate consequence of treating mode as a bundle, not a per-stage toggle. The user is the only caller; there are no saved invocations using these combinations. Acknowledged as an accepted behavior change, not a bug.
+
 ---
 
 ## 2. Implementation surface
@@ -161,6 +174,27 @@ def search(query, *, mode: str = "max", ...): ...
 def _new_pipeline_search(query, ..., mode: str = "max"): ...
 ```
 
+`search()` is a thin wrapper around `search_memories()` (currently at `searcher.py:195-235`). Its body passes the four old booleans through. The body must change too:
+
+```python
+# BEFORE (delete):
+def search(query, *, llm_rerank=False, soar_boost=False, soar_first=False, quality_rerank=True, ...):
+    return search_memories(
+        query=query,
+        llm_rerank=llm_rerank,
+        soar_boost=soar_boost,
+        soar_first=soar_first,
+        quality_rerank=quality_rerank,
+        ...
+    )
+
+# AFTER:
+def search(query, *, mode: str = "max", ...):
+    return search_memories(query=query, mode=mode, ...)
+```
+
+The `is_hook_call: bool = False` parameter on `search_memories` is **orthogonal to mode** — it controls reranker top-K caps (`reranker_k_hook` vs `reranker_k_interactive`). It is preserved unchanged. Mode and `is_hook_call` are independent dimensions; both can co-vary.
+
 `_apply_optional_stages` keeps its name (already correct in `searcher.py:453`). Only its signature changes: replace the four boolean flags with a single `mode` string. Body becomes a mode-dispatched if/elif/else.
 
 Stage helper signatures (verified against `searcher.py:394-450`):
@@ -228,6 +262,29 @@ def _stage_4_judge(query, reranked, cfg):
 
 `judge.judge()` itself: **no signature change**. The exception handling lives entirely in the searcher wrapper.
 
+**Critical: serializer + printer updates** — without these, the `judge_status` dict is silently dropped before reaching callers.
+
+The result serializer at `searcher.py:645-677` builds output dicts from an explicit allowlist. SOAR (`soar_tags`, `soar_boost`) and Stage 6 (`quality_score`, `quality_tier`) appear in that list precisely because their audit trails would otherwise vanish. `judge_status` needs the same treatment:
+
+```python
+# Add to the dict literal at searcher.py:645-677:
+"judge_status": (r.get("judge_status") if isinstance(r, dict) else None),
+```
+
+The audit-line printer at `_print_search_results` (~lines 170-191) reads named keys like `soar_tags` and `quality_tier`. It has no `judge_status` read path. Add one:
+
+```python
+# Add to _print_search_results after the existing SOAR / quality blocks:
+status = results[0].get("judge_status") if results else None
+if status:
+    if "error" in status:
+        print(f"JUDGE: FAILED ({status['error']}) — identity-order fallback")
+    elif status.get("reordered"):
+        print(f"JUDGE: reordered {status['n']} hits ({status['model']}, {status['elapsed_s']}s)")
+```
+
+Verify before commit: grep `searcher.py` for `_print_search_results` and confirm both the allowlist and printer blocks land in the right place.
+
 #### `cognitive_castle/config.py`
 
 - Delete `cfg.soar_enabled` property (lines ~550–556).
@@ -247,7 +304,20 @@ No code changes (error surfacing happens in the searcher wrapper).
 
 #### `CLAUDE.md`
 
-Replace the four-flag retrieval-pipeline diagram block with the mode table from Section 1.
+Replace the entire Stage 4+5 block at `CLAUDE.md:184-194` (starts `├── Stage 4 + Stage 5 (optional, composable...` and ends with the `(requires both --llm-rerank AND --soar-boost on; loud sys.exit(2)...)` line) and the Stage 6 line at `CLAUDE.md:195` (starts `├── Stage 6 (ON by default, opt-out via --no-quality-rerank...`) with the new mode block.
+
+New block to substitute:
+
+```
+    ├── Stage 4-6 (gated by --mode):
+    │     ├── --mode fast      → Stage 3 only
+    │     ├── --mode standard  → Stage 3 + Stage 6 (quality rerank)
+    │     ├── --mode boosted   → Stage 3 + Stage 5 (SOAR boost-tags) + Stage 6
+    │     └── --mode max       → Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6   ← default
+    │           Stage 4 graceful-fallback: identity order on any LLM failure; surfaces via JUDGE audit line.
+```
+
+Plan-time grep: search the file for any remaining `--llm-rerank`, `--soar-boost`, `--soar-first`, `--no-quality-rerank`, `CASTLE_SOAR_ENABLED`, `CASTLE_QUALITY_DISABLED` references and delete them. None should remain after the substitution.
 
 ---
 
