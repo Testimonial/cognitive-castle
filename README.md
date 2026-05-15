@@ -499,12 +499,32 @@ MIT — see [LICENSE](LICENSE).
 
 ## Acknowledgements
 
-Cognitive Castle is a fork and continuation of the MemPalace project,
-re-architected around LanceDB and a 3-stage retrieval pipeline (dense +
-Tantivy FTS + knowledge-graph traversal, fused via weighted RRF +
-recency, then cross-encoder reranked). Original benchmark methodology
-and "wings/rooms/drawers" naming preserved with credit to the upstream
-authors.
+Cognitive Castle is a fork and continuation of
+[**MemPalace**](https://github.com/MemPalace/mempalace) by Milla
+Jovovich. The foundational design — verbatim-only storage, the AAAK
+compressed dialect, the wings / rooms / drawers / halls / tunnels
+palace architecture, the temporal knowledge graph, the
+local-first / zero-external-API principle, and the `PALACE_PROTOCOL`
+behavioral contract — all originate upstream.
+
+Castle's contribution is an integration and distribution layer on top
+of that design:
+
+- **LanceDB backend** replacing upstream Chroma
+- **3-stage retrieval pipeline** — dense + Tantivy FTS +
+  knowledge-graph traversal, fused via weighted RRF + recency, then
+  cross-encoder reranked
+- **SOAR symbolic re-ranking productions** (Stage 5) — recency-boost,
+  same-project, entity-match, type-match
+- **Claude Code session hooks** for background Stop / PreCompact mining
+- **MCP `initialize.instructions` injection** that bakes
+  `PALACE_PROTOCOL` + AAAK spec + live palace state into the client's
+  system prompt at session start (PR #48)
+- **`claude-cli` LLM provider** — reuses the parent Claude Code's auth
+  for Stage 4 judge instead of a separate Messages API key (PR #49)
+
+Original benchmark methodology and the "wings/rooms/drawers" naming
+preserved with credit to the upstream authors.
 
 <!-- Link Definitions -->
 [version-shield]: https://img.shields.io/badge/version-3.3.3-4dc9f6?style=flat-square&labelColor=0a0e14
