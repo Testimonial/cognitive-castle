@@ -57,9 +57,14 @@ Behavioral protocol:
   rationale via castle_add_drawer in wing_<project> / decisions.
 - If a fact has changed (renamed function, moved file, person's role):
   call castle_kg_invalidate on the old, castle_kg_add for the new.
+- After significant work (decisions made, problems solved, milestones
+  reached), call castle_diary_write with a brief summary of what
+  happened, what you learned, and what matters.
 
-The Stop hook auto-mines completed sessions into the palace. Trust the
-palace over recollection — it stores exact words."""
+The Stop hook (plugin install) auto-mines completed transcripts. The
+diary is a higher-signal layer — call castle_diary_write explicitly for
+structured daily reflection, independent of the hook. Trust the palace
+over recollection — it stores exact words."""
 ```
 
 The current PALACE_PROTOCOL text (5 numbered rules including "ON WAKE-UP: Call castle_status...") is replaced wholesale. The "ON WAKE-UP" rule is dropped because it's circular when this text is itself injected at startup.
@@ -151,10 +156,10 @@ The rest of AAAK_SPEC (FORMAT line, EMOTIONS line, STRUCTURE, DATES, COUNTS, IMP
 ### Composition shape
 
 Approximate byte counts of the injected text:
-- `PALACE_PROTOCOL` (refined): ~600 chars
+- `PALACE_PROTOCOL` (refined, with diary rule): ~750 chars
 - `AAAK_SPEC` (with placeholder examples): ~600 chars
 - Palace state line: ~70 chars
-- **Total injection per session: ~1300 chars**
+- **Total injection per session: ~1450 chars**
 
 ### Error budget
 
@@ -206,6 +211,7 @@ def test_initialize_instructions_contains_protocol_and_aaak():
     # Behavioral protocol markers
     assert "castle_search" in text
     assert "castle_add_drawer" in text
+    assert "castle_diary_write" in text
     assert "Never guess" in text
     # AAAK marker
     assert "AAAK" in text
@@ -328,7 +334,6 @@ This validates that Claude Code's MCP client actually injects the field. If the 
 - Asserting the EXACT injected text byte-for-byte.
 - Behavior change in `castle_status` beyond the new PALACE_PROTOCOL text.
 - A SessionStart hook (deferred to follow-up if needed).
-- Diary-write rule in the protocol (Stop hook handles transcript mining).
 
 ---
 
