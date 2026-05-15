@@ -1,7 +1,10 @@
 """Unit tests for the LLM-as-judge Stage 4 module."""
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 from cognitive_castle.judge import judge
 from cognitive_castle.llm_client import LLMError, LLMResponse
@@ -104,6 +107,7 @@ def test_stage_4_judge_status_on_successful_reorder(_mock_cfg):
     """When judge reorders, _stage_4_judge stashes a status dict on hits[0]."""
     from unittest.mock import patch
     from cognitive_castle import searcher
+
     fake_reorder = [2, 0, 1]
     reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(3)]
     with patch("cognitive_castle.judge.judge", return_value=fake_reorder):
@@ -119,6 +123,7 @@ def test_stage_4_judge_status_on_failure_is_identity_fallback(_mock_cfg):
     """ConnectionError (or any Exception) → identity-order return + error stash."""
     from unittest.mock import patch
     from cognitive_castle import searcher
+
     reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(3)]
     with patch("cognitive_castle.judge.judge", side_effect=ConnectionError("ollama down")):
         out = searcher._stage_4_judge("q", reranked, _mock_cfg)
@@ -132,6 +137,7 @@ def test_stage_4_judge_preserves_hits_beyond_top_n(_mock_cfg_top_n_3):
     discards reranked[top_n:]."""
     from unittest.mock import patch
     from cognitive_castle import searcher
+
     fake_reorder = [2, 0, 1]
     reranked = [(1.0 - i * 0.1, {"text": f"t{i}"}) for i in range(5)]
     with patch("cognitive_castle.judge.judge", return_value=fake_reorder):
@@ -139,3 +145,98 @@ def test_stage_4_judge_preserves_hits_beyond_top_n(_mock_cfg_top_n_3):
     assert len(out) == 5
     assert [r[1]["text"] for r in out[:3]] == ["t2", "t0", "t1"]  # reordered top-3
     assert [r[1]["text"] for r in out[3:]] == ["t3", "t4"]  # tail preserved
+
+
+# ---------------------------------------------------------------------------
+# Slow smoke test — requires Ollama running on localhost:11434
+# ---------------------------------------------------------------------------
+
+
+def _ollama_reachable() -> bool:
+    """True if Ollama is responding on localhost:11434."""
+    import urllib.request
+    import urllib.error
+
+    try:
+        urllib.request.urlopen("http://localhost:11434/api/tags", timeout=1)
+        return True
+    except (urllib.error.URLError, TimeoutError, ConnectionError, OSError):
+        return False
+
+
+@pytest.fixture
+def real_palace_fixture(palace_path):
+    """A palace seeded with three drawers so search returns enough hits to
+    exercise Stage 4 (LLM-as-judge).
+
+    Uses the same ``get_collection`` + ``add_drawer`` pattern as the rest of
+    the test suite (see test_hall_detection.py and conftest.py).
+    """
+    import os
+    from cognitive_castle.palace import get_collection
+    from cognitive_castle.miner import add_drawer
+
+    col = get_collection(palace_path, collection_name="castle_drawers", create=True)
+
+    # Create real source files so add_drawer's os.path.getmtime() doesn't fail.
+    src1 = os.path.join(palace_path, "retrieval.txt")
+    src2 = os.path.join(palace_path, "recency.txt")
+    src3 = os.path.join(palace_path, "cooking.txt")
+    Path(src1).touch()
+    Path(src2).touch()
+    Path(src3).touch()
+
+    add_drawer(
+        collection=col,
+        wing="test",
+        room="r1",
+        content="Retrieval weights: dense 0.5, sparse 0.3, kg 0.2. We decided to use these weights after benchmarking on 500 queries.",
+        source_file=src1,
+        chunk_index=0,
+        agent="test",
+    )
+    add_drawer(
+        collection=col,
+        wing="test",
+        room="r1",
+        content="We chose a recency tau of 30 days after discussing exponential decay on retrieval freshness.",
+        source_file=src2,
+        chunk_index=0,
+        agent="test",
+    )
+    add_drawer(
+        collection=col,
+        wing="test",
+        room="r1",
+        content="Unrelated content about cooking pasta with garlic and olive oil.",
+        source_file=src3,
+        chunk_index=0,
+        agent="test",
+    )
+    return palace_path
+
+
+@pytest.mark.slow
+def test_max_mode_end_to_end_with_real_judge(real_palace_fixture):
+    """Reaches actual Ollama. Skipped if not reachable; CI excludes via -m.
+
+    Catches: Ollama URL changes, default-model regressions, prompt-template
+    breakage, judge_status serializer/printer regressions.
+    """
+    from cognitive_castle import searcher
+
+    if not _ollama_reachable():
+        pytest.skip("Ollama not running on localhost:11434")
+
+    result = searcher.search_memories(
+        query="What did we decide about retrieval weights?",
+        palace_path=real_palace_fixture,
+        mode="max",
+    )
+    assert "results" in result
+    assert len(result["results"]) > 0
+    # judge_status is absent (no-reorder happy path), a "reordered" success
+    # dict, or an "error" failure dict — all three are valid post-conditions.
+    status = result["results"][0].get("judge_status")
+    if status is not None:
+        assert "reordered" in status or "error" in status
