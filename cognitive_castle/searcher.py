@@ -191,6 +191,19 @@ def _print_search_results(result: dict, query: str) -> None:
         print(f"      {text}\n")
         print(f"  {'─' * 56}")
 
+    # JUDGE audit line — driven by judge_status stashed on hits[0] by
+    # _stage_4_judge. Absent for identity-order success (no surprise to
+    # surface) or when mode < max (Stage 4 didn't run).
+    status = hits[0].get("judge_status") if hits else None
+    if status:
+        if "error" in status:
+            print(f"\n  JUDGE: FAILED ({status['error']}) — identity-order fallback")
+        elif status.get("reordered"):
+            print(
+                f"\n  JUDGE: reordered {status['n']} hits "
+                f"({status['model']}, {status['elapsed_s']}s)"
+            )
+
 
 def search(
     query: str,
@@ -198,10 +211,7 @@ def search(
     wing: str = None,
     room: str = None,
     n_results: int = 5,
-    llm_rerank: bool = False,
-    soar_boost: bool = False,
-    soar_first: bool = False,
-    quality_rerank: bool = True,
+    mode: str = "max",
 ):
     """CLI entry point.
 
@@ -211,10 +221,11 @@ def search(
     reranker score, not cosine distance.
 
     Args:
-        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
-            cross-encoder (Stage 3). Default False — no behavior change.
-        quality_rerank: When True, appends Stage 6 deterministic quality rerank
-            after Stages 4 and 5. Default False.
+        mode: Optional-stage activation mode. One of:
+            fast     — Stage 3 only (no optional stages)
+            standard — Stage 3 + Stage 6 (quality rerank)
+            boosted  — Stage 3 + Stage 5 (SOAR) + Stage 6
+            max      — Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6 (default)
 
     Raises SearchError if the pipeline fails. Returns None either way (this is
     a print-only function — programmatic callers should use `search_memories`).
@@ -228,10 +239,7 @@ def search(
             wing=wing,
             room=room,
             n_results=n_results,
-            llm_rerank=llm_rerank,
-            soar_boost=soar_boost,
-            soar_first=soar_first,
-            quality_rerank=quality_rerank,
+            mode=mode,
         )
     except EmbedderIdentityMismatchError:
         # Surface the friendly migration prompt — don't wrap as SearchError.
@@ -252,10 +260,7 @@ def search_memories(
     vector_disabled: bool = False,
     candidate_strategy: str = "vector",
     is_hook_call: bool = False,
-    llm_rerank: bool = False,
-    soar_boost: bool = False,
-    soar_first: bool = False,
-    quality_rerank: bool = True,
+    mode: str = "max",
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -278,12 +283,11 @@ def search_memories(
         vector_disabled: Accepted for compatibility; ignored by new pipeline.
         candidate_strategy: Accepted for compatibility; ignored by new pipeline.
         is_hook_call: When True, uses a smaller reranker K cap (hook budget).
-        llm_rerank: When True, appends Stage 4 LLM-as-judge re-rank after the
-            cross-encoder (Stage 3). Default False — no behavior change.
-        soar_boost: When True, appends Stage 5 SOAR symbolic boost-tags after
-            Stage 4 (or Stage 3 if llm_rerank is False). Default False.
-        quality_rerank: When True, appends Stage 6 deterministic quality rerank
-            after Stages 4 and 5. Default False.
+        mode: Optional-stage activation mode. One of:
+            fast     — Stage 3 only (no optional stages)
+            standard — Stage 3 + Stage 6 (quality rerank)
+            boosted  — Stage 3 + Stage 5 (SOAR) + Stage 6
+            max      — Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6 (default)
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
@@ -296,10 +300,7 @@ def search_memories(
         n_results,
         cfg,
         is_hook_call=is_hook_call,
-        llm_rerank=llm_rerank,
-        soar_boost=soar_boost,
-        soar_first=soar_first,
-        quality_rerank=quality_rerank,
+        mode=mode,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
@@ -398,20 +399,53 @@ def _stage_4_judge(
 ) -> list[tuple[float, dict]]:
     """Stage 4: LLM-as-judge re-rank.
 
-    Truncates ``reranked`` to ``cfg.llm_judge_top_n``, then asks the LLM to
-    reorder. Returns the reordered top-N tuples (the rest are discarded —
-    same behavior as the inline block this replaces).
+    Asks the LLM to reorder the top ``cfg.llm_judge_top_n`` hits. The
+    rest of the input list is preserved unchanged at the tail of the
+    return value.
 
-    On any LLM failure, the underlying ``judge.judge()`` returns identity
-    order, so this helper preserves the input top-N order.
+    On any LLM failure (timeout, connection error, malformed reorder),
+    returns ``reranked`` unchanged in identity order and stashes
+    ``{"error": "<ExceptionClass>: <msg>"}`` on the first hit's dict so
+    the CLI printer can surface a JUDGE audit line.
+
+    On successful reorder, stashes ``{"reordered": True, "n": top_n,
+    "model": cfg.llm_model, "elapsed_s": <float>}`` on the first hit's
+    dict. If the judge returns identity order, no dict is stashed.
+
+    The stashed ``judge_status`` is dropped by callers unless it appears
+    in the result serializer allowlist in ``search_memories``.
     """
+    import time
     from .judge import judge
 
-    top_n = cfg.llm_judge_top_n
-    judge_pool = reranked[:top_n]
-    judge_docs = [_extract_text(r) for _, r in judge_pool]
-    new_order = judge(query, judge_docs, cfg)
-    return [judge_pool[i] for i in new_order]
+    if not reranked:
+        return reranked
+
+    started = time.time()
+    try:
+        top_n = cfg.llm_judge_top_n
+        judge_pool = reranked[:top_n]
+        judge_docs = [_extract_text(r) for _, r in judge_pool]
+        new_order = judge(query, judge_docs, cfg)
+        elapsed = round(time.time() - started, 2)
+
+        if new_order != list(range(len(new_order))):
+            reordered_top = [judge_pool[i] for i in new_order]
+            new_reranked = reordered_top + reranked[top_n:]
+            new_reranked[0][1]["judge_status"] = {
+                "reordered": True,
+                "n": len(judge_pool),
+                "model": cfg.llm_model,
+                "elapsed_s": elapsed,
+            }
+            return new_reranked
+
+        # Identity order — return original list, no status stash
+        return reranked
+
+    except Exception as e:  # noqa: BLE001 — deliberate broad catch for graceful fallback
+        reranked[0][1]["judge_status"] = {"error": f"{type(e).__name__}: {e}"}
+        return reranked
 
 
 def _stage_5_soar(
@@ -454,39 +488,33 @@ def _apply_optional_stages(
     query: str,
     reranked: list[tuple[float, dict]],
     cfg,
-    llm_rerank: bool,
-    soar_boost: bool,
-    soar_first: bool,
-    quality_rerank: bool = True,
+    mode: str,
 ) -> list[tuple[float, dict]]:
-    """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank) in
-    the requested order.
+    """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank)
+    according to ``mode``.
 
-    Default order (soar_first=False): Stage 4 → Stage 5 → Stage 6.
+    Modes:
+        fast      → Stage 3 only (returns reranked unchanged)
+        standard  → Stage 6
+        boosted   → Stage 5 + Stage 6
+        max       → Stage 4 + Stage 5 + Stage 6  (default)
 
-    soar_first=True: Stage 5 → Stage 4 → Stage 6 (SOAR re-ranks the full
-    reranked list, then judge truncates to top-N, then quality reranks).
-    Stage 6 always runs last.
+    Order in ``max`` is fixed: judge → SOAR → quality.
 
-    Each stage is gated by its own boolean flag — any combination of
-    on/off works. Stages are mutually composable; their score multipliers
-    compound multiplicatively.
+    Raises ValueError on unknown mode.
     """
-    if soar_first:
-        if soar_boost:
-            reranked = _stage_5_soar(reranked, cfg, query=query)
-        if llm_rerank:
-            reranked = _stage_4_judge(query, reranked, cfg)
-    else:
-        if llm_rerank:
-            reranked = _stage_4_judge(query, reranked, cfg)
-        if soar_boost:
-            reranked = _stage_5_soar(reranked, cfg, query=query)
-
-    if quality_rerank:
-        reranked = _stage_6_quality(reranked, cfg)
-
-    return reranked
+    if mode == "fast":
+        return reranked
+    if mode == "standard":
+        return _stage_6_quality(reranked, cfg)
+    if mode == "boosted":
+        reranked = _stage_5_soar(reranked, cfg, query=query)
+        return _stage_6_quality(reranked, cfg)
+    if mode == "max":
+        reranked = _stage_4_judge(query, reranked, cfg)
+        reranked = _stage_5_soar(reranked, cfg, query=query)
+        return _stage_6_quality(reranked, cfg)
+    raise ValueError(f"invalid mode '{mode}' (must be fast|standard|boosted|max)")
 
 
 def _new_pipeline_search(
@@ -497,10 +525,7 @@ def _new_pipeline_search(
     n_results: int,
     cfg,
     is_hook_call: bool = False,
-    llm_rerank: bool = False,
-    soar_boost: bool = False,
-    soar_first: bool = False,
-    quality_rerank: bool = True,
+    mode: str = "max",
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -516,8 +541,18 @@ def _new_pipeline_search(
     Stage 3: Rerank
         Top-K candidates fed through the cross-encoder; top-N returned.
 
-    Returns a list of result dicts.  Only runs when
-    ``cfg.use_new_retrieval_pipeline`` is True.
+    Args:
+        query: Search query string.
+        palace_path: Path to the palace directory.
+        wing: Optional wing filter.
+        room: Optional room filter.
+        n_results: Number of results to return.
+        cfg: CognitiveCastleConfig instance.
+        is_hook_call: True when called from a background hook (smaller top-K).
+        mode: Retrieval pipeline mode. fast=Stage 3 only; standard=+quality;
+            boosted=+SOAR; max=+LLM judge (default).
+
+    Returns a list of result dicts.
     """
     from datetime import datetime, timezone
     from pathlib import Path as _Path
@@ -632,15 +667,7 @@ def _new_pipeline_search(
     reranked = sorted(zip(rerank_scores, top_k_rows), key=lambda x: -x[0])
 
     # ── Stage 4 + Stage 5 + Stage 6 (optional, composable order) ────────────
-    reranked = _apply_optional_stages(
-        query=query,
-        reranked=reranked,
-        cfg=cfg,
-        llm_rerank=llm_rerank,
-        soar_boost=soar_boost,
-        soar_first=soar_first,
-        quality_rerank=quality_rerank,
-    )
+    reranked = _apply_optional_stages(query, reranked, cfg, mode)
 
     return [
         {
@@ -672,6 +699,10 @@ def _new_pipeline_search(
             "score_pre_quality": (
                 float(r.get("score_pre_quality", s)) if isinstance(r, dict) else float(s)
             ),
+            # LLM judge audit trail — populated only when Stage 4 ran AND
+            # either reordered hits or hit an error. Absent otherwise (no
+            # audit line emitted for identity-order success).
+            "judge_status": (r.get("judge_status") if isinstance(r, dict) else None),
         }
         for s, r in reranked[:n_results]
     ]

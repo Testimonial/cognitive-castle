@@ -13,6 +13,7 @@ instead of the real user profile.
 import os
 import shutil
 import tempfile
+from unittest.mock import MagicMock
 
 # ── Isolate HOME before any cognitive_castle imports ──────────────────────────
 _original_env = {}
@@ -197,3 +198,29 @@ def seeded_kg(kg):
     kg.add_triple("Alice", "works_at", "NewCo", valid_from="2025-01-01")
 
     return kg
+
+
+@pytest.fixture
+def _mock_cfg():
+    """Minimal cfg for judge / pipeline-stage unit tests.
+
+    Exposes only the knobs Stage 4 (`_stage_4_judge`) reads:
+    ``llm_judge_top_n`` and ``llm_model``.
+    """
+    cfg = MagicMock()
+    cfg.llm_judge_top_n = 10
+    cfg.llm_model = "qwen3.5:latest"
+    return cfg
+
+
+@pytest.fixture
+def _mock_cfg_top_n_3():
+    """Like ``_mock_cfg`` but with ``llm_judge_top_n=3`` so the
+    ``reranked[top_n:]`` preservation path is testable.
+
+    Independent MagicMock — does not depend on or mutate _mock_cfg.
+    """
+    cfg = MagicMock()
+    cfg.llm_judge_top_n = 3
+    cfg.llm_model = "qwen3.5:latest"
+    return cfg

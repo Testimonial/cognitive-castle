@@ -32,6 +32,7 @@ import sys
 import shlex
 import argparse
 from pathlib import Path
+from typing import NamedTuple
 
 from .config import CognitiveCastleConfig
 from .corpus_origin import detect_origin_heuristic, detect_origin_llm
@@ -584,36 +585,6 @@ def cmd_search(args):
     from .backends.base import EmbedderIdentityMismatchError
 
     cfg = CognitiveCastleConfig()
-    soar_boost = getattr(args, "soar_boost", False)
-    soar_first = getattr(args, "soar_first", False)
-    llm_rerank = getattr(args, "llm_rerank", False)
-    # Stage 6 is ON by default. CLI flag --no-quality-rerank or env
-    # CASTLE_QUALITY_DISABLED=1 (read via cfg.quality_disabled) turns it OFF.
-    no_quality_rerank = getattr(args, "no_quality_rerank", False)
-    quality_rerank = not no_quality_rerank and not cfg.quality_disabled
-
-    # --soar-first requires both companion flags
-    if soar_first:
-        missing = []
-        if not llm_rerank:
-            missing.append("--llm-rerank")
-        if not soar_boost:
-            missing.append("--soar-boost")
-        if missing:
-            print(
-                f"--soar-first requires both --llm-rerank and --soar-boost; "
-                f"missing: {', '.join(missing)}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-
-    # Kill-switch check: --soar-boost requires CASTLE_SOAR_ENABLED=1
-    if soar_boost and not cfg.soar_enabled:
-        print(
-            "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost",
-            file=sys.stderr,
-        )
-        sys.exit(2)
 
     palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
 
@@ -624,22 +595,18 @@ def cmd_search(args):
             wing=args.wing,
             room=args.room,
             n_results=args.results,
-            llm_rerank=llm_rerank,
-            soar_boost=soar_boost,
-            soar_first=soar_first,
-            quality_rerank=quality_rerank,
+            mode=args.mode,
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
         print(f"\n{e}", file=sys.stderr)
         sys.stderr.flush()
-        sys.stdout.flush()
-        # os._exit skips Python finalizers, avoiding a LanceDB/PyArrow
-        # PyGILState_Release fatal during interpreter shutdown that would
-        # otherwise dump noise to stderr after our message.
+        # Use os._exit to avoid pytest harness re-raising via SystemExit
+        # (matches existing pattern in this codebase).
         os._exit(1)
     except SearchError:
-        sys.exit(1)
+        # search() already printed; just exit with non-zero status.
+        os._exit(1)
 
 
 def cmd_wakeup(args):
@@ -950,7 +917,27 @@ def cmd_compress(args):
         print("  (dry run -- nothing stored)")
 
 
-def main():
+class _ParserBundle(NamedTuple):
+    """Bundle returned by build_parser().
+
+    Holds the main parser plus the two two-level subparsers that
+    main() needs to print help on incomplete subcommands (e.g.,
+    `castle hook` with no further argument).
+    """
+
+    parser: argparse.ArgumentParser
+    p_hook: argparse.ArgumentParser
+    p_instructions: argparse.ArgumentParser
+
+
+def build_parser() -> _ParserBundle:
+    """Build and return the argument parser for the CLI.
+
+    Constructs the complete parser with all subcommands and arguments.
+    Returns a _ParserBundle containing the main parser and the hook and
+    instructions subparsers, which are needed for help output on incomplete
+    subcommands (e.g., `castle hook` with no further argument).
+    """
     version_label = f"Cognitive Castle {__version__}"
     parser = argparse.ArgumentParser(
         description="Cognitive Castle — Give your AI a memory. No API key required.",
@@ -1119,41 +1106,16 @@ def main():
     p_search.add_argument("--room", default=None, help="Limit to one room")
     p_search.add_argument("--results", type=int, default=5, help="Number of results")
     p_search.add_argument(
-        "--llm-rerank",
-        action="store_true",
+        "--mode",
+        choices=["fast", "standard", "boosted", "max"],
+        default="max",
         help=(
-            "Run optional Stage 4 LLM-as-judge re-rank over top candidates. "
-            "Adds 1-2s latency. Uses the LLM provider configured at `castle init` "
-            "(set via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL or castle.yaml). "
-            "Off by default."
-        ),
-    )
-    p_search.add_argument(
-        "--soar-boost",
-        action="store_true",
-        help=(
-            "Apply SOAR symbolic-rule boost-tags to final scores "
-            "(experimental; requires Soar 9.6+ + SML Python bindings "
-            "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
-        ),
-    )
-    p_search.add_argument(
-        "--soar-first",
-        action="store_true",
-        help=(
-            "Run SOAR (Stage 5) BEFORE LLM-as-judge (Stage 4). Requires both "
-            "--llm-rerank and --soar-boost. Default order is judge-then-SOAR. "
-            "Use this to let SOAR's hand-crafted rules shape what the LLM sees."
-        ),
-    )
-    p_search.add_argument(
-        "--no-quality-rerank",
-        action="store_true",
-        help=(
-            "Disable Stage 6 deterministic text-quality rerank for this query. "
-            "Stage 6 is ON by default — pass this flag to skip the quality "
-            "boost for one query, or set CASTLE_QUALITY_DISABLED=1 to disable "
-            "globally."
+            "Retrieval pipeline mode. "
+            "fast=Stage 3 only; "
+            "standard=+quality rerank; "
+            "boosted=+SOAR boost-tags; "
+            "max=+LLM judge (default). "
+            "Pick fast for hooks/low latency; max for best quality."
         ),
     )
 
@@ -1287,16 +1249,21 @@ def main():
 
     sub.add_parser("status", help="Show what's been filed")
 
-    args = parser.parse_args()
+    return _ParserBundle(parser=parser, p_hook=p_hook, p_instructions=p_instructions)
+
+
+def main():
+    bundle = build_parser()
+    args = bundle.parser.parse_args()
 
     if not args.command:
-        parser.print_help()
+        bundle.parser.print_help()
         return
 
     # Handle two-level subcommands
     if args.command == "hook":
         if not getattr(args, "hook_action", None):
-            p_hook.print_help()
+            bundle.p_hook.print_help()
             return
         cmd_hook(args)
         return
@@ -1304,7 +1271,7 @@ def main():
     if args.command == "instructions":
         name = getattr(args, "instructions_name", None)
         if not name:
-            p_instructions.print_help()
+            bundle.p_instructions.print_help()
             return
         args.name = name
         cmd_instructions(args)

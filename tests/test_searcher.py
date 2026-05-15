@@ -236,10 +236,10 @@ def large_seeded_collection(palace_path):
 # ── LLM rerank (Stage 4) integration tests ────────────────────────────
 
 
-def test_search_memories_llm_rerank_false_skips_stage_4(
+def test_search_memories_standard_mode_skips_stage_4(
     monkeypatch, palace_path, large_seeded_collection
 ):
-    """When llm_rerank=False (default), judge.judge is never called."""
+    """mode='standard' (no LLM judge), judge.judge is never called."""
     from unittest.mock import MagicMock
 
     spy = MagicMock()
@@ -251,17 +251,17 @@ def test_search_memories_llm_rerank_false_skips_stage_4(
         lambda query, candidates, **kw: [1.0 - i * 0.1 for i in range(len(candidates))],
     )
 
-    result = search_memories(query="authentication tokens", palace_path=palace_path, n_results=5)
+    result = search_memories(
+        query="authentication tokens", palace_path=palace_path, n_results=5, mode="standard"
+    )
 
     spy.assert_not_called()
     assert isinstance(result, dict)
     assert "results" in result
 
 
-def test_search_memories_llm_rerank_true_calls_judge(
-    monkeypatch, palace_path, large_seeded_collection
-):
-    """When llm_rerank=True, judge.judge is called with top-N candidates."""
+def test_search_memories_max_mode_calls_judge(monkeypatch, palace_path, large_seeded_collection):
+    """mode='max': judge.judge is called with top-N candidates."""
     from unittest.mock import MagicMock
 
     spy = MagicMock(return_value=list(range(10)))
@@ -276,7 +276,7 @@ def test_search_memories_llm_rerank_true_calls_judge(
         query="authentication tokens",
         palace_path=palace_path,
         n_results=3,
-        llm_rerank=True,
+        mode="max",
     )
 
     spy.assert_called_once()
@@ -293,10 +293,10 @@ def test_search_memories_llm_rerank_true_calls_judge(
     assert len(result["results"]) == 3
 
 
-def test_search_memories_llm_rerank_identity_fallback_preserves_stage3_order(
+def test_search_memories_max_mode_identity_fallback_preserves_stage3_order(
     monkeypatch, palace_path, large_seeded_collection
 ):
-    """Identity-ordering from judge means final result equals llm_rerank=False output."""
+    """Identity-ordering from judge means final result equals standard-mode output."""
     monkeypatch.setattr("cognitive_castle.judge.judge", lambda *a, **kw: list(range(10)))
     # Stub the cross-encoder (Stage 3) so these Stage-4 tests never touch the GPU.
     monkeypatch.setattr(
@@ -305,10 +305,10 @@ def test_search_memories_llm_rerank_identity_fallback_preserves_stage3_order(
     )
 
     no_llm = search_memories(
-        query="authentication tokens", palace_path=palace_path, n_results=5, llm_rerank=False
+        query="authentication tokens", palace_path=palace_path, n_results=5, mode="standard"
     )
     with_llm_identity = search_memories(
-        query="authentication tokens", palace_path=palace_path, n_results=5, llm_rerank=True
+        query="authentication tokens", palace_path=palace_path, n_results=5, mode="max"
     )
     # Drawer IDs should match in the same order (identity = no reordering)
     assert [r["id"] for r in no_llm["results"]] == [r["id"] for r in with_llm_identity["results"]]
@@ -344,7 +344,7 @@ def test_cli_search_routes_through_new_pipeline(tmp_path, capsys):
 
 
 def test_search_memories_return_dict_has_quality_fields_when_enabled(tmp_path, monkeypatch):
-    """When quality_rerank=True, returned hits include quality_* fields."""
+    """mode='max': returned hits include quality_* fields."""
     import cognitive_castle.searcher as searcher_mod
 
     # Stub _new_pipeline_search to return a hand-crafted result
@@ -376,7 +376,7 @@ def test_search_memories_return_dict_has_quality_fields_when_enabled(tmp_path, m
     result = searcher_mod.search_memories(
         query="test",
         palace_path=str(tmp_path),
-        quality_rerank=True,
+        mode="max",
     )
     hits = result["results"] if isinstance(result, dict) else result
     assert len(hits) == 1
@@ -390,7 +390,7 @@ def test_search_memories_return_dict_has_quality_fields_when_enabled(tmp_path, m
 def test_search_memories_return_dict_has_default_quality_fields_when_disabled(
     tmp_path, monkeypatch
 ):
-    """When quality_rerank=False, returned hits have default quality_* fields."""
+    """mode='fast': returned hits have default quality_* fields (Stage 6 skipped)."""
     import cognitive_castle.searcher as searcher_mod
 
     def stub_pipeline(query, palace_path, wing, room, n_results, cfg, **kwargs):
@@ -421,7 +421,7 @@ def test_search_memories_return_dict_has_default_quality_fields_when_disabled(
     result = searcher_mod.search_memories(
         query="test",
         palace_path=str(tmp_path),
-        quality_rerank=False,
+        mode="fast",
     )
     hits = result["results"] if isinstance(result, dict) else result
     assert hits[0]["quality_score"] is None
@@ -505,3 +505,48 @@ def test_print_search_results_suppresses_quality_line_when_tier_none(capsys):
     _print_search_results(result, "test query")
     captured = capsys.readouterr()
     assert "QUALITY:" not in captured.out
+
+
+# ── Programmatic mode= parity tests (Task 8) ────────────────────────────
+
+
+def _make_fake_pipeline_result():
+    """Build a result dict shaped like _new_pipeline_search returns."""
+    return [
+        {"id": f"d{i}", "text": f"t{i}", "score": 1.0 - i * 0.1, "wing": "w", "room": "r"}
+        for i in range(3)
+    ]
+
+
+def test_search_memories_default_mode_is_max(palace_path):
+    """Programmatic callers get max by default — closes the PR #45 P2 gap."""
+    captured = {}
+
+    def stub(*args, **kwargs):
+        captured.update(kwargs)
+        return _make_fake_pipeline_result()
+
+    with patch("cognitive_castle.searcher._new_pipeline_search", side_effect=stub):
+        search_memories(query="q", palace_path=palace_path)
+    assert captured.get("mode") == "max"
+
+
+def test_search_memories_mode_fast_threads_through(palace_path):
+    """Programmatic caller with mode='fast' threads it through correctly."""
+    captured = {}
+
+    def stub(*args, **kwargs):
+        captured.update(kwargs)
+        return _make_fake_pipeline_result()
+
+    with patch("cognitive_castle.searcher._new_pipeline_search", side_effect=stub):
+        search_memories(query="q", palace_path=palace_path, mode="fast")
+    assert captured.get("mode") == "fast"
+
+
+def test_search_memories_invalid_mode_raises(palace_path, seeded_collection):
+    """Invalid mode bubbles up from _apply_optional_stages as ValueError."""
+    with pytest.raises(ValueError, match="invalid mode"):
+        # Don't patch _new_pipeline_search — let the call reach
+        # _apply_optional_stages, which validates mode.
+        search_memories(query="q", palace_path=palace_path, mode="full")

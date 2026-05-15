@@ -181,20 +181,17 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │     └── KG-hop (entity registry lookup → KnowledgeGraph.find_drawers_by_entities)
     ├── Stage 2: weighted RRF + recency multiplier → top-K (K=20 interactive, K=10 hook)
     ├── Stage 3: cross-encoder rerank → top-N candidates
-    ├── Stage 4 + Stage 5 (optional, composable; default order: 4 then 5)
-    │     ├── Stage 4 (--llm-rerank or llm_rerank:true MCP): LLM-as-judge re-ranks
-    │     │     top-cfg.llm_judge_top_n (default 10) from Stage 3
-    │     │     → graceful identity-order fallback on any LLM failure
-    │     ├── Stage 5 (--soar-boost AND CASTLE_SOAR_ENABLED=1): 4 SOAR symbolic
-    │     │     productions (recency-boost, same-project, entity-match, type-match) add boost-tags
-    │     │     → graceful pass-through on any Soar failure
-    │     └── Ordering: default is Stage 4 then Stage 5 (judge-then-SOAR).
-    │            --soar-first / soar_first:true flips to Stage 5 then Stage 4
-    │            (requires both --llm-rerank AND --soar-boost on; loud sys.exit(2)
-    │            on missing companion flags).
-    ├── Stage 6 (ON by default, opt-out via `--no-quality-rerank` or `CASTLE_QUALITY_DISABLED=1`):
-    │     deterministic text-quality rerank via vendored `understanding/` package —
-    │     two-tier threshold rule with calibrated defaults (medium ×1.15, high ×1.25)
+    ├── Stage 4-6 (gated by --mode):
+    │     ├── --mode fast      → Stage 3 only (lowest latency)
+    │     ├── --mode standard  → Stage 3 + Stage 6 (quality rerank)
+    │     ├── --mode boosted   → Stage 3 + Stage 5 (SOAR boost-tags) + Stage 6
+    │     └── --mode max       → Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6   ← default
+    │           Stage 4 graceful-fallback: identity order on any LLM failure;
+    │           surfaces via JUDGE audit line.
+    │           Stage 5: 4 SOAR symbolic productions (recency-boost,
+    │           same-project, entity-match, type-match) add boost-tags.
+    │           Stage 6: deterministic text-quality rerank via vendored
+    │           `understanding/` package — two-tier threshold (medium ×1.15, high ×1.25).
 ```
 
 ## Key Files for Common Tasks

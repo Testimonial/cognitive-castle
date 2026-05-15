@@ -987,103 +987,34 @@ class TestCacheInvalidation:
         assert isinstance(result["drawers"], int)
 
 
-def test_mcp_castle_search_soar_boost_threads_through(monkeypatch):
-    """MCP castle_search with soar_boost:true passes soar_boost to search_memories."""
+def test_mcp_tool_search_default_mode_is_max():
     from unittest.mock import patch
-    from cognitive_castle.mcp_server import tool_search
-
-    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
-    # Simulate in-pipeline SOAR: search_memories returns hits with audit-trail fields
-    fake_hits = [
-        {
-            "id": "a",
-            "score": 0.625,
-            "soar_boost": 1.25,
-            "soar_tags": ["recency-boost"],
-            "score_pre_soar": 0.5,
-            "wing": "w",
-            "room": "r",
-            "source_file": "f",
-        }
-    ]
-    fake_result = {"results": fake_hits, "query": "x", "filters": {}}
-
-    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
-        result = tool_search(query="x", soar_boost=True)
-
-    # search_memories was called with soar_boost=True
-    mock_sm.assert_called_once()
-    assert mock_sm.call_args.kwargs.get("soar_boost") is True
-    # Result has the boosted hit with audit-trail fields
-    assert result.get("results", [])[0]["soar_boost"] == 1.25
-
-
-def test_mcp_soar_first_without_other_flags_returns_error(monkeypatch):
-    """MCP tool_search with soar_first=True but soar_boost=False returns error response."""
     from cognitive_castle import mcp_server
 
-    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
+    with patch(
+        "cognitive_castle.mcp_server.search_memories",
+        return_value={"results": []},
+    ) as m:
+        mcp_server.tool_search(query="q")
+    assert m.call_args.kwargs.get("mode") == "max"
 
-    result = mcp_server.tool_search(
-        query="test",
-        soar_first=True,
-        soar_boost=False,
-        llm_rerank=False,
-    )
+
+def test_mcp_tool_search_accepts_valid_modes():
+    from unittest.mock import patch
+    from cognitive_castle import mcp_server
+
+    for mode in ("fast", "standard", "boosted", "max"):
+        with patch(
+            "cognitive_castle.mcp_server.search_memories",
+            return_value={"results": []},
+        ):
+            result = mcp_server.tool_search(query="q", mode=mode)
+        assert "error" not in result, f"mode={mode} returned error: {result}"
+
+
+def test_mcp_tool_search_rejects_invalid_mode():
+    from cognitive_castle import mcp_server
+
+    result = mcp_server.tool_search(query="q", mode="full")
     assert "error" in result
-    assert "soar_first" in result["error"]
-    # MCP does NOT sys.exit — it returns the error to the client
-
-
-def test_mcp_default_runs_quality_rerank(monkeypatch):
-    """Default MCP call (no quality_rerank param, no CASTLE_QUALITY_DISABLED) →
-    search_memories receives quality_rerank=True (Stage 6 is opt-out)."""
-    from unittest.mock import patch
-
-    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
-
-    fake_result = {"results": [], "query": "test", "filters": {}}
-
-    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
-        from cognitive_castle.mcp_server import tool_search
-
-        tool_search(query="test")
-
-    mock_sm.assert_called_once()
-    assert mock_sm.call_args.kwargs.get("quality_rerank") is True
-
-
-def test_mcp_quality_rerank_false_disables_stage_6(monkeypatch):
-    """quality_rerank=false MCP param → search_memories receives
-    quality_rerank=False (per-call opt-out)."""
-    from unittest.mock import patch
-
-    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
-
-    fake_result = {"results": [], "query": "test", "filters": {}}
-
-    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
-        from cognitive_castle.mcp_server import tool_search
-
-        tool_search(query="test", quality_rerank=False)
-
-    mock_sm.assert_called_once()
-    assert mock_sm.call_args.kwargs.get("quality_rerank") is False
-
-
-def test_mcp_castle_quality_disabled_env_overrides_param(monkeypatch):
-    """CASTLE_QUALITY_DISABLED=1 → quality_rerank=False even when the MCP
-    caller explicitly passed quality_rerank=True (global kill switch wins)."""
-    from unittest.mock import patch
-
-    monkeypatch.setenv("CASTLE_QUALITY_DISABLED", "1")
-
-    fake_result = {"results": [], "query": "test", "filters": {}}
-
-    with patch("cognitive_castle.mcp_server.search_memories", return_value=fake_result) as mock_sm:
-        from cognitive_castle.mcp_server import tool_search
-
-        tool_search(query="test", quality_rerank=True)
-
-    mock_sm.assert_called_once()
-    assert mock_sm.call_args.kwargs.get("quality_rerank") is False
+    assert "invalid mode" in result["error"].lower()

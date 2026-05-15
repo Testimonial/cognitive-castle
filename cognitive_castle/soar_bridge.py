@@ -1,8 +1,8 @@
 """soar_bridge.py — SOAR post-pipeline boost-tag layer (PR #4a, experimental).
 
-Opt-in via cfg.soar_enabled + --soar-boost CLI flag (or soar_boost:true MCP).
+Opt-in via --mode boosted/max (or mode:boosted/max MCP).
 Default behavior unchanged. Module is lazy-imported by callers so its load
-cost is zero for users who never use --soar-boost.
+cost is zero for users who never use boosted/max mode.
 
 Soar runs ELABORATION productions over the input-link memory WMEs, adding
 i-supported ^boost-tag attributes. Python reads tags back, maps via
@@ -102,7 +102,7 @@ def _load_sml():
     if os.environ.get("CASTLE_SML_DISABLED") == "1":
         _warn_once(
             "sml-disabled-env",
-            "SML Python bindings not available (CASTLE_SML_DISABLED=1) — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+            "SML Python bindings not available (CASTLE_SML_DISABLED=1) — install Soar 9.6+ with SML, or use --mode fast/standard to skip SOAR Stage 5",
         )
         return None
 
@@ -114,7 +114,7 @@ def _load_sml():
     except ImportError:
         _warn_once(
             "sml-import-failed",
-            "SML Python bindings not available — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+            "SML Python bindings not available — install Soar 9.6+ with SML, or use --mode fast/standard to skip SOAR Stage 5",
         )
         return None
 
@@ -417,7 +417,7 @@ def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
         hits: Search hits (typically from search_memories() result["results"]).
             Each hit must have at least: "id", "score", "wing", and optionally
             "created_at" (used to derive recency).
-        cfg: Config object exposing .soar_enabled, .soar_rules_path, .palace_path.
+        cfg: Config object exposing .soar_rules_path, .palace_path.
         query: The original search query string. Forwarded to
             _push_working_memory so the type-match rule (PR #4c-type-match)
             can classify it into a memory_type intent. Default empty preserves
@@ -431,24 +431,16 @@ def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
         - score_pre_soar: float — original score before adjustment
 
     Never raises. Search continues with degraded behavior on Soar failure.
-    On any failure (SML missing, kill switch, kernel/agent/rules error,
+    On any failure (SML missing, kernel/agent/rules error,
     truncation, unknown tag, etc.) prints a one-time-per-process stderr
     warning and returns hits unchanged (or partially boosted).
     """
-    # Kill switch check (defensive — CLI/MCP layer should have caught this)
-    if not cfg.soar_enabled:
-        _warn_once(
-            "kill-switch-disabled",
-            "apply_soar_boosts called with cfg.soar_enabled=False — returning hits unchanged",
-        )
-        return hits
-
     # Lazy SML import
     sml = _load_sml()
     if sml is None:
         _warn_once(
             "sml-unavailable",
-            "SML Python bindings not available — install Soar 9.6+ with SML or set CASTLE_SOAR_ENABLED=0",
+            "SML Python bindings not available — install Soar 9.6+ with SML, or use --mode fast/standard to skip SOAR Stage 5",
         )
         return hits
 
