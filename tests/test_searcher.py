@@ -507,3 +507,48 @@ def test_print_search_results_suppresses_quality_line_when_tier_none(capsys):
     _print_search_results(result, "test query")
     captured = capsys.readouterr()
     assert "QUALITY:" not in captured.out
+
+
+# ── Programmatic mode= parity tests (Task 8) ────────────────────────────
+
+
+def _make_fake_pipeline_result():
+    """Build a result dict shaped like _new_pipeline_search returns."""
+    return [
+        {"id": f"d{i}", "text": f"t{i}", "score": 1.0 - i * 0.1, "wing": "w", "room": "r"}
+        for i in range(3)
+    ]
+
+
+def test_search_memories_default_mode_is_max(palace_path):
+    """Programmatic callers get max by default — closes the PR #45 P2 gap."""
+    captured = {}
+
+    def stub(*args, **kwargs):
+        captured.update(kwargs)
+        return _make_fake_pipeline_result()
+
+    with patch("cognitive_castle.searcher._new_pipeline_search", side_effect=stub):
+        search_memories(query="q", palace_path=palace_path)
+    assert captured.get("mode") == "max"
+
+
+def test_search_memories_mode_fast_threads_through(palace_path):
+    """Programmatic caller with mode='fast' threads it through correctly."""
+    captured = {}
+
+    def stub(*args, **kwargs):
+        captured.update(kwargs)
+        return _make_fake_pipeline_result()
+
+    with patch("cognitive_castle.searcher._new_pipeline_search", side_effect=stub):
+        search_memories(query="q", palace_path=palace_path, mode="fast")
+    assert captured.get("mode") == "fast"
+
+
+def test_search_memories_invalid_mode_raises(palace_path, seeded_collection):
+    """Invalid mode bubbles up from _apply_optional_stages as ValueError."""
+    with pytest.raises(ValueError, match="invalid mode"):
+        # Don't patch _new_pipeline_search — let the call reach
+        # _apply_optional_stages, which validates mode.
+        search_memories(query="q", palace_path=palace_path, mode="full")
