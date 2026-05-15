@@ -538,24 +538,6 @@ class CognitiveCastleConfig:
         return max(1, parsed)
 
     @property
-    def soar_enabled(self):
-        """Kill switch for SOAR post-pipeline boost-tags (PR #4a).
-
-        Default: ``False``. Must be explicitly set to a truthy value
-        (``"1"`` / ``"true"`` / ``"yes"`` case-insensitive) to enable.
-        When False, `--soar-boost` CLI flag triggers a loud kill-switch
-        error rather than silent no-op.
-
-        Reads from ``CASTLE_SOAR_ENABLED`` env var first, then config file,
-        then default.
-        """
-        env_val = os.environ.get("CASTLE_SOAR_ENABLED")
-        if env_val is not None:
-            return env_val.strip().lower() in ("1", "true", "yes")
-        cfg_val = self._file_config.get("soar_enabled", False)
-        return bool(cfg_val)
-
-    @property
     def soar_rules_path(self):
         """Path to the Soar production rule file for #4a's boost-tag layer.
 
@@ -776,24 +758,6 @@ class CognitiveCastleConfig:
         except (TypeError, ValueError):
             parsed = 50
         return max(1, parsed)
-
-    @property
-    def quality_disabled(self) -> bool:
-        """Kill-switch for Stage 6 (deterministic quality rerank). Default False
-        (i.e., Stage 6 runs by default).
-
-        Reads from ``CASTLE_QUALITY_DISABLED`` env var first, then config file,
-        then default. Any truthy env value (``1``, ``true``, ``yes`` —
-        case-insensitive) disables Stage 6; anything else (including unset)
-        leaves it enabled.
-        """
-        env_val = os.environ.get("CASTLE_QUALITY_DISABLED")
-        if env_val is not None:
-            return env_val.strip().lower() in ("1", "true", "yes")
-        cfg_val = self._file_config.get("quality_disabled")
-        if cfg_val is not None:
-            return bool(cfg_val)
-        return False
 
     @property
     def quality_threshold_medium(self) -> float:

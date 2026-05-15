@@ -373,17 +373,6 @@ def test_llm_timeout_env_override(monkeypatch):
     assert cfg.llm_timeout == 60
 
 
-def test_soar_enabled_default_is_false():
-    cfg = _make_config_with_file_config({})
-    assert cfg.soar_enabled is False
-
-
-def test_soar_enabled_env_override(monkeypatch):
-    monkeypatch.setenv("CASTLE_SOAR_ENABLED", "1")
-    cfg = _make_config_with_file_config({})
-    assert cfg.soar_enabled is True
-
-
 def test_soar_rules_path_default_points_at_package():
     cfg = _make_config_with_file_config({})
     # Default should be <package>/rules/castle-boost.soar
@@ -477,22 +466,6 @@ def test_entity_fetch_batch_size_file_config_override():
 # ── Quality rerank (Stage 6) config tests ──────────────────────────────
 
 
-def test_quality_disabled_default():
-    cfg = CognitiveCastleConfig()
-    assert cfg.quality_disabled is False
-
-
-def test_quality_disabled_env_override(monkeypatch):
-    monkeypatch.setenv("CASTLE_QUALITY_DISABLED", "1")
-    cfg = CognitiveCastleConfig()
-    assert cfg.quality_disabled is True
-
-
-def test_quality_disabled_file_config_override():
-    cfg = _make_config_with_file_config({"quality_disabled": True})
-    assert cfg.quality_disabled is True
-
-
 def test_quality_threshold_medium_default():
     cfg = CognitiveCastleConfig()
     assert cfg.quality_threshold_medium == 0.53
@@ -555,3 +528,12 @@ def test_quality_boost_high_env_override(monkeypatch):
 def test_quality_boost_high_file_config_override():
     cfg = _make_config_with_file_config({"quality_boost_high": 1.35})
     assert cfg.quality_boost_high == 1.35
+
+
+@pytest.mark.parametrize("attr", ["soar_enabled", "quality_disabled"])
+def test_removed_config_properties_are_absent(attr):
+    cfg = CognitiveCastleConfig()
+    assert not hasattr(cfg, attr), (
+        f"cfg.{attr} should have been deleted in the search-mode "
+        "consolidation; if you need a stage-on/off toggle, use mode="
+    )

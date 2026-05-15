@@ -95,7 +95,6 @@ def test_stage_5_soar_helper_exists_and_applies_boosts(tmp_path, monkeypatch):
     ]
 
     class FakeCfg:
-        soar_enabled = True
         soar_rules_path = None
         palace_path = str(tmp_path)
 
@@ -170,7 +169,6 @@ def test_default_path_runs_judge_then_soar(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
         },
@@ -202,7 +200,6 @@ def test_boosted_mode_runs_soar_not_judge(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
         },
@@ -343,7 +340,6 @@ def test_query_threaded_through_to_stage_5_soar(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
         },
@@ -384,7 +380,6 @@ def test_query_threaded_through_max_mode(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
         },
@@ -578,7 +573,6 @@ def test_quality_runs_in_standard_mode(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
             "quality_enabled": True,
@@ -608,7 +602,6 @@ def test_quality_skipped_in_fast_mode(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
         },
@@ -647,7 +640,6 @@ def test_judge_soar_quality_compound_in_default_order(monkeypatch, tmp_path):
         (),
         {
             "llm_judge_top_n": 5,
-            "soar_enabled": True,
             "soar_rules_path": None,
             "palace_path": str(tmp_path),
             "quality_enabled": True,

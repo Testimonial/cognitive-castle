@@ -37,10 +37,9 @@ def reset_soar_state():
     soar_bridge._reset_for_test()
 
 
-def _mock_cfg(soar_enabled=True, rules_path=None):
+def _mock_cfg(rules_path=None):
     """Minimal cfg for tests — only the fields apply_soar_boosts reads."""
     cfg = MagicMock()
-    cfg.soar_enabled = soar_enabled
     cfg.soar_rules_path = rules_path or "/dev/null"
     cfg.palace_path = "/tmp/test-palace"
     return cfg
@@ -60,22 +59,6 @@ def test_apply_soar_boosts_no_op_when_sml_unavailable(monkeypatch, capsys):
     assert result == hits  # unchanged
     err = capsys.readouterr().err
     assert "SML Python bindings not available" in err
-
-
-def test_apply_soar_boosts_kill_switch_when_disabled(monkeypatch, capsys):
-    """When cfg.soar_enabled=False, return hits unchanged + stderr 'disabled'.
-
-    The kill-switch ALSO fires at the CLI/MCP layer before apply_soar_boosts
-    is called; this test covers the defensive double-check at the function level.
-    """
-    from cognitive_castle import soar_bridge
-
-    soar_bridge._WARNED.clear()
-    hits = [{"id": "a", "score": 0.5}]
-    result = soar_bridge.apply_soar_boosts(hits, _mock_cfg(soar_enabled=False))
-    assert result == hits
-    err = capsys.readouterr().err
-    assert "disabled" in err.lower() or "soar_enabled" in err.lower()
 
 
 # ── Soar-required tests (skip if SML unavailable) ──────────────────────
