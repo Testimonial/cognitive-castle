@@ -32,6 +32,7 @@ import sys
 import shlex
 import argparse
 from pathlib import Path
+from typing import NamedTuple
 
 from .config import CognitiveCastleConfig
 from .corpus_origin import detect_origin_heuristic, detect_origin_llm
@@ -950,7 +951,27 @@ def cmd_compress(args):
         print("  (dry run -- nothing stored)")
 
 
-def main():
+class _ParserBundle(NamedTuple):
+    """Bundle returned by build_parser().
+
+    Holds the main parser plus the two two-level subparsers that
+    main() needs to print help on incomplete subcommands (e.g.,
+    `castle hook` with no further argument).
+    """
+
+    parser: argparse.ArgumentParser
+    p_hook: argparse.ArgumentParser
+    p_instructions: argparse.ArgumentParser
+
+
+def build_parser() -> _ParserBundle:
+    """Build and return the argument parser for the CLI.
+
+    Constructs the complete parser with all subcommands and arguments.
+    Returns a _ParserBundle containing the main parser and the hook and
+    instructions subparsers, which are needed for help output on incomplete
+    subcommands (e.g., `castle hook` with no further argument).
+    """
     version_label = f"Cognitive Castle {__version__}"
     parser = argparse.ArgumentParser(
         description="Cognitive Castle — Give your AI a memory. No API key required.",
@@ -1287,16 +1308,21 @@ def main():
 
     sub.add_parser("status", help="Show what's been filed")
 
-    args = parser.parse_args()
+    return _ParserBundle(parser=parser, p_hook=p_hook, p_instructions=p_instructions)
+
+
+def main():
+    bundle = build_parser()
+    args = bundle.parser.parse_args()
 
     if not args.command:
-        parser.print_help()
+        bundle.parser.print_help()
         return
 
     # Handle two-level subcommands
     if args.command == "hook":
         if not getattr(args, "hook_action", None):
-            p_hook.print_help()
+            bundle.p_hook.print_help()
             return
         cmd_hook(args)
         return
@@ -1304,7 +1330,7 @@ def main():
     if args.command == "instructions":
         name = getattr(args, "instructions_name", None)
         if not name:
-            p_instructions.print_help()
+            bundle.p_instructions.print_help()
             return
         args.name = name
         cmd_instructions(args)
