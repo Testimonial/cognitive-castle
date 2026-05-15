@@ -82,6 +82,33 @@ Zero behavioral change; makes the parser testable. All new CLI tests depend on t
 - Add `--mode`, `choices=["fast", "standard", "boosted", "max"]`, `default="max"`.
 - Delete kill-switch validation block (~lines 607–613): the `sys.exit(2)` enforcing `--soar-first` companion-flag requirement is removed along with the flag.
 
+**`cmd_search` body changes:**
+
+The function currently reads four boolean flags off `args` and threads them into `searcher.search()`. Replace those reads with a single `args.mode` read:
+
+```python
+# BEFORE (delete):
+result = searcher.search(
+    query=args.query,
+    palace_path=args.palace,
+    llm_rerank=args.llm_rerank,
+    soar_boost=args.soar_boost,
+    soar_first=args.soar_first,
+    no_quality_rerank=args.no_quality_rerank,
+    ...
+)
+
+# AFTER (replace with):
+result = searcher.search(
+    query=args.query,
+    palace_path=args.palace,
+    mode=args.mode,
+    ...
+)
+```
+
+Same pattern in any other CLI subcommand that calls `searcher.search()` (e.g., `cmd_hook`). Plan-time grep: `args.llm_rerank|args.soar_boost|args.soar_first|args.no_quality_rerank` across `cli.py`.
+
 **`cmd_init` changes:**
 
 - Argparse `--llm-model` default: `"gemma3:4b"` → `"qwen3.5:latest"`.
@@ -102,6 +129,30 @@ Rationale: `gemma3:4b` is not in the Ollama registry; the user's installed model
       return {"error": f"invalid mode '{mode}'. Must be one of: fast, standard, boosted, max"}
   ```
 - Validation lives in **the function body, not the JSON schema** — keeps the JSON schema generic and the error message specific to Castle.
+
+**MCP JSON schema (`TOOLS` dict) update:**
+
+Two separate changes — Python signature AND the advertised JSON schema. Both must match or MCP clients see ghost parameters.
+
+In the `TOOLS` dict entry for `castle_search` (or whichever tool name maps to `tool_search`):
+
+```python
+# DELETE these four property entries from "properties":
+"llm_rerank":       {"type": "boolean", "default": False, "description": "..."},
+"soar_boost":       {"type": "boolean", "default": False, "description": "..."},
+"soar_first":       {"type": "boolean", "default": False, "description": "..."},
+"no_quality_rerank":{"type": "boolean", "default": False, "description": "..."},
+
+# ADD this single property entry:
+"mode": {
+    "type": "string",
+    "enum": ["fast", "standard", "boosted", "max"],
+    "default": "max",
+    "description": "Retrieval pipeline mode. fast=Stage 3 only; standard=+quality; boosted=+SOAR; max=+LLM judge.",
+},
+```
+
+Plan-time grep: locate the `TOOLS` dict entry by searching for `"llm_rerank"` in `mcp_server.py`.
 
 #### `cognitive_castle/searcher.py`
 
@@ -384,6 +435,8 @@ def test_search_memories_invalid_mode_raises(tmp_palace):
 
 `tmp_palace` is the existing fixture in `tests/conftest.py` that creates a minimal LanceDB-backed palace.
 
+**Plan-time verification:** `_mock_recall_layer` patches `cognitive_castle.searcher._stage_3_rerank`. The actual function name in `searcher.py` may differ (`_stage_3`, `_rerank`, `cross_encoder_rerank`, etc.). Before writing this test, grep `searcher.py` for the Stage 3 rerank function and update the patch path. Same applies to the `_stage_4_judge`, `_stage_5_soar`, `_stage_6_quality` patch paths used throughout Section 3 — if any of these helpers have different names in the current code, update consistently across all tests.
+
 Test 9.1 explicitly closes the P2 review gap flagged on PR #45 — programmatic callers no longer execute Stage 6 silently.
 
 **10. JUDGE audit line — happy + error path (2 tests)** — `tests/test_judge.py`
@@ -456,7 +509,7 @@ Catches: Ollama URL changes, default-model-not-installed regressions, prompt tem
 
 ## 4. Acceptance criteria
 
-- All 14 new tests pass.
+- All 16 new tests pass.
 - All 33 updated tests pass.
 - All 19 deleted tests are gone (no zombies).
 - `python -m pytest tests/ -v --ignore=tests/benchmarks` reports zero failures.
