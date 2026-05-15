@@ -375,53 +375,31 @@ def tool_search(
     max_distance: float = 1.5,
     min_similarity: float = None,
     context: str = None,
-    llm_rerank: bool = False,
-    soar_boost: bool = False,
-    soar_first: bool = False,
-    quality_rerank: bool = True,
+    mode: str = "max",
 ):
+    # Mode validation in the function body (not the JSON schema) so the
+    # error message is specific to Castle.
+    if mode not in ("fast", "standard", "boosted", "max"):
+        return {
+            "error": (
+                f"invalid mode '{mode}'. "
+                "Must be one of: fast, standard, boosted, max"
+            )
+        }
+
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
         wing = _sanitize_optional_name(wing, "wing")
         room = _sanitize_optional_name(room, "room")
     except ValueError as e:
         return {"error": str(e)}
-    # Backwards compat: accept old name
+
     # Backwards compat: convert old similarity scale (higher=stricter) to
     # distance scale (lower=stricter). Similarity 0.8 → distance 0.2.
     dist = (1.0 - min_similarity) if min_similarity is not None else max_distance
     # Mitigate system prompt contamination (Issue #333)
     sanitized = sanitize_query(query)
-    # --soar-first requires both companion flags (MCP path: error response, not sys.exit)
-    if soar_first:
-        missing = []
-        if not llm_rerank:
-            missing.append("llm_rerank")
-        if not soar_boost:
-            missing.append("soar_boost")
-        if missing:
-            return {
-                "error": f"soar_first requires both llm_rerank and soar_boost; missing: {', '.join(missing)}",
-            }
-    # Kill-switch check: soar_boost requires CASTLE_SOAR_ENABLED=1
-    if soar_boost and not _config.soar_enabled:
-        return {
-            "error": "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost",
-            "soar_boost_skipped": True,
-        }
-    # Kill switch: CASTLE_QUALITY_DISABLED=1 (cfg.quality_disabled) globally
-    # disables Stage 6 regardless of the caller's quality_rerank param.
-    if _config.quality_disabled:
-        quality_rerank = False
-    # Map old booleans to mode (stopgap — removed in Task 6)
-    if llm_rerank:
-        mode = "max"
-    elif soar_boost:
-        mode = "boosted"
-    elif not quality_rerank:
-        mode = "fast"
-    else:
-        mode = "standard"
+
     result = search_memories(
         sanitized["clean_query"],
         palace_path=_config.palace_path,
@@ -431,6 +409,7 @@ def tool_search(
         max_distance=dist,
         mode=mode,
     )
+
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:
         result["query_sanitized"] = True
@@ -1453,33 +1432,16 @@ TOOLS = {
                     "type": "string",
                     "description": "Background context for the search (optional). NOT used for embedding — only for future re-ranking.",
                 },
-                "llm_rerank": {
-                    "type": "boolean",
-                    "default": False,
+                "mode": {
+                    "type": "string",
+                    "enum": ["fast", "standard", "boosted", "max"],
+                    "default": "max",
                     "description": (
-                        "Run optional Stage 4 LLM-as-judge re-rank over top "
-                        "candidates. Adds 1-2s latency. Uses the LLM provider "
-                        "configured via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL "
-                        "or castle.yaml. Off by default."
-                    ),
-                },
-                "soar_boost": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": (
-                        "Apply SOAR symbolic-rule boost-tags to final scores "
-                        "(experimental; requires Soar 9.6+ + SML Python bindings "
-                        "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
-                    ),
-                },
-                "quality_rerank": {
-                    "type": "boolean",
-                    "default": True,
-                    "description": (
-                        "Apply Stage 6 deterministic quality rerank via the "
-                        "vendored `understanding` package. ON by default — "
-                        "pass false to skip for one query, or set "
-                        "CASTLE_QUALITY_DISABLED=1 to disable globally."
+                        "Retrieval pipeline mode. "
+                        "fast=Stage 3 only (lowest latency); "
+                        "standard=+quality rerank; "
+                        "boosted=+SOAR boost-tags; "
+                        "max=+LLM judge (default — highest quality)."
                     ),
                 },
             },
