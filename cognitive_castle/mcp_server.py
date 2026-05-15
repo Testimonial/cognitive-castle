@@ -270,23 +270,36 @@ def tool_status():
 
 
 # ── AAAK Dialect Spec ─────────────────────────────────────────────────────────
-# Included in status response so the AI learns it on first wake-up call.
-# Also available via castle_get_aaak_spec tool.
+# Injected into the MCP `initialize` response's `instructions` field at
+# session start, so MCP-compliant clients (Claude Code, etc.) bake it
+# into the system prompt automatically. Also returned by castle_status
+# and castle_get_aaak_spec for legacy/explicit callers.
 
-PALACE_PROTOCOL = """IMPORTANT — Cognitive Castle Memory Protocol:
-1. ON WAKE-UP: Call castle_status to load palace overview + AAAK spec.
-2. BEFORE RESPONDING about any person, project, or past event: call castle_kg_query or castle_search FIRST. Never guess — verify.
-3. IF UNSURE about a fact (name, gender, age, relationship): say "let me check" and query the palace. Wrong is worse than slow.
-4. AFTER EACH SESSION: call castle_diary_write to record what happened, what you learned, what matters.
-5. WHEN FACTS CHANGE: call castle_kg_invalidate on the old fact, castle_kg_add for the new one.
+PALACE_PROTOCOL = """Castle is a local verbatim memory palace storing this user's past
+conversations, decisions, and entity facts. The palace is on the
+user's machine — no data leaves it.
 
-This protocol ensures the AI KNOWS before it speaks. Storage is not memory — but storage + this protocol = memory."""
+Behavioral protocol:
+- Before answering about a person, project, design decision, or past
+  event: call castle_search or castle_kg_query FIRST. Never guess.
+- When making non-obvious design decisions during brainstorming, file
+  rationale via castle_add_drawer in wing_<project> / decisions.
+- If a fact has changed (renamed function, moved file, person's role):
+  call castle_kg_invalidate on the old, castle_kg_add for the new.
+- After significant work (decisions made, problems solved, milestones
+  reached), call castle_diary_write with a brief summary of what
+  happened, what you learned, and what matters.
+
+The Stop hook (plugin install) auto-mines completed transcripts. The
+diary is a higher-signal layer — call castle_diary_write explicitly for
+structured daily reflection, independent of the hook. Trust the palace
+over recollection — it stores exact words."""
 
 AAAK_SPEC = """AAAK is a compressed memory dialect that Cognitive Castle uses for efficient storage.
 It is designed to be readable by both humans and LLMs without decoding.
 
 FORMAT:
-  ENTITIES: 3-letter uppercase codes. ALC=Alice, JOR=Jordan, RIL=Riley, MAX=Max, BEN=Ben.
+  ENTITIES: 3-letter uppercase codes. ENT1=PersonAlpha, ENT2=PersonBeta, ENT3=PersonGamma.
   EMOTIONS: *action markers* before/during text. *warm*=joy, *fierce*=determined, *raw*=vulnerable, *bloom*=tenderness.
   STRUCTURE: Pipe-separated fields. FAM: family | PROJ: projects | ⚠: warnings/reminders.
   DATES: ISO format (2026-03-31). COUNTS: Nx = N mentions (e.g., 570x).
@@ -296,7 +309,7 @@ FORMAT:
   ROOMS: Hyphenated slugs representing named ideas (e.g., lancedb-setup, gpu-pricing).
 
 EXAMPLE:
-  FAM: ALC→♡JOR | 2D(kids): RIL(18,sports) MAX(11,chess+swimming) | BEN(contributor)
+  FAM: ENT1→♡ENT2 | 2D(kids): ENT3(18,sports) ENT4(11,chess+swim) | ENT5(contributor)
 
 Read AAAK naturally — expand codes mentally, treat *markers* as emotional context.
 When WRITING AAAK: use entity codes, mark emotions, keep structure tight."""

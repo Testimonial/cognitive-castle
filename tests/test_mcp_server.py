@@ -1018,3 +1018,31 @@ def test_mcp_tool_search_rejects_invalid_mode():
     result = mcp_server.tool_search(query="q", mode="full")
     assert "error" in result
     assert "invalid mode" in result["error"].lower()
+
+
+def test_palace_protocol_has_no_circular_wakeup_rule():
+    """PALACE_PROTOCOL is now injected at session start; it shouldn't
+    instruct the AI to call castle_status (the protocol's source) on
+    wake-up — that's the very thing the injection replaces."""
+    from cognitive_castle.mcp_server import PALACE_PROTOCOL
+    assert "ON WAKE-UP" not in PALACE_PROTOCOL
+    assert "Call castle_status" not in PALACE_PROTOCOL
+
+
+def test_aaak_spec_uses_generic_placeholders():
+    """The AAAK spec ships with example entity codes that get injected
+    into every user's system prompt. Personal-name examples (Alice,
+    Jordan, etc.) are replaced with neutral placeholders. Emotion
+    mappings (*warm*=joy, *fierce*=determined) stay — those define the
+    AAAK dialect itself, not user data."""
+    from cognitive_castle.mcp_server import AAAK_SPEC
+    # Personal names removed
+    for personal in ("Alice", "Jordan", "Riley", "Max=Max", "BEN=Ben"):
+        assert personal not in AAAK_SPEC, (
+            f"AAAK_SPEC still contains personal-name example: {personal!r}"
+        )
+    # Placeholders present
+    assert "ENT1" in AAAK_SPEC
+    assert "PersonAlpha" in AAAK_SPEC
+    # Emotion mappings preserved (these ARE the dialect, not data)
+    assert "*warm*=joy" in AAAK_SPEC
