@@ -74,11 +74,16 @@ def _palace_state_line() -> str | None:
 
     Best-effort: any exception (no palace, lock contention, lance error)
     returns None so initialize never fails because of a state read.
+
+    Mirrors the semantics of `tool_status`: when the palace dir exists,
+    pass `create=True` so an initialized-but-unmined palace shows count=0
+    rather than falling through to the "empty" branch.
     """
     try:
-        if not os.path.isdir(_config.palace_path):
+        palace_exists = os.path.isdir(_config.palace_path)
+        if not palace_exists:
             return "Palace state: not initialized. Run `castle init <dir>` to set up."
-        col = _get_collection(create=False)
+        col = _get_collection(create=palace_exists)
         if not col:
             return "Palace state: empty (no drawers filed yet)."
         count = col.count()
@@ -119,11 +124,35 @@ In the `handle_request` function around `mcp_server.py:1656-1666`:
 },
 ```
 
+### Change 4 — Refine AAAK_SPEC examples to generic placeholders
+
+The current AAAK_SPEC text (around `mcp_server.py:285-300`) contains hardcoded example entity codes that look like real personal names:
+
+```
+ENTITIES: 3-letter uppercase codes. ALC=Alice, JOR=Jordan, RIL=Riley, MAX=Max, BEN=Ben.
+...
+EXAMPLE:
+  FAM: ALC→♡JOR | 2D(kids): RIL(18,sports) MAX(11,chess+swimming) | BEN(contributor)
+```
+
+These ship with the package but will appear verbatim in every Castle user's system prompt under this PR. Replace personal-name examples with neutral placeholders. Keep the **emotion mappings** (`*warm*=joy`, `*fierce*=determined`, etc.) unchanged — those define the AAAK dialect itself, not user data.
+
+Updated AAAK_SPEC sections (only the changed lines shown):
+
+```
+ENTITIES: 3-letter uppercase codes. ENT1=PersonAlpha, ENT2=PersonBeta, ENT3=PersonGamma.
+...
+EXAMPLE:
+  FAM: ENT1→♡ENT2 | 2D(kids): ENT3(18,sports) ENT4(11,chess+swim) | ENT5(contributor)
+```
+
+The rest of AAAK_SPEC (FORMAT line, EMOTIONS line, STRUCTURE, DATES, COUNTS, IMPORTANCE, HALLS, WINGS, ROOMS) stays unchanged — those reference Castle's own conventions, not user data.
+
 ### Composition shape
 
 Approximate byte counts of the injected text:
 - `PALACE_PROTOCOL` (refined): ~600 chars
-- `AAAK_SPEC` (existing, unchanged): ~600 chars
+- `AAAK_SPEC` (with placeholder examples): ~600 chars
 - Palace state line: ~70 chars
 - **Total injection per session: ~1300 chars**
 
@@ -143,10 +172,10 @@ Three unit tests covering the new behavior. Tests assert substrings rather than 
 
 | File | Delete | Update | Add |
 |---|--:|--:|--:|
-| `tests/test_mcp_server.py` | 0 | 0 | 4 |
-| **Totals** | 0 | 0 | 4 |
+| `tests/test_mcp_server.py` | 0 | 0 | 6 |
+| **Totals** | 0 | 0 | 6 |
 
-### New tests (4 total)
+### New tests (6 total)
 
 **1. `initialize` response includes `instructions` field**
 
@@ -213,6 +242,58 @@ def test_palace_protocol_has_no_circular_wakeup_rule():
     assert "Call castle_status" not in PALACE_PROTOCOL
 ```
 
+**5. Palace-state line happy path — actual drawers + wings**
+
+```python
+def test_palace_state_line_with_drawers(monkeypatch):
+    """The N-drawers-across-M-wings code path is not exercised by tests 1-4
+    on a fresh CI machine (no `castle init` run). Mock the collection +
+    metadata so this code path is covered."""
+    from cognitive_castle import mcp_server
+
+    class FakeCol:
+        def count(self):
+            return 42
+
+    fake_meta = [
+        {"wing": "wing_castle"},
+        {"wing": "wing_castle"},
+        {"wing": "wing_alice"},
+        {"wing": None},
+    ]
+
+    monkeypatch.setattr(mcp_server.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(mcp_server, "_get_collection", lambda **kw: FakeCol())
+    monkeypatch.setattr(mcp_server, "_get_cached_metadata", lambda col: fake_meta)
+
+    line = mcp_server._palace_state_line()
+    assert "42 drawers" in line
+    # 3 distinct wings: wing_castle, wing_alice, "unknown" (None → fallback)
+    assert "3 wings" in line
+```
+
+**6. AAAK_SPEC has no personal-name examples**
+
+```python
+def test_aaak_spec_uses_generic_placeholders():
+    """The AAAK spec ships with example entity codes that get injected
+    into every user's system prompt. Personal-name examples (Alice,
+    Jordan, etc.) are replaced with neutral placeholders. Emotion
+    mappings (*warm*=joy, *fierce*=determined) stay — those define the
+    AAAK dialect itself, not user data."""
+    from cognitive_castle.mcp_server import AAAK_SPEC
+    # Personal names removed
+    for personal in ("Alice", "Jordan", "Riley", "Max=Max", "BEN=Ben"):
+        assert personal not in AAAK_SPEC, (
+            f"AAAK_SPEC still contains personal-name example: {personal!r}"
+        )
+    # Placeholders present
+    assert "ENT1" in AAAK_SPEC
+    assert "PersonAlpha" in AAAK_SPEC
+    # Emotion mappings preserved (these ARE the dialect, not data)
+    assert "*warm*=joy" in AAAK_SPEC
+```
+
 ### Integration check (manual, not automated)
 
 Restart the running Castle MCP server and start a fresh Claude Code session. Confirm via `claude --debug` (or equivalent system-prompt inspection) that the system prompt contains a section like:
@@ -239,6 +320,7 @@ This validates that Claude Code's MCP client actually injects the field. If the 
 | 2 | Existing `castle_status` callers expecting "ON WAKE-UP" wording break | Very Low | The text is informational; no tool/test depends on the exact wording. Single-user system — only the user's AI agents see it. |
 | 3 | MCP client doesn't honor the `instructions` field (non-compliant client) | Low | Out of Castle's control. Claude Code is the primary client and is MCP-compliant. The field is harmless if ignored. |
 | 4 | Cached metadata is stale, making the wing count wrong | Low | The metadata is informational, not load-bearing. A stale count is no worse than no count. |
+| 5 | `_config.palace_path` access raises during MCP startup on a fresh machine (config file missing or corrupt before `castle init`) | Medium | `_palace_state_line`'s broad `except Exception` catches `AttributeError` / config-layer errors. Initialize still returns; the dynamic line is omitted. This is the most likely failure path for first-time users — verified by the existing tests via the `_palace_state_line_returns_none_on_failure` test. |
 
 ### Non-goals
 
@@ -252,7 +334,7 @@ This validates that Claude Code's MCP client actually injects the field. If the 
 
 ## 4. Acceptance criteria
 
-- All 4 new tests pass.
+- All 6 new tests pass.
 - `python -m pytest tests/ --ignore=tests/benchmarks -m "not slow"` reports zero failures.
 - `ruff check .` and `ruff format --check .` both clean.
 - Manual integration check confirms the `instructions` field reaches Claude Code's system prompt after MCP server restart.
