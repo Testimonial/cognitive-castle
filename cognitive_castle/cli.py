@@ -585,21 +585,6 @@ def cmd_search(args):
     from .backends.base import EmbedderIdentityMismatchError
 
     cfg = CognitiveCastleConfig()
-    # Stopgap mapping: old boolean flags → new mode enum.
-    # Task 5 will rewrite this properly with --mode on the parser.
-    soar_boost = getattr(args, "soar_boost", False)
-    llm_rerank = getattr(args, "llm_rerank", False)
-    no_quality_rerank = getattr(args, "no_quality_rerank", False)
-    quality_rerank = not no_quality_rerank and not cfg.quality_disabled
-
-    if llm_rerank:
-        mode = "max"
-    elif soar_boost:
-        mode = "boosted"
-    elif not quality_rerank:
-        mode = "fast"
-    else:
-        mode = "standard"
 
     palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
 
@@ -610,19 +595,18 @@ def cmd_search(args):
             wing=args.wing,
             room=args.room,
             n_results=args.results,
-            mode=mode,
+            mode=args.mode,
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
         print(f"\n{e}", file=sys.stderr)
         sys.stderr.flush()
-        sys.stdout.flush()
-        # os._exit skips Python finalizers, avoiding a LanceDB/PyArrow
-        # PyGILState_Release fatal during interpreter shutdown that would
-        # otherwise dump noise to stderr after our message.
+        # Use os._exit to avoid pytest harness re-raising via SystemExit
+        # (matches existing pattern in this codebase).
         os._exit(1)
     except SearchError:
-        sys.exit(1)
+        # search() already printed; just exit with non-zero status.
+        os._exit(1)
 
 
 def cmd_wakeup(args):
@@ -1122,41 +1106,16 @@ def build_parser() -> _ParserBundle:
     p_search.add_argument("--room", default=None, help="Limit to one room")
     p_search.add_argument("--results", type=int, default=5, help="Number of results")
     p_search.add_argument(
-        "--llm-rerank",
-        action="store_true",
+        "--mode",
+        choices=["fast", "standard", "boosted", "max"],
+        default="max",
         help=(
-            "Run optional Stage 4 LLM-as-judge re-rank over top candidates. "
-            "Adds 1-2s latency. Uses the LLM provider configured at `castle init` "
-            "(set via CASTLE_LLM_PROVIDER / CASTLE_LLM_MODEL or castle.yaml). "
-            "Off by default."
-        ),
-    )
-    p_search.add_argument(
-        "--soar-boost",
-        action="store_true",
-        help=(
-            "Apply SOAR symbolic-rule boost-tags to final scores "
-            "(experimental; requires Soar 9.6+ + SML Python bindings "
-            "installed; activate via CASTLE_SOAR_ENABLED=1). Off by default."
-        ),
-    )
-    p_search.add_argument(
-        "--soar-first",
-        action="store_true",
-        help=(
-            "Run SOAR (Stage 5) BEFORE LLM-as-judge (Stage 4). Requires both "
-            "--llm-rerank and --soar-boost. Default order is judge-then-SOAR. "
-            "Use this to let SOAR's hand-crafted rules shape what the LLM sees."
-        ),
-    )
-    p_search.add_argument(
-        "--no-quality-rerank",
-        action="store_true",
-        help=(
-            "Disable Stage 6 deterministic text-quality rerank for this query. "
-            "Stage 6 is ON by default — pass this flag to skip the quality "
-            "boost for one query, or set CASTLE_QUALITY_DISABLED=1 to disable "
-            "globally."
+            "Retrieval pipeline mode. "
+            "fast=Stage 3 only; "
+            "standard=+quality rerank; "
+            "boosted=+SOAR boost-tags; "
+            "max=+LLM judge (default). "
+            "Pick fast for hooks/low latency; max for best quality."
         ),
     )
 
