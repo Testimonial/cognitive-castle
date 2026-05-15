@@ -413,6 +413,15 @@ def tool_search(
     # disables Stage 6 regardless of the caller's quality_rerank param.
     if _config.quality_disabled:
         quality_rerank = False
+    # Map old booleans to mode (stopgap — removed in Task 6)
+    if llm_rerank:
+        mode = "max"
+    elif soar_boost:
+        mode = "boosted"
+    elif not quality_rerank:
+        mode = "fast"
+    else:
+        mode = "standard"
     result = search_memories(
         sanitized["clean_query"],
         palace_path=_config.palace_path,
@@ -420,10 +429,7 @@ def tool_search(
         room=room,
         n_results=limit,
         max_distance=dist,
-        llm_rerank=llm_rerank,
-        soar_boost=soar_boost,
-        soar_first=soar_first,
-        quality_rerank=quality_rerank,
+        mode=mode,
     )
     # Attach sanitizer metadata for transparency
     if sanitized["was_sanitized"]:

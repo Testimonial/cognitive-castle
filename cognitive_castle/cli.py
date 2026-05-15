@@ -585,36 +585,21 @@ def cmd_search(args):
     from .backends.base import EmbedderIdentityMismatchError
 
     cfg = CognitiveCastleConfig()
+    # Stopgap mapping: old boolean flags → new mode enum.
+    # Task 5 will rewrite this properly with --mode on the parser.
     soar_boost = getattr(args, "soar_boost", False)
-    soar_first = getattr(args, "soar_first", False)
     llm_rerank = getattr(args, "llm_rerank", False)
-    # Stage 6 is ON by default. CLI flag --no-quality-rerank or env
-    # CASTLE_QUALITY_DISABLED=1 (read via cfg.quality_disabled) turns it OFF.
     no_quality_rerank = getattr(args, "no_quality_rerank", False)
     quality_rerank = not no_quality_rerank and not cfg.quality_disabled
 
-    # --soar-first requires both companion flags
-    if soar_first:
-        missing = []
-        if not llm_rerank:
-            missing.append("--llm-rerank")
-        if not soar_boost:
-            missing.append("--soar-boost")
-        if missing:
-            print(
-                f"--soar-first requires both --llm-rerank and --soar-boost; "
-                f"missing: {', '.join(missing)}",
-                file=sys.stderr,
-            )
-            sys.exit(2)
-
-    # Kill-switch check: --soar-boost requires CASTLE_SOAR_ENABLED=1
-    if soar_boost and not cfg.soar_enabled:
-        print(
-            "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use --soar-boost",
-            file=sys.stderr,
-        )
-        sys.exit(2)
+    if llm_rerank:
+        mode = "max"
+    elif soar_boost:
+        mode = "boosted"
+    elif not quality_rerank:
+        mode = "fast"
+    else:
+        mode = "standard"
 
     palace_path = os.path.expanduser(args.palace) if args.palace else cfg.palace_path
 
@@ -625,10 +610,7 @@ def cmd_search(args):
             wing=args.wing,
             room=args.room,
             n_results=args.results,
-            llm_rerank=llm_rerank,
-            soar_boost=soar_boost,
-            soar_first=soar_first,
-            quality_rerank=quality_rerank,
+            mode=mode,
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
