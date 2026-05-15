@@ -315,6 +315,40 @@ Read AAAK naturally — expand codes mentally, treat *markers* as emotional cont
 When WRITING AAAK: use entity codes, mark emotions, keep structure tight."""
 
 
+def _palace_state_line() -> "str | None":
+    """One-line palace summary, or None if palace is unavailable.
+
+    Best-effort: any exception (no palace, lock contention, lance error)
+    returns None so initialize never fails because of a state read.
+
+    Mirrors the semantics of `tool_status`: when the palace dir exists,
+    pass `create=True` so an initialized-but-unmined palace shows count=0
+    rather than falling through to the "empty" branch.
+    """
+    try:
+        palace_exists = os.path.isdir(_config.palace_path)
+        if not palace_exists:
+            return "Palace state: not initialized. Run `castle init <dir>` to set up."
+        col = _get_collection(create=palace_exists)
+        if not col:
+            return "Palace state: empty (no drawers filed yet)."
+        count = col.count()
+        wings = {(m or {}).get("wing", "unknown") for m in _get_cached_metadata(col)}
+        return f"Palace state: {count} drawers across {len(wings)} wings."
+    except Exception:
+        logger.exception("_palace_state_line failed")
+        return None
+
+
+def _build_instructions() -> str:
+    """Compose the system-prompt injection: protocol + AAAK + palace state."""
+    parts = [PALACE_PROTOCOL, "", AAAK_SPEC]
+    state = _palace_state_line()
+    if state:
+        parts.extend(["", state])
+    return "\n".join(parts)
+
+
 def tool_list_wings():
     col = _get_collection()
     if not col:

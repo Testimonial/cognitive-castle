@@ -1046,3 +1046,44 @@ def test_aaak_spec_uses_generic_placeholders():
     assert "PersonAlpha" in AAAK_SPEC
     # Emotion mappings preserved (these ARE the dialect, not data)
     assert "*warm*=joy" in AAAK_SPEC
+
+
+def test_palace_state_line_returns_none_on_failure(monkeypatch):
+    """Initialize must never fail because of a palace state read.
+    A broken palace path or LanceDB error returns None; injection
+    proceeds without the dynamic line."""
+    from cognitive_castle import mcp_server
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("lance broken")
+
+    monkeypatch.setattr(mcp_server.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(mcp_server, "_get_collection", _raise)
+    assert mcp_server._palace_state_line() is None
+
+
+def test_palace_state_line_with_drawers(monkeypatch):
+    """The N-drawers-across-M-wings code path is not exercised on a
+    fresh CI machine (no `castle init` run). Mock the collection +
+    metadata so this code path is covered."""
+    from cognitive_castle import mcp_server
+
+    class FakeCol:
+        def count(self):
+            return 42
+
+    fake_meta = [
+        {"wing": "wing_castle"},
+        {"wing": "wing_castle"},
+        {"wing": "wing_alice"},
+        {"wing": None},
+    ]
+
+    monkeypatch.setattr(mcp_server.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(mcp_server, "_get_collection", lambda **kw: FakeCol())
+    monkeypatch.setattr(mcp_server, "_get_cached_metadata", lambda col: fake_meta)
+
+    line = mcp_server._palace_state_line()
+    assert "42 drawers" in line
+    # 3 distinct wings: wing_castle, wing_alice, "unknown" (None → fallback)
+    assert "3 wings" in line
