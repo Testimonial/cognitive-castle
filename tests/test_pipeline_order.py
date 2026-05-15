@@ -70,7 +70,7 @@ def test_stage_4_judge_helper_exists_and_reorders(monkeypatch):
     class FakeCfg:
         llm_judge_top_n = 3
         llm_provider = "ollama"
-        llm_model = "gemma3:4b"
+        llm_model = "qwen3.5:latest"
 
     # Monkeypatch judge() to return a fixed permutation [2, 0, 1]
     import cognitive_castle.judge as judge_mod
