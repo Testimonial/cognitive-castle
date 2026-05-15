@@ -778,17 +778,19 @@ class CognitiveCastleConfig:
         return max(1, parsed)
 
     @property
-    def quality_enabled(self) -> bool:
-        """Kill-switch for Stage 6 (deterministic quality rerank). Default False.
+    def quality_disabled(self) -> bool:
+        """Kill-switch for Stage 6 (deterministic quality rerank). Default False
+        (i.e., Stage 6 runs by default).
 
-        Reads from ``CASTLE_QUALITY_ENABLED`` env var first, then config file,
+        Reads from ``CASTLE_QUALITY_DISABLED`` env var first, then config file,
         then default. Any truthy env value (``1``, ``true``, ``yes`` —
-        case-insensitive) enables; anything else disables.
+        case-insensitive) disables Stage 6; anything else (including unset)
+        leaves it enabled.
         """
-        env_val = os.environ.get("CASTLE_QUALITY_ENABLED")
+        env_val = os.environ.get("CASTLE_QUALITY_DISABLED")
         if env_val is not None:
             return env_val.strip().lower() in ("1", "true", "yes")
-        cfg_val = self._file_config.get("quality_enabled")
+        cfg_val = self._file_config.get("quality_disabled")
         if cfg_val is not None:
             return bool(cfg_val)
         return False

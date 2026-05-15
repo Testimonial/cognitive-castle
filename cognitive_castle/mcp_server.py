@@ -378,7 +378,7 @@ def tool_search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
-    quality_rerank: bool = False,
+    quality_rerank: bool = True,
 ):
     limit = max(1, min(limit, _MAX_RESULTS))
     try:
@@ -409,11 +409,10 @@ def tool_search(
             "error": "CASTLE_SOAR_ENABLED=0 kill switch is active; remove it to use soar_boost",
             "soar_boost_skipped": True,
         }
-    # Kill-switch check: quality_rerank requires CASTLE_QUALITY_ENABLED=1
-    if quality_rerank and not _config.quality_enabled:
-        return {
-            "error": "quality_rerank requires CASTLE_QUALITY_ENABLED=1 (kill switch is active to prevent accidental Stage 6 invocation)",
-        }
+    # Kill switch: CASTLE_QUALITY_DISABLED=1 (cfg.quality_disabled) globally
+    # disables Stage 6 regardless of the caller's quality_rerank param.
+    if _config.quality_disabled:
+        quality_rerank = False
     result = search_memories(
         sanitized["clean_query"],
         palace_path=_config.palace_path,
@@ -1469,11 +1468,12 @@ TOOLS = {
                 },
                 "quality_rerank": {
                     "type": "boolean",
-                    "default": False,
+                    "default": True,
                     "description": (
                         "Apply Stage 6 deterministic quality rerank via the "
-                        "vendored `understanding` package. Requires CASTLE_QUALITY_ENABLED=1. "
-                        "Off by default."
+                        "vendored `understanding` package. ON by default — "
+                        "pass false to skip for one query, or set "
+                        "CASTLE_QUALITY_DISABLED=1 to disable globally."
                     ),
                 },
             },

@@ -1,6 +1,7 @@
 """quality_rerank.py — Stage 6 of Castle's retrieval pipeline.
 
-Optional, opt-in via cfg.quality_enabled + --quality-rerank CLI flag.
+ON by default. Opt-out via cfg.quality_disabled (env CASTLE_QUALITY_DISABLED=1)
+or --no-quality-rerank CLI flag.
 Re-ranks Stage 3+ candidates using the 31 deterministic text-quality
 metrics from the vendored `understanding` package.
 

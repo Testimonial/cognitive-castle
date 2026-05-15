@@ -201,7 +201,7 @@ def search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
-    quality_rerank: bool = False,
+    quality_rerank: bool = True,
 ):
     """CLI entry point.
 
@@ -255,7 +255,7 @@ def search_memories(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
-    quality_rerank: bool = False,
+    quality_rerank: bool = True,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -457,7 +457,7 @@ def _apply_optional_stages(
     llm_rerank: bool,
     soar_boost: bool,
     soar_first: bool,
-    quality_rerank: bool = False,
+    quality_rerank: bool = True,
 ) -> list[tuple[float, dict]]:
     """Run optional Stages 4 (judge), 5 (SOAR), and 6 (quality rerank) in
     the requested order.
@@ -500,7 +500,7 @@ def _new_pipeline_search(
     llm_rerank: bool = False,
     soar_boost: bool = False,
     soar_first: bool = False,
-    quality_rerank: bool = False,
+    quality_rerank: bool = True,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 

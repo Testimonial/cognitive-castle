@@ -53,6 +53,7 @@ def test_cmd_status_custom_palace(mock_config_cls):
 @patch("cognitive_castle.cli.CognitiveCastleConfig")
 def test_cmd_search_calls_search(mock_config_cls):
     mock_config_cls.return_value.palace_path = "/fake/palace"
+    mock_config_cls.return_value.quality_disabled = False
     args = argparse.Namespace(
         palace=None,
         query="test query",
@@ -62,7 +63,7 @@ def test_cmd_search_calls_search(mock_config_cls):
         llm_rerank=False,
         soar_boost=False,
         soar_first=False,
-        quality_rerank=False,
+        no_quality_rerank=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -75,7 +76,7 @@ def test_cmd_search_calls_search(mock_config_cls):
             llm_rerank=False,
             soar_boost=False,
             soar_first=False,
-            quality_rerank=False,
+            quality_rerank=True,
         )
 
 
@@ -95,6 +96,7 @@ def test_cmd_search_error_exits(mock_config_cls):
 def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
     """`castle search ... --llm-rerank` must set llm_rerank=True on the search call."""
     mock_config_cls.return_value.palace_path = "/fake/palace"
+    mock_config_cls.return_value.quality_disabled = False
     args = argparse.Namespace(
         palace=None,
         query="x",
@@ -104,7 +106,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
         llm_rerank=True,
         soar_boost=False,
         soar_first=False,
-        quality_rerank=False,
+        no_quality_rerank=False,
     )
     with patch("cognitive_castle.searcher.search") as mock_search:
         cmd_search(args)
@@ -117,7 +119,7 @@ def test_search_cli_llm_rerank_flag_propagates(mock_config_cls):
             llm_rerank=True,
             soar_boost=False,
             soar_first=False,
-            quality_rerank=False,
+            quality_rerank=True,
         )
 
 
@@ -936,7 +938,7 @@ def test_search_cli_soar_boost_flag_propagates(monkeypatch):
         llm_rerank=False,
         soar_boost=True,
         soar_first=False,
-        quality_rerank=False,
+        no_quality_rerank=False,
     )
 
     with patch("cognitive_castle.searcher.search") as mock_search:
@@ -950,7 +952,7 @@ def test_search_cli_soar_boost_flag_propagates(monkeypatch):
             llm_rerank=False,
             soar_boost=True,
             soar_first=False,
-            quality_rerank=False,
+            quality_rerank=True,
         )
 
 
@@ -1023,37 +1025,9 @@ def test_cli_soar_first_alone_errors(monkeypatch, capsys):
     assert "--soar-boost" in err
 
 
-def test_cli_quality_rerank_without_kill_switch_exits_2(monkeypatch, capsys):
-    """--quality-rerank without CASTLE_QUALITY_ENABLED=1 should exit 2 with
-    a kill-switch message."""
-    monkeypatch.delenv("CASTLE_QUALITY_ENABLED", raising=False)
-    import argparse
-
-    args = argparse.Namespace(
-        query="test",
-        palace=None,
-        wing=None,
-        room=None,
-        results=5,
-        llm_rerank=False,
-        soar_boost=False,
-        soar_first=False,
-        quality_rerank=True,
-    )
-    with pytest.raises(SystemExit) as exc_info:
-        cmd_search(args)
-    assert exc_info.value.code == 2
-
-    captured = capsys.readouterr()
-    assert "CASTLE_QUALITY_ENABLED" in captured.err
-
-
-def test_cli_quality_rerank_with_kill_switch_threads_through(
-    monkeypatch,
-):
-    """--quality-rerank with CASTLE_QUALITY_ENABLED=1 should invoke search()
-    with quality_rerank=True."""
-    monkeypatch.setenv("CASTLE_QUALITY_ENABLED", "1")
+def test_cli_default_runs_quality_rerank(monkeypatch):
+    """Default (no flag, no env var) → search() called with quality_rerank=True."""
+    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
 
     captured_kwargs = {}
 
@@ -1073,7 +1047,64 @@ def test_cli_quality_rerank_with_kill_switch_threads_through(
         llm_rerank=False,
         soar_boost=False,
         soar_first=False,
-        quality_rerank=True,
+        no_quality_rerank=False,
     )
     cmd_search(args)
     assert captured_kwargs.get("quality_rerank") is True
+
+
+def test_cli_no_quality_rerank_flag_disables_stage_6(monkeypatch):
+    """--no-quality-rerank flag → search() called with quality_rerank=False."""
+    monkeypatch.delenv("CASTLE_QUALITY_DISABLED", raising=False)
+
+    captured_kwargs = {}
+
+    def stub_search(**kwargs):
+        captured_kwargs.update(kwargs)
+
+    monkeypatch.setattr("cognitive_castle.searcher.search", stub_search)
+
+    import argparse
+
+    args = argparse.Namespace(
+        query="test",
+        palace=None,
+        wing=None,
+        room=None,
+        results=5,
+        llm_rerank=False,
+        soar_boost=False,
+        soar_first=False,
+        no_quality_rerank=True,
+    )
+    cmd_search(args)
+    assert captured_kwargs.get("quality_rerank") is False
+
+
+def test_cli_castle_quality_disabled_env_disables_stage_6(monkeypatch):
+    """CASTLE_QUALITY_DISABLED=1 → search() called with quality_rerank=False
+    even without the --no-quality-rerank flag."""
+    monkeypatch.setenv("CASTLE_QUALITY_DISABLED", "1")
+
+    captured_kwargs = {}
+
+    def stub_search(**kwargs):
+        captured_kwargs.update(kwargs)
+
+    monkeypatch.setattr("cognitive_castle.searcher.search", stub_search)
+
+    import argparse
+
+    args = argparse.Namespace(
+        query="test",
+        palace=None,
+        wing=None,
+        room=None,
+        results=5,
+        llm_rerank=False,
+        soar_boost=False,
+        soar_first=False,
+        no_quality_rerank=False,
+    )
+    cmd_search(args)
+    assert captured_kwargs.get("quality_rerank") is False

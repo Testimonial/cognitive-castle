@@ -477,20 +477,20 @@ def test_entity_fetch_batch_size_file_config_override():
 # ── Quality rerank (Stage 6) config tests ──────────────────────────────
 
 
-def test_quality_enabled_default():
+def test_quality_disabled_default():
     cfg = CognitiveCastleConfig()
-    assert cfg.quality_enabled is False
+    assert cfg.quality_disabled is False
 
 
-def test_quality_enabled_env_override(monkeypatch):
-    monkeypatch.setenv("CASTLE_QUALITY_ENABLED", "1")
+def test_quality_disabled_env_override(monkeypatch):
+    monkeypatch.setenv("CASTLE_QUALITY_DISABLED", "1")
     cfg = CognitiveCastleConfig()
-    assert cfg.quality_enabled is True
+    assert cfg.quality_disabled is True
 
 
-def test_quality_enabled_file_config_override():
-    cfg = _make_config_with_file_config({"quality_enabled": True})
-    assert cfg.quality_enabled is True
+def test_quality_disabled_file_config_override():
+    cfg = _make_config_with_file_config({"quality_disabled": True})
+    assert cfg.quality_disabled is True
 
 
 def test_quality_threshold_medium_default():
