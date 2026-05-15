@@ -1018,3 +1018,120 @@ def test_mcp_tool_search_rejects_invalid_mode():
     result = mcp_server.tool_search(query="q", mode="full")
     assert "error" in result
     assert "invalid mode" in result["error"].lower()
+
+
+def test_palace_protocol_has_no_circular_wakeup_rule():
+    """PALACE_PROTOCOL is now injected at session start; it shouldn't
+    instruct the AI to call castle_status (the protocol's source) on
+    wake-up — that's the very thing the injection replaces."""
+    from cognitive_castle.mcp_server import PALACE_PROTOCOL
+
+    assert "ON WAKE-UP" not in PALACE_PROTOCOL
+    assert "Call castle_status" not in PALACE_PROTOCOL
+
+
+def test_aaak_spec_uses_generic_placeholders():
+    """The AAAK spec ships with example entity codes that get injected
+    into every user's system prompt. Personal-name examples (Alice,
+    Jordan, etc.) are replaced with neutral placeholders. Emotion
+    mappings (*warm*=joy, *fierce*=determined) stay — those define the
+    AAAK dialect itself, not user data."""
+    from cognitive_castle.mcp_server import AAAK_SPEC
+
+    # Personal names removed
+    for personal in ("Alice", "Jordan", "Riley", "Max=Max", "BEN=Ben"):
+        assert personal not in AAAK_SPEC, (
+            f"AAAK_SPEC still contains personal-name example: {personal!r}"
+        )
+    # Placeholders present
+    assert "ENT1" in AAAK_SPEC
+    assert "PersonAlpha" in AAAK_SPEC
+    # Emotion mappings preserved (these ARE the dialect, not data)
+    assert "*warm*=joy" in AAAK_SPEC
+
+
+def test_palace_state_line_returns_none_on_failure(monkeypatch):
+    """Initialize must never fail because of a palace state read.
+    A broken palace path or LanceDB error returns None; injection
+    proceeds without the dynamic line."""
+    from cognitive_castle import mcp_server
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("lance broken")
+
+    monkeypatch.setattr(mcp_server.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(mcp_server, "_get_collection", _raise)
+    assert mcp_server._palace_state_line() is None
+
+
+def test_palace_state_line_with_drawers(monkeypatch):
+    """The N-drawers-across-M-wings code path is not exercised on a
+    fresh CI machine (no `castle init` run). Mock the collection +
+    metadata so this code path is covered."""
+    from cognitive_castle import mcp_server
+
+    class FakeCol:
+        def count(self):
+            return 42
+
+    fake_meta = [
+        {"wing": "wing_castle"},
+        {"wing": "wing_castle"},
+        {"wing": "wing_alice"},
+        {"wing": None},
+    ]
+
+    monkeypatch.setattr(mcp_server.os.path, "isdir", lambda p: True)
+    monkeypatch.setattr(mcp_server, "_get_collection", lambda **kw: FakeCol())
+    monkeypatch.setattr(mcp_server, "_get_cached_metadata", lambda col: fake_meta)
+
+    line = mcp_server._palace_state_line()
+    assert "42 drawers" in line
+    # 3 distinct wings: wing_castle, wing_alice, "unknown" (None → fallback)
+    assert "3 wings" in line
+
+
+def test_initialize_response_includes_instructions():
+    """The initialize response carries the `instructions` field, which
+    MCP-compliant clients inject into the system prompt at session
+    start. This is the foundational guarantee that AIs see Castle's
+    protocol every session."""
+    from cognitive_castle.mcp_server import handle_request
+
+    response = handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    assert "instructions" in response["result"]
+    assert isinstance(response["result"]["instructions"], str)
+    assert len(response["result"]["instructions"]) > 100
+
+
+def test_initialize_instructions_contains_protocol_and_aaak():
+    """Verify the injected text carries the behavioral protocol markers
+    and the AAAK dialect spec. Substring assertions (not exact wording)
+    so the protocol can evolve without test churn."""
+    from cognitive_castle.mcp_server import handle_request
+
+    response = handle_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05"},
+        }
+    )
+    text = response["result"]["instructions"]
+    # Behavioral protocol markers
+    assert "castle_search" in text
+    assert "castle_add_drawer" in text
+    assert "castle_diary_write" in text
+    assert "castle_kg_invalidate" in text
+    assert "Never guess" in text
+    # AAAK marker
+    assert "AAAK" in text
+    assert "ENTITIES:" in text
