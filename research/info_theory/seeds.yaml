@@ -1,0 +1,8 @@
+numpy_seed: 42
+torch_seed: 42
+subsample_seed: 42
+bootstrap_seed: 42
+prompt_template_seed: 42
+downstream_eval_seed: 42
+palace_snapshot_fingerprint: null  # populated by Task 2
+longmemeval_release: null  # populated by Task 6

@@ -1,0 +1,23 @@
+[project]
+name = "info-theory-of-verbatim-memory"
+version = "0.1.0"
+description = "Phase 1 research artifact: estimator + experiment + paper"
+requires-python = ">=3.11"
+dependencies = [
+  "pyarrow>=15.0",
+  "numpy>=1.26",
+  "scipy>=1.13",
+  "statsmodels>=0.14",
+  "matplotlib>=3.8",
+  "pyyaml>=6.0",
+  "tiktoken>=0.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov>=5.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools]
+packages = ["pipeline", "analysis"]
