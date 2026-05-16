@@ -2621,7 +2621,24 @@ git commit -m "feat(analysis): aggregation — BH-FDR, N* saturation point, ≥2
 
 ### Task 17: H3 downstream R@5 evaluation [H3]
 
-**Skip this task if Task 0 returned H3 OUT.**
+**Skip this task if Task 0 returned H3 OUT.** Task 0 returned **H3 IN** with
+two findings that shape this task:
+
+1. **The harness is already parameterizable.** No CLI flag refactor needed.
+   Corpus is rebuilt per question from three in-memory arrays
+   (`haystack_sessions`, `haystack_session_ids`, `haystack_dates`); the
+   ChromaDB index is ephemeral and `_fresh_collection()` recreates it per
+   question. H3 filters by trimming those three arrays in lockstep before
+   each entry hits `build_palace_and_retrieve` (or any of its sibling
+   functions: `..._aaak`, `..._rooms`, `..._hybrid`, `..._full`).
+2. **Provenance bridge required.** `recon_residual` is computed at
+   **drawer** granularity (Castle's chunks), but LME drops operate at
+   **session** granularity. The H3 runner must group drawers by
+   `session_id` and apply a session-level aggregation to decide which
+   sessions to drop. **Decision rule (locked):** filter at the session
+   level using the **mean** of `recon_residual` across drawers in each
+   session. Simpler than median, robust to chunking variance, matches
+   LME's natural drop granularity.
 
 **Files:**
 - Create: `research/info_theory/pipeline/downstream_eval.py`
@@ -2634,43 +2651,101 @@ git commit -m "feat(analysis): aggregation — BH-FDR, N* saturation point, ≥2
 import numpy as np
 import pyarrow as pa
 from pipeline.downstream_eval import (
-    drop_bottom_by_info_score, run_lme_r_at_5_under_corpus,
+    aggregate_to_session_scores,
+    drop_bottom_sessions_by_info,
+    apply_drop_filter,
+    run_h3_experiment,
 )
 
 
-def test_drop_bottom_by_info_score_threshold_10():
+def test_aggregate_to_session_scores_mean():
+    """Drawer-level recon_residual → session-level mean."""
     table = pa.table({
-        "drawer_id": [f"d{i}" for i in range(100)],
-        "recon_residual": list(range(100)),  # lowest = bottom
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [0.2, 0.4, 0.6, 0.8],
     })
-    kept = drop_bottom_by_info_score(table, threshold_pct=10)
-    assert kept.num_rows == 90
-    # Lowest 10 (residuals 0-9) dropped
-    ids = kept.column("drawer_id").to_pylist()
-    assert "d0" not in ids and "d9" not in ids
-    assert "d10" in ids and "d99" in ids
+    session_scores = aggregate_to_session_scores(table)
+    assert session_scores["s_a"] == 0.3  # mean of 0.2, 0.4
+    assert session_scores["s_b"] == 0.7  # mean of 0.6, 0.8
 
 
-def test_drop_bottom_handles_nulls():
-    """Nulls in recon_residual are treated as the lowest score
-    (i.e., dropped first)."""
+def test_aggregate_handles_null_residuals():
+    """Drawers with null recon_residual (below K_floor) are excluded
+    from the mean. If all of a session's drawers are null, the session
+    is excluded entirely (cannot be info-weighted)."""
     table = pa.table({
-        "drawer_id": ["a", "b", "c", "d"],
-        "recon_residual": [0.5, None, 0.8, 0.3],
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [None, 0.5, None, None],
     })
-    kept = drop_bottom_by_info_score(table, threshold_pct=25)
-    ids = kept.column("drawer_id").to_pylist()
-    assert "b" not in ids  # null was lowest
+    session_scores = aggregate_to_session_scores(table)
+    assert session_scores["s_a"] == 0.5
+    assert "s_b" not in session_scores  # all null
 
 
-def test_run_lme_r_at_5_mock():
-    """Smoke test with mocked LME harness."""
+def test_drop_bottom_sessions_threshold_25():
+    session_scores = {f"s{i}": float(i) for i in range(100)}
+    kept = drop_bottom_sessions_by_info(session_scores, threshold_pct=25)
+    # Lowest 25 (s0..s24) dropped
+    assert "s24" not in kept and "s0" not in kept
+    assert "s25" in kept and "s99" in kept
+    assert len(kept) == 75
+
+
+def test_apply_drop_filter_trims_three_arrays_in_lockstep():
+    """The actual filter operation that hits the LME entry shape."""
+    entry = {
+        "question_id": "q1",
+        "haystack_sessions": [["turn1"], ["turn2"], ["turn3"]],
+        "haystack_session_ids": ["s_a", "s_b", "s_c"],
+        "haystack_dates": ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "other_field": "preserved",
+    }
+    out = apply_drop_filter(entry, drop_ids={"s_b"})
+    assert out["haystack_session_ids"] == ["s_a", "s_c"]
+    assert out["haystack_sessions"] == [["turn1"], ["turn3"]]
+    assert out["haystack_dates"] == ["2026-01-01", "2026-01-03"]
+    assert out["other_field"] == "preserved"
+    assert out["question_id"] == "q1"
+    # Original is not mutated
+    assert len(entry["haystack_session_ids"]) == 3
+
+
+def test_run_h3_experiment_calls_harness_per_threshold():
+    """Smoke test with mocked harness."""
     from unittest.mock import patch
-    corpus_ids = ["d0", "d1", "d2"]
-    with patch("pipeline.downstream_eval._lme_eval", return_value=0.75) as m:
-        r_at_5 = run_lme_r_at_5_under_corpus(corpus_ids)
-    assert r_at_5 == 0.75
-    m.assert_called_once_with(corpus_ids)
+    drawer_table = pa.table({
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [0.2, 0.4, 0.6, 0.8],
+    })
+    lme_entries = [
+        {"question_id": "q1",
+         "haystack_sessions": [["x"], ["y"]],
+         "haystack_session_ids": ["s_a", "s_b"],
+         "haystack_dates": ["d1", "d2"],
+         "answer_session_ids": ["s_b"]},
+    ]
+    # Mock the per-entry retrieval call to return a constant R@5
+    fake_r_at_5 = {"uniform": 1.0, 10: 1.0, 25: 0.5, 50: 0.0}
+
+    def fake_eval(entries, drop_ids):
+        # Determine threshold from drop_ids size relative to total sessions
+        if not drop_ids:
+            return fake_r_at_5["uniform"]
+        # Total = 2 sessions; drop_ids count tells us threshold
+        if len(drop_ids) == 0: return fake_r_at_5["uniform"]
+        if "s_a" in drop_ids and len(drop_ids) == 1: return fake_r_at_5[50]
+        return fake_r_at_5[10]
+
+    with patch("pipeline.downstream_eval._run_lme_with_filter",
+                 side_effect=fake_eval) as m:
+        results = run_h3_experiment(drawer_table, lme_entries,
+                                     thresholds=(10, 25, 50))
+    assert "uniform" in results
+    assert all(t in results for t in (10, 25, 50))
+    assert m.call_count == 4  # uniform + 3 thresholds
 ```
 
 - [ ] **Step 2: Run tests, verify fail**
@@ -2685,50 +2760,101 @@ python -m pytest tests/test_downstream_eval.py -v
 # pipeline/downstream_eval.py
 """H3 — LongMemEval R@5 under info-weighted corpus.
 
-Drops bottom-X% of drawers by recon_residual, runs LME R@5 against
-the remaining corpus, returns the delta vs. uniform baseline."""
+Aggregates drawer-level recon_residual to session-level scores (mean),
+drops bottom-X% of sessions, then filters each LME entry's
+haystack_session_ids/sessions/dates arrays in lockstep before retrieval.
+
+Per Task 0 spike findings: the LME harness rebuilds its retrieval
+index per question from these three arrays, so trimming them is the
+entire filter mechanism — no harness refactor needed."""
 
 from __future__ import annotations
+import statistics
+from typing import Optional
 import pyarrow as pa
 
 
-def drop_bottom_by_info_score(
-    table: pa.Table, threshold_pct: float, info_col: str = "recon_residual"
-) -> pa.Table:
-    """Drop the bottom threshold_pct% of rows by info_col.
-    Nulls are treated as lowest (dropped first)."""
-    scores = table.column(info_col).to_pylist()
-    # None → -inf for sort
-    indexed = [(s if s is not None else -float("inf"), i) for i, s in enumerate(scores)]
-    indexed.sort()
-    n = len(indexed)
+def aggregate_to_session_scores(
+    table: pa.Table,
+    info_col: str = "recon_residual",
+    session_col: str = "session_id",
+) -> dict:
+    """Drawer-level info → session-level mean. Sessions with all-null
+    drawers are excluded (cannot be info-weighted)."""
+    rows = table.to_pylist()
+    by_session: dict = {}
+    for r in rows:
+        sid = r.get(session_col)
+        score = r.get(info_col)
+        if sid is None or score is None:
+            if sid is not None:
+                by_session.setdefault(sid, [])
+            continue
+        by_session.setdefault(sid, []).append(score)
+    return {sid: statistics.mean(scores) for sid, scores in by_session.items()
+             if scores}
+
+
+def drop_bottom_sessions_by_info(session_scores: dict, threshold_pct: float) -> set:
+    """Return the set of session_ids to KEEP (i.e., top (100-X)% by score)."""
+    items = sorted(session_scores.items(), key=lambda kv: kv[1])
+    n = len(items)
     drop_n = int(n * threshold_pct / 100)
-    keep_indices = sorted(i for _, i in indexed[drop_n:])
-    return table.take(pa.array(keep_indices))
+    return {sid for sid, _ in items[drop_n:]}
 
 
-def _lme_eval(corpus_ids):
-    """Wrapper around the LME benchmark harness (set by Task 0 spike).
-    Returns R@5 ∈ [0, 1]."""
-    from benchmarks.longmemeval_bench import run_with_corpus_filter
-    return run_with_corpus_filter(corpus_ids)
+def apply_drop_filter(entry: dict, drop_ids: set) -> dict:
+    """Trim haystack_sessions/session_ids/dates in lockstep.
+    Returns a new dict; does not mutate input."""
+    sessions, sids, dates = [], [], []
+    for s, sid, d in zip(entry["haystack_sessions"],
+                          entry["haystack_session_ids"],
+                          entry["haystack_dates"]):
+        if sid in drop_ids:
+            continue
+        sessions.append(s); sids.append(sid); dates.append(d)
+    out = dict(entry)
+    out["haystack_sessions"] = sessions
+    out["haystack_session_ids"] = sids
+    out["haystack_dates"] = dates
+    return out
 
 
-def run_lme_r_at_5_under_corpus(corpus_ids: list) -> float:
-    """Delegate to the patched LME harness."""
-    return _lme_eval(corpus_ids)
+def _run_lme_with_filter(entries: list, drop_ids: set) -> float:
+    """Invoke the LME harness with each entry filtered by drop_ids.
+    Returns mean R@5 across entries.
+
+    drop_ids empty → uniform baseline.
+    """
+    # Imports kept lazy to keep test mocking simple
+    from benchmarks.longmemeval_bench import (
+        build_palace_and_retrieve, evaluate_retrieval,
+    )
+    recalls = []
+    for entry in entries:
+        filtered = apply_drop_filter(entry, drop_ids)
+        if not filtered["haystack_session_ids"]:
+            continue  # nothing left to retrieve against
+        rankings, corpus_ids = build_palace_and_retrieve(filtered, k=5)
+        correct_ids = filtered.get("answer_session_ids", [])
+        r5 = evaluate_retrieval(rankings, correct_ids, corpus_ids, k=5)
+        recalls.append(r5)
+    return sum(recalls) / len(recalls) if recalls else 0.0
 
 
 def run_h3_experiment(
-    table: pa.Table, thresholds: list = (10, 25, 50)
+    drawer_table: pa.Table,
+    lme_entries: list,
+    thresholds: tuple = (10, 25, 50),
 ) -> dict:
-    """Returns {threshold: r_at_5} for uniform + each threshold."""
-    results = {"uniform": run_lme_r_at_5_under_corpus(
-        table.column("drawer_id").to_pylist())}
+    """Returns {"uniform": R@5, 10: R@5, 25: R@5, 50: R@5}."""
+    session_scores = aggregate_to_session_scores(drawer_table)
+    results = {"uniform": _run_lme_with_filter(lme_entries, drop_ids=set())}
+    all_sessions = set(session_scores.keys())
     for t in thresholds:
-        filtered = drop_bottom_by_info_score(table, threshold_pct=t)
-        ids = filtered.column("drawer_id").to_pylist()
-        results[t] = run_lme_r_at_5_under_corpus(ids)
+        keep = drop_bottom_sessions_by_info(session_scores, threshold_pct=t)
+        drop = all_sessions - keep
+        results[t] = _run_lme_with_filter(lme_entries, drop_ids=drop)
     return results
 ```
 
@@ -2743,7 +2869,7 @@ python -m pytest tests/test_downstream_eval.py -v
 ```bash
 git add research/info_theory/pipeline/downstream_eval.py \
         research/info_theory/tests/test_downstream_eval.py
-git commit -m "feat(pipeline): downstream_eval — H3 R@5 under info-weighted corpus"
+git commit -m "feat(pipeline): downstream_eval — H3 R@5 with session-level provenance bridge"
 ```
 
 ---
