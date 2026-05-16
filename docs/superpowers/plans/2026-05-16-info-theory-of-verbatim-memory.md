@@ -113,6 +113,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 
+# Required: pin the installable packages to just the two Python modules.
+# Without this, setuptools' flat-layout auto-discovery finds `paper`,
+# `outputs`, `pipeline`, and `analysis` as candidates and refuses to build.
+[tool.setuptools]
+packages = ["pipeline", "analysis"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 ```
