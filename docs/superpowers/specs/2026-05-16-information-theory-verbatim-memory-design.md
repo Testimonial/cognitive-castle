@@ -42,9 +42,15 @@ The core question is whether the marginal information rate `I(d_t | D_<t)` *decl
 
 ### H1 — Source-type heterogeneity (primary)
 
-> **Within each corpus, the marginal-information decay rate differs significantly across drawer source types** (`miner`, `session-hook`, `mcp` for palace; `question_type` for LongMemEval).
+> **The marginal-information decay rate differs significantly across drawer source types**, formally tested on LongMemEval via `question_type`; descriptively observed on the palace via `added_by` where data permits.
 
-Tested via comparison of fitted decay parameters (α for power-law, τ for exponential) across source-type groups using bootstrap-CI overlap and Kruskal-Wallis test. If true, this is the paper's headline: information accumulation is not a property of memory in general but a property of *how memory is captured*.
+**Formal test (LongMemEval)**: Kruskal-Wallis on fitted-α distributions across the 6 `question_type` levels, with epsilon-squared (`ε²_H`) as effect size. n per group ≈ 20-60 fittable `question_id` cells (each with ≥200 drawers). This is the test the paper rests on.
+
+**Descriptive observation (Palace)**: only `miner` source produces strata with ≥200 drawers (3 cells); `session-hook` and `mcp` sources have all strata below the power-floor (max 42 and 8 drawers respectively). Palace contributes:
+- Fitted α's from the 3 `miner` cells reported as data points (not statistical group)
+- The `session-hook` (max N=42) and `mcp` (max N=8) cells reported as descriptive case studies — including the empirical observation that **only ~10 deliberate `mcp` filings emerged across months of palace usage despite the PALACE_PROTOCOL MCP-instructions injection nudging the agent to file** (this finding gets its own Discussion subsection: "Limits of protocol-as-behavior-driver").
+
+If LME H1 holds, the paper's headline: information accumulation is not a property of memory in general but a property of *how memory is captured*.
 
 ### H2 — Saturation form (per stratum)
 
@@ -69,8 +75,10 @@ Tested via paired comparison of R@5 across thresholds against uniform baseline, 
 
 ### Two candidate decay models — and only two
 
-- **Power-law decay**: `info(N) = a · N^(-α) + ε`, `ε ~ N(0, σ_N²)` with heteroscedastic noise (`σ_N² ∝ N^(-α)`). MLE under this noise model is weighted least squares.
-- **Exponential decay to floor**: `info(N) = c + (a − c) · exp(−N/τ) + ε`, `ε ~ N(0, σ²)` homoscedastic. MLE is ordinary least squares.
+- **Power-law decay**: `info(N) = a · N^(-α) + ε`. **Noise structure estimated empirically**: bin drawers by N (bin width=10), compute empirical variance per bin, fit weighted least squares with `w_N = 1 / σ̂²_N`. This avoids asserting a closed-form noise dependence (e.g., `σ_N² ∝ N^(-α)`) that may not hold in practice.
+- **Exponential decay to floor**: `info(N) = c + (a − c) · exp(−N/τ) + ε`. Same empirical-variance binning; if variance is constant across bins (within a tolerance), fall back to ordinary least squares.
+
+Empirical-variance binning is reported in the appendix (per-stratum bin-variance plots).
 
 Log-normal and stretched-exponential dropped — YAGNI. Cited as future work.
 
@@ -86,8 +94,8 @@ Log-normal and stretched-exponential dropped — YAGNI. Cited as future work.
 2. **Compute** the `(N, info_score)` sequence for that stratum, with `N` indexing drawer position in `(filed_at, chunk_index)` order.
 
 3. **Fit both decay models** via weighted least squares (power-law) / OLS (exponential) with **block bootstrap confidence intervals**:
-   - Block size: `min(100, max(10, N_stratum / 5))`. Adaptive — block_size ≤ N/5 floor prevents the 2-block degeneracy from earlier draft.
-   - **Source-aware blocking** (important): blocks span across `source_file` boundaries where possible. Within-source-file chunks are correlated; blocks that cluster within a single source file underestimate variance.
+   - Block size: `block_size = clamp(N_stratum // 5, 10, 100)`. Target ≥5 blocks per stratum (prevents 2-block degeneracy); cap at 100 for computational tractability on large strata.
+   - **Source-aware blocking**: blocks span `source_file` boundaries where possible. Within-source-file chunks are correlated; blocks that cluster within a single source file underestimate variance.
    - B = 1000 bootstrap resamples. Sensitivity at block sizes ±50% in appendix.
 
 4. **Compare models** via AIC. Report ΔAIC and Akaike weights.
@@ -100,9 +108,15 @@ Log-normal and stretched-exponential dropped — YAGNI. Cited as future work.
 
 Per-stratum results aggregate to the H1 claim via:
 
-- **Within-source-type fitted-α distribution**: report median + IQR of fitted α per source type.
-- **Kruskal-Wallis test** across source types: tests whether α distributions differ significantly between `miner`, `session-hook`, `mcp` strata.
-- **Headline figure for H1**: violin plot of fitted α across all strata, grouped by source type. Visual immediately reveals whether `miner` saturates faster than `mcp` (the likely empirical finding).
+**LongMemEval (formal test)**:
+- **Per-`question_type` fitted-α distribution**: report median + IQR + n per group. Expected n per group ≈ 20-60 cells. If any group has n<10, report descriptively and exclude from the formal test.
+- **Kruskal-Wallis test** across the 6 `question_type` levels. Effect size: **epsilon-squared `ε²_H`** (committed metric).
+- **Headline violin plot**: fitted α across all LME cells, faceted by `question_type`. Each violin shows the distribution per type with n annotated.
+
+**Palace (descriptive only)**:
+- Fitted α from the 3 `miner` cells reported as a small overlay (3 labeled points, not a violin — n is too small for a distribution).
+- `session-hook` and `mcp` strata reported as descriptive case studies in a separate table, with raw `(N, recon_residual)` series shown for each.
+- Honest framing: "Palace adds qualitative evidence; LME provides the formal Kruskal-Wallis test."
 
 ### What the paper concludes (plain English)
 
@@ -115,16 +129,16 @@ For each fittable stratum, we report:
 
 For the headline H1 claim:
 
-- Per-source-type α distribution
-- Kruskal-Wallis statistic across source types
-- Qualitative description of the heterogeneity pattern (e.g., "miner saturates fastest, mcp shows no detectable saturation")
+- Per-`question_type` α distribution on LongMemEval (median + IQR + n) — the formal test
+- Kruskal-Wallis statistic + epsilon-squared effect size on LongMemEval
+- Palace `miner` α's overlaid as case-study points; palace `session-hook` and `mcp` reported in a separate descriptive table
 
 For the H3 downstream claim:
 
-- R@5 deltas per threshold (10%, 25%, 50%)
+- R@5 deltas per threshold (10%, 25%, 50%) with bootstrap CIs
 - Per-question-type R@5 deltas (does info-weighting help on some question types more than others?)
 
-Headline figure: a small-multiples grid showing `(N, recon_residual)` curves grouped by source type, with fitted models overlaid and null distributions shaded.
+**Canonical headline figure**: a small-multiples grid of `(N, recon_residual)` curves on LongMemEval, faceted by `question_type`, with fitted models overlaid and the source-aware shuffled-null distribution shaded. Palace `miner` curves shown as an inset panel for qualitative comparison.
 
 ## Estimator architecture
 
@@ -289,7 +303,7 @@ The palace is **actively growing** via the Stop hook. Experiment runs over 9-11 
 **Snapshot procedure** (in `pipeline/snapshot_palace.py`):
 
 1. At experiment start: `cp -r ~/.castle/palace/ ~/.castle/research/palace_snapshot_2026-05-16/`.
-2. Record snapshot fingerprint: **stable hash of `(drawer_id list + filed_at values + chunk_index values)`** sorted by `drawer_id` — NOT raw file hashes, which include non-deterministic LanceDB index timestamps. Written to `research/info_theory/seeds.yaml`.
+2. Record snapshot fingerprint: **`sha256(sorted [(drawer_id, filed_at, chunk_index) tuples])`** — concatenating canonical JSON-serialized tuples in `drawer_id`-sorted order. Tuples preserve per-drawer positional binding, which value-list concatenation would lose. NOT raw file hashes (LanceDB indexes have non-deterministic write timestamps). Written to `research/info_theory/seeds.yaml`.
 3. All downstream stages read from `palace_snapshot_2026-05-16/`, never from live palace.
 
 Reproducibility manifest includes the snapshot fingerprint alongside the Castle commit hash.
@@ -422,6 +436,8 @@ Each stage reads cached Parquet inputs, writes cached Parquet outputs, skips if 
 
 ### Pipeline DAG
 
+The pilot stage (`python -m cli pilot`) is a **one-time prep step**, not part of the cached DAG. It runs `load_longmemeval.py` on 5% of LME questions to tighten the corpus-size estimate (currently 75k-125k drawers) and adjust the C-stage subsample allocation. Output: an updated `seeds.yaml` with the corrected LME size + a `pilot_report.txt` summarizing what was learned. Pilot output is not consumed by downstream stages; it informs human decisions about whether to proceed.
+
 ```
 [palace LanceDB]                          [LongMemEval public]
        │                                          │
@@ -478,7 +494,7 @@ Each Parquet file carries a fingerprint of its inputs in metadata. **Fingerprint
 
 | Cache file | Fingerprint of |
 |---|---|
-| `palace_snapshot_2026-05-16/` | stable hash of `(sorted drawer_ids, filed_at values, chunk_index values)` |
+| `palace_snapshot_2026-05-16/` | `sha256(sorted [(drawer_id, filed_at, chunk_index) tuples])` |
 | `embeddings.parquet` | normalize output hash + bge-m3 revision |
 | `neighbors_K20.parquet` | embeddings hash + K |
 | `nn_novelty.parquet` | neighbors hash + algorithm version |
@@ -508,7 +524,7 @@ Each Parquet file carries a fingerprint of its inputs in metadata. **Fingerprint
 - Castle source-tree commit hash
 - **Palace snapshot fingerprint** (from `seeds.yaml`)
 - LongMemEval release version
-- Seeds in `seeds.yaml`: `numpy_seed`, `torch_seed`, `subsample_seed`, `bootstrap_seed`, `prompt_template_seed`, `downstream_eval_seed`
+- Seeds in `seeds.yaml`: `numpy_seed`, `torch_seed`, `subsample_seed` (C-stage stratified sampling), `bootstrap_seed` (block-bootstrap resamples for decay-fit CIs), `prompt_template_seed` (any randomized prompt-template variations, if used), `downstream_eval_seed` (bootstrap CIs on H3 R@5 deltas; H3 corpus subset is deterministic given threshold but R@5 deltas have their own bootstrap)
 - Exact `claude-cli` invocation: model name (e.g., `claude-haiku-4-5-20251001`), prompt template SHA, `--no-session-persistence` and `--disable-slash-commands` flags
 - Hardware notes: **CUDA GPU confirmed available** (CPU-only fallback would add ~2-4 hours and is not the target configuration)
 
@@ -542,7 +558,7 @@ This catches single-machine determinism bugs that pure CI cannot — e.g., a har
 - `longmemeval_drawers.parquet` — chunked LME drawers
 - `embeddings.parquet`
 - `neighbors_K{K}.parquet` — one file per K
-- `metadata.parquet`
+- `metadata.parquet` — merged `(drawer_id, corpus, stratum_id, wing, room, added_by, question_type, …)`, written by the `load_palace.py` + `load_longmemeval.py` merge step (single source of truth for stratification + grouping)
 - `nn_novelty.parquet`
 - `recon_residual_K{K}.parquet` — one file per K
 - `llm_surprise_subsample.parquet` — master file post-merge
@@ -593,8 +609,9 @@ Run on every commit via CI. Fast, deterministic, no external deps.
 
 | Test | Setup | Expected |
 |---|---|---|
-| Power-law recovery (heteroscedastic) | `y = N^(-0.5) + N^(-0.5)·N(0,1)`, N=1000 | Fitted `α = 0.5 ± 0.05` |
-| Exponential recovery | `y = 1 + 9·exp(-N/100) + N(0,0.1)` | Fitted `τ = 100 ± 5`, `c=1` |
+| Power-law recovery (empirical variance) | `y = N^(-0.5) + ε_N`, `ε_N ~ N(0, σ_N)` with `σ_N` set per-bin so weighted-LS recovery is tested under realistic noise | Fitted `α = 0.5 ± 0.05` |
+| Exponential recovery | `y = 1 + 9·exp(-N/100) + N(0, 0.1)`, homoscedastic | Fitted `τ = 100 ± 5`, `c=1` |
+| Empirical variance binning correctness | Generate y with known per-bin variance | Estimator recovers per-bin σ̂² within 20% |
 | Model selection | Generate from power-law, fit both | Power law wins, AIC weight > 0.95 |
 | Null rejection | Generate shuffled-order from real corpus | Real-order AIC improves at FDR-corrected q<0.05 |
 
@@ -636,7 +653,7 @@ Run on every commit. Validates pipeline DAG.
 - **Cross-machine re-run** (CI for LME-only, manual for palace): on fixed Castle commit + fixed LME release + fixed seeds, fitted decay parameters match `paper/results.yaml` within **±1e-3** (cross-machine) or **±1e-6** (same-machine).
 - **`results.yaml` is checked in**: every paper number lives here. Updates PR-reviewed. CI compares freshly-fitted numbers to YAML, fails on divergence.
 - **Initial two-machine verification protocol**: developer runs on Machine A + Machine B before first commit of `results.yaml`. Documented in `REPRODUCIBILITY.md`.
-- **Appendix tables auto-generated**: `analysis/figures.py --tables` reads `results.yaml`, emits LaTeX `.tex` in `paper/appendix/`. Single source of truth.
+- **Appendix tables auto-generated**: `analysis/figures.py --tables` reads `results.yaml` and emits **one LaTeX `.tex` file per table** (e.g., `paper/appendix/table_K_sensitivity.tex`, `paper/appendix/table_per_stratum_fits.tex`), each `\input{}`-able from `appendix.tex`. Single source of truth.
 - **Seeds checked in**: any change → new run → new `results.yaml`.
 
 ### CI shape
@@ -669,12 +686,21 @@ New workflow: `.github/workflows/research-info-theory.yml`. Same Python matrix a
 | 2. Related work | 1 page | mem0, Zep, Letta, MemPalace, MemGPT, LongMemEval, classical info theory, locally linear embedding |
 | 3. Methods | 3 pages | Estimators A/B/C, corpora + stratification, H1/H2/H3 procedures, statistical correction |
 | 4. Results | 3-4 pages | H2 per-cell fits, H1 source-type violin plot (likely headline figure), A/B/C correlations, **H3 downstream R@5 deltas** |
-| 5. Discussion | 1.5 pages | Heterogeneity implications; what verbatim-vs-lossy means information-theoretically; downstream-validation interpretation |
+| 5. Discussion | 1.5 pages | (a) Heterogeneity implications — what `question_type` (LME) and `added_by` (palace) divergence means for AI memory design; (b) "Limits of protocol-as-behavior-driver" subsection — empirical observation that only ~10 deliberate MCP filings emerged despite the PALACE_PROTOCOL injection; (c) what verbatim-vs-lossy means information-theoretically; (d) downstream-validation interpretation; (e) **source-aware smart-mining implication** — if H1 + H3 both hold, Phase 2's `--skip-low-info` should be parameterized per-source-type, not applied globally |
 | 6. Limitations | 0.5 page | n=1 user palace; bge-m3 dependency; LME stratification asymmetry; LLM-rating-not-log-prob; within-file correlation |
 | 7. Conclusion | 0.5 page | What's next; Phase 2 pointer |
 | Appendix | 3-4 pages | K-sensitivity, λ-sensitivity, block-size sensitivity, per-cell tables, prompt template, raw-text vs. normalized, downstream per-question-type breakdown |
 
 Total: 9-10 pages main + appendix.
+
+**Paper's voice / structural priority** (resolves scope concern that the paper carries 4 findings — H1, H2, H3, and A/B/C correlations — across 9-10 pages):
+
+- **H1 is the headline.** Abstract leads with H1; Introduction's motivation is "source type matters"; Results opens with H1's faceted violin figure; Discussion's central section is H1's interpretation.
+- **H2 is the technical foundation.** Methods spends most pages on H2's procedure (because it's how H1 numbers are computed); Results reports per-cell H2 fits as supporting data; not the headline.
+- **H3 is the practical proof-point.** Discussion uses H3 to argue "this isn't just descriptive — info-weighting actually improves retrieval"; not the headline but the bridge to Phase 2.
+- **A/B/C correlations are estimator-validation.** Sit in a single Results subsection ("Estimator validation"); confirm B is a reasonable proxy for C, A is a usable cheap baseline. Not a finding; a methods-quality check.
+
+This keeps the paper focused. If H1 is null, the paper still works as a methodology contribution with H2 + H3 — but the framing pivots (see "complete-but-pivoted" below).
 
 ### Paper LaTeX location
 
@@ -695,13 +721,16 @@ Not targeting NeurIPS/ICLR/ACL main track.
 
 | Phase | Duration |
 |---|---|
-| Implementation (incl. `downstream_eval.py`) | **3.5 weeks** |
+| **H3 feasibility spike** (verify `longmemeval_bench.py` can accept a corpus filter) | **1 day** — gates the H3 design before full implementation |
+| Implementation (incl. `downstream_eval.py`, contingent on spike) | **3.5 weeks** |
 | First experimental run + debugging | **1 week** |
 | C-stage subsample run | **1-2 days wall-clock** (7-12 hr compute, 1-2 reruns) |
 | **H3 downstream evaluation** | **3-5 days** |
 | Analysis + figures | **1 week** |
 | Paper drafting | **3 weeks** |
 | **Total** | **9-11 weeks part-time** |
+
+If the H3 feasibility spike reveals the LME harness needs significant refactoring (>3 days), drop H3 from Phase 1 scope and defer to a follow-up note. Paper still ships with H1 + H2; H3 motivation becomes "future work."
 
 ### In scope (Phase 1)
 
@@ -733,8 +762,10 @@ Phase 1 **ships** when:
 - [ ] Paper draft on arXiv
 - [ ] Code in `research/info_theory/` on `develop`
 - [ ] `paper/results.yaml` committed; CI passes on LongMemEval
-- [ ] At least **5 fittable cells per corpus** (H2 has data behind it)
-- [ ] H1 reported with effect size: per-source-type α distribution, Kruskal-Wallis statistic, violin plot
+- [ ] **Palace**: at least 3 fittable `miner` cells (matches data availability; provides descriptive H1 evidence)
+- [ ] **LongMemEval**: at least 5 fittable `question_id` cells distributed across ≥3 of the 6 `question_type` levels (supports formal H1 Kruskal-Wallis)
+- [ ] H1 (LME formal): reported with Kruskal-Wallis statistic + epsilon-squared effect size + faceted violin plot
+- [ ] H1 (palace descriptive): 3 `miner` α points + `session-hook` / `mcp` case-study table
 - [ ] H3 reported: R@5 deltas at thresholds {10%, 25%, 50%} with bootstrap CIs
 - [ ] Spearman correlations `(A, C)` and `(B, C)` reported with bootstrap CIs
 
@@ -753,8 +784,9 @@ Phase 1 **fails** (rethink) if:
 
 - C-stage technical failure (rate-limit blocks > 50% of calls; costs blow past $200 even with `--max-cost`)
 - bge-m3 turns out uninformative for chat-text, invalidating A and B simultaneously
-- Either corpus supports < 5 fittable cells (insufficient data for H1)
-- **H3 downstream experiment cannot be set up** (LME benchmark harness too fragile to support the info-weighted variant)
+- LongMemEval supports < 5 fittable cells across < 3 `question_type` levels (insufficient data for formal H1)
+- Palace produces zero fittable cells (rules out even descriptive H1 evidence)
+- **H3 downstream experiment cannot be set up** (LME benchmark harness can't be parameterized to use an info-filtered corpus subset; identified via feasibility spike)
 
 ### Risks & mitigations
 
@@ -770,6 +802,7 @@ Phase 1 **fails** (rethink) if:
 | Palace grows during experiment | High | Snapshot at start; all stages read from snapshot |
 | `longmemeval_bench.py` not importable | Medium | Spec acknowledges minor refactor; ~1 day budget allocated |
 | H3 downstream experiment shows no improvement | Medium | Publishable as negative result; reframes Phase 2 motivation |
+| LME benchmark harness can't be parameterized | Medium | **Feasibility spike (1 day) at start of implementation phase**; if harness needs >3 days of refactoring, drop H3 from Phase 1 scope |
 | LME version drift between local and CI | Low | Pin LME release version in REPRODUCIBILITY.md |
 
 ## Confirmed design decisions
