@@ -631,15 +631,22 @@ git commit -m "refactor(benchmarks): expose load_questions() for import"
 
 ```json
 // tests/fixtures/longmemeval_mini.json
+// Note: each turn must be ≥50 chars after newline-joining within a session,
+// or Castle's chunk_text() will drop the chunk (MIN_CHUNK_SIZE = 50).
 [
   {
     "question_id": "q1",
     "question_type": "single-session-user",
     "sessions": [
       {"session_id": "q1_s0", "timestamp": "2026-01-01T00:00:00Z",
-       "turns": [{"text": "hello there"}, {"text": "hi"}]},
+       "turns": [
+         {"text": "Hello there, I have a question about a project I've been working on for a few weeks."},
+         {"text": "Hi! Happy to help. What's the project about and what's the question?"}
+       ]},
       {"session_id": "q1_s1", "timestamp": "2026-01-02T00:00:00Z",
-       "turns": [{"text": "follow up question"}]}
+       "turns": [
+         {"text": "A follow-up question on the same project, building on what we discussed earlier today."}
+       ]}
     ]
   },
   {
@@ -647,7 +654,10 @@ git commit -m "refactor(benchmarks): expose load_questions() for import"
     "question_type": "multi-session",
     "sessions": [
       {"session_id": "q2_s0", "timestamp": "2026-01-03T00:00:00Z",
-       "turns": [{"text": "different topic"}, {"text": "another turn"}]}
+       "turns": [
+         {"text": "A completely different topic from a different conversation about something unrelated."},
+         {"text": "Another turn in the same session continuing the unrelated topic with more detail."}
+       ]}
     ]
   }
 ]
@@ -721,10 +731,15 @@ from pathlib import Path
 from typing import Union
 import pyarrow as pa
 
-from cognitive_castle.miner import ChunkConfig, chunk_text
+# Castle's miner API (verified against cognitive_castle/miner.py:371):
+#   chunk_text(content: str, source_file: str) -> list[dict]
+# Returns dicts shaped {"content": str, "chunk_index": int}, driven by
+# module-level constants CHUNK_SIZE=800 and MIN_CHUNK_SIZE=50. No
+# per-call size override; no ChunkConfig class.
+from cognitive_castle.miner import chunk_text
 
 
-def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Table:
+def load_longmemeval(source: Union[Path, str]) -> pa.Table:
     """Read LME questions (or a fixture JSON), chunk through Castle's
     miner, and return an Arrow table compatible with load_palace()."""
     source = Path(source)
@@ -736,7 +751,6 @@ def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Ta
         from benchmarks.longmemeval_bench import load_questions
         questions = load_questions()
 
-    cfg = ChunkConfig(chunk_chars=chunk_chars)
     rows = []
     for q in questions:
         qid = q["question_id"]
@@ -745,16 +759,18 @@ def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Ta
             sid = sess["session_id"]
             ts = sess["timestamp"]
             joined = "\n".join(t["text"] for t in sess["turns"])
-            for ci, chunk in enumerate(chunk_text(joined, cfg)):
+            source_file_tag = f"lme_{qid}_{sid}"
+            for chunk in chunk_text(joined, source_file_tag):
+                ci = chunk["chunk_index"]
                 rows.append({
                     "drawer_id": f"lme_{qid}_{sid}_{ci:03d}",
-                    "text": chunk,
+                    "text": chunk["content"],
                     "filed_at": ts,
                     "session_id": sid,
                     "question_id": qid,
                     "question_type": qtype,
                     "chunk_index": ci,
-                    "source_file": f"lme_{qid}_{sid}",
+                    "source_file": source_file_tag,
                     "wing": None, "room": None, "added_by": None,
                 })
 
