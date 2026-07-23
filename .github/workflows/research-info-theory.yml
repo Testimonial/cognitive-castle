@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'research/info_theory/**'
+      - '.github/workflows/research-info-theory.yml'
 
 jobs:
   unit-and-integration:
@@ -25,14 +26,14 @@ jobs:
         run: |
           pip install -e .
           pip install -e research/info_theory[dev]
-      - name: Run Tier 1 unit tests
+      - name: Run Tier 1 unit + integration tests
         run: |
           cd research/info_theory
           pytest tests/ -v --tb=short -x
-      - name: Run integration smoke (LME fixture)
+      - name: Integration-only smoke (e2e + cross-corpus)
         run: |
           cd research/info_theory
-          pytest tests/ -v -k integration --tb=short
+          pytest tests/test_e2e_smoke.py tests/test_cross_corpus_merge.py -v --tb=short
 
   reproducibility-tier4:
     runs-on: ubuntu-latest
