@@ -26,14 +26,7 @@ jobs:
           pyproject_version=$(grep -E '^version' pyproject.toml | head -1 | cut -d'"' -f2)
           marketplace_version=$(jq -r '.plugins[0].version' .claude-plugin/marketplace.json)
           plugin_version=$(jq -r '.version' .claude-plugin/plugin.json)
-          # .codex-plugin/plugin.json is optional (Castle does not currently
-          # ship a Codex plugin manifest). Treat missing as "n/a" so this
-          # step never fails on a missing optional artifact.
-          if [ -f .codex-plugin/plugin.json ]; then
-            codex_version=$(jq -r '.version' .codex-plugin/plugin.json)
-          else
-            codex_version="n/a"
-          fi
+          codex_version=$(jq -r '.version' .codex-plugin/plugin.json)
 
           echo "py_version=$py_version" >> "$GITHUB_OUTPUT"
           echo "pyproject_version=$pyproject_version" >> "$GITHUB_OUTPUT"
@@ -71,14 +64,10 @@ jobs:
             fi
           }
           # All must agree with each other (use version.py as the reference, per CLAUDE.md).
-          # .codex-plugin/plugin.json is optional; when absent the extraction step
-          # sets CODEX="n/a" and we skip the check.
           check "pyproject.toml" "$PYPROJECT" "$PY"
           check ".claude-plugin/marketplace.json" "$MARKETPLACE" "$PY"
           check ".claude-plugin/plugin.json" "$PLUGIN" "$PY"
-          if [[ "$CODEX" != "n/a" ]]; then
-            check ".codex-plugin/plugin.json" "$CODEX" "$PY"
-          fi
+          check ".codex-plugin/plugin.json" "$CODEX" "$PY"
           exit $fail
 
       - name: Verify tag matches manifest (tag pushes only)
