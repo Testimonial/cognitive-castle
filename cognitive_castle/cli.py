@@ -718,6 +718,48 @@ def cmd_status(args):
     status(palace_path=palace_path)
 
 
+def cmd_info_score(args):
+    """Score how novel some text is against the palace.
+
+    Practical use of the v3.4.0 research finding: the O(1) nn_novelty
+    estimator captures ~96% of the variance of the O(K^3) LLE residual
+    on a real 65k-drawer palace (rho = 0.982). Cheap enough to run
+    interactively.
+    """
+    import json as _json
+    import sys as _sys
+
+    from .info_score import score_novelty
+
+    text = args.text
+    if not text:
+        text = _sys.stdin.read()
+    text = (text or "").strip()
+    if not text:
+        print("info-score: no text provided (pass an argument or pipe stdin)", file=_sys.stderr)
+        _sys.exit(2)
+
+    try:
+        result = score_novelty(text, palace_path=args.palace, top_k=args.top_k, wing=args.wing)
+    except FileNotFoundError as e:
+        print(f"info-score: {e}", file=_sys.stderr)
+        _sys.exit(1)
+
+    if args.json:
+        print(_json.dumps(result.as_dict(), indent=2))
+        return
+
+    print(f"Novelty: {result.novelty:.3f}  ({result.band})")
+    if not result.neighbours:
+        print("  (no prior drawers to compare against)")
+        return
+    print(f"Nearest {len(result.neighbours)} drawers:")
+    for i, n in enumerate(result.neighbours, 1):
+        wing = f"[{n.wing}]" if n.wing else ""
+        excerpt = n.text[:80].replace("\n", " ")
+        print(f"  {i}. cos={n.cosine:.3f} {wing} {n.drawer_id}: {excerpt}")
+
+
 def cmd_repair_status(args):
     """Read-only HNSW capacity health check (#1222)."""
     from .repair import status as repair_status
@@ -1249,6 +1291,17 @@ def build_parser() -> _ParserBundle:
 
     sub.add_parser("status", help="Show what's been filed")
 
+    # info-score — practical use of the v3.4.0 research (nn_novelty)
+    p_info = sub.add_parser(
+        "info-score",
+        help="Score how novel a piece of text is against your palace (0=duplicate, 1=novel)",
+    )
+    p_info.add_argument("text", nargs="?", help="Text to score (or read from stdin if omitted)")
+    p_info.add_argument("--wing", default=None, help="Restrict search to one wing")
+    p_info.add_argument("--top-k", type=int, default=5, help="How many neighbours to return")
+    p_info.add_argument("--json", action="store_true", help="Emit JSON instead of human text")
+    p_info.add_argument("--palace", default=None, help="Palace directory (defaults to config)")
+
     return _ParserBundle(parser=parser, p_hook=p_hook, p_instructions=p_instructions)
 
 
@@ -1290,6 +1343,7 @@ def main():
         "repair-status": cmd_repair_status,
         "reindex": cmd_reindex,
         "status": cmd_status,
+        "info-score": cmd_info_score,
     }
     dispatch[args.command](args)
 
