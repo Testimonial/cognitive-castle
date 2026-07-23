@@ -413,10 +413,14 @@ class ClaudeCliProvider(LLMProvider):
     def __init__(
         self,
         model: str,
-        timeout: int = 120,
+        timeout: int = 600,
         endpoint: Optional[str] = None,
         **_: object,
     ):
+        # 600s default: claude CLI + Sonnet can take >120s on long (20-prior)
+        # prompts; Haiku typically finishes in <30s but slow-launch startup +
+        # network jitter still push into the 60-120s range. Override via
+        # CASTLE_LLM_TIMEOUT env var when constructed through the factory.
         super().__init__(model=model, endpoint=endpoint, timeout=timeout)
 
     @property

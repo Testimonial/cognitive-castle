@@ -77,18 +77,31 @@ def process_subsample(
     - One Parquet per completed drawer in partials_dir/{drawer_id}.parquet
     - Skip targets whose partial already exists
     - Track cumulative total_cost_usd; raise CostCapExceeded before exceeding max_cost
+    - Per-drawer error skipping: a single failed call (timeout, malformed JSON,
+      out-of-range score, etc.) logs a warning and moves on. The batch survives
+      any number of individual failures; only CostCapExceeded aborts the batch.
     - Print last (drawer_id, score, reasoning) every merge_every calls
     """
     partials_dir = Path(partials_dir)
     partials_dir.mkdir(parents=True, exist_ok=True)
     done_ids = {f.stem for f in partials_dir.glob("*.parquet")}
     cumulative = 0.0
+    n_errors = 0
 
     for i, target in enumerate(targets):
         if target["drawer_id"] in done_ids:
             continue
         priors = priors_lookup[target["drawer_id"]]
-        result = llm_surprise_one(priors, target, provider)
+        try:
+            result = llm_surprise_one(priors, target, provider)
+        except Exception as e:  # noqa: BLE001 — degrade on any per-call failure
+            n_errors += 1
+            print(
+                f"[{i + 1}/{len(targets)}] {target['drawer_id']} "
+                f"ERR: {type(e).__name__}: {e!s:.200}",
+                flush=True,
+            )
+            continue
         cost = result.get("llm_surprise_cost_usd") or 0.0
         if cumulative + cost > max_cost:
             raise CostCapExceeded(
@@ -102,9 +115,13 @@ def process_subsample(
         if (i + 1) % merge_every == 0:
             print(
                 f"[{i + 1}/{len(targets)}] {target['drawer_id']} "
-                f"score={10 - result['llm_surprise']} cumulative=${cumulative:.2f}"
+                f"score={10 - result['llm_surprise']} cumulative=${cumulative:.2f} "
+                f"errors={n_errors}"
             )
             print(f"  reasoning: {result['llm_surprise_reasoning_spotcheck'][:120]}")
+
+    if n_errors:
+        print(f"[process_subsample] finished with {n_errors} per-drawer errors (skipped)")
 
 
 def merge_partials(partials_dir: Path, output: Path) -> None:
