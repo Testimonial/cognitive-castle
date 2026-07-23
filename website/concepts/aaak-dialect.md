@@ -17,7 +17,7 @@ AAAK is a separate compression layer, **not the storage default**. The 96.6% ben
 
 - **Not lossless compression.** The original text cannot be reconstructed.
 - **Not efficient at small scale.** Short text already tokenizes efficiently — AAAK overhead costs more than it saves.
-- **Not the default storage format.** MemPalace stores raw verbatim text in LanceDB.
+- **Not the default storage format.** Cognitive Castle stores raw verbatim text in LanceDB.
 
 ## Format
 

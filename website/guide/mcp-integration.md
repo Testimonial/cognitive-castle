@@ -1,12 +1,12 @@
 # MCP Integration
 
-MemPalace provides 29 tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), giving any MCP-compatible AI full read/write access to your palace.
+Cognitive Castle provides 29 tools through the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/), giving any MCP-compatible AI full read/write access to your palace.
 
 ## Setup
 
 ### Setup Helper
 
-MemPalace includes a setup helper that prints the exact configuration commands for your environment:
+Cognitive Castle includes a setup helper that prints the exact configuration commands for your environment:
 
 ```bash
 castle mcp
@@ -32,7 +32,7 @@ Claude calls `castle_search` automatically, gets verbatim results, and answers y
 
 ## Compatible Tools
 
-MemPalace works with any tool that supports MCP:
+Cognitive Castle works with any tool that supports MCP:
 
 - **Claude Code** — native via plugin or manual MCP
 - **OpenClaw** — via official skill, see [OpenClaw Skill](/guide/openclaw)

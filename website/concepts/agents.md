@@ -1,9 +1,9 @@
 # Specialist Agents
 
-MemPalace currently supports **agent diaries** through MCP tools. The practical model is simple: give an agent a stable name, and write/read diary entries under that agent's wing.
+Cognitive Castle currently supports **agent diaries** through MCP tools. The practical model is simple: give an agent a stable name, and write/read diary entries under that agent's wing.
 
 ::: warning Current Scope
-This page documents the diary workflow that exists today. MemPalace does **not** currently ship an agent registry, `~/.castle/agents/*.json`, or a `castle_list_agents` tool.
+This page documents the diary workflow that exists today. Cognitive Castle does **not** currently ship an agent registry, `~/.castle/agents/*.json`, or a `castle_list_agents` tool.
 :::
 
 ## What Agents Do

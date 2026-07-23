@@ -12,6 +12,16 @@ pip install -e ".[dev]"
 
 After install, the `castle` and `castle-mcp` commands are on `$PATH`.
 
+::: danger Watch out for brand-squatting
+Cognitive Castle's official code lives only at
+[github.com/Testimonial/cognitive-castle](https://github.com/Testimonial/cognitive-castle).
+Historical drift from Castle's upstream ancestor MemPalace has attracted
+brand-squatting look-alike domains (e.g. `mempalace.tech`) that have hosted
+ad-redirects and potential malware. Never install binaries, scripts, or
+pip packages from unofficial domains, PyPI mirrors, or any URL you did
+not verify against the official repo above.
+:::
+
 ### Requirements
 
 - Python 3.9+
@@ -69,7 +79,7 @@ That gives you a working local memory index.
 
 ## What Happens Next
 
-After the one-time setup, you don't run MemPalace commands manually. Your AI uses it for you through [MCP integration](/guide/mcp-integration) or a [Claude Code plugin](/guide/claude-code).
+After the one-time setup, you don't run Cognitive Castle commands manually. Your AI uses it for you through [MCP integration](/guide/mcp-integration) or a [Claude Code plugin](/guide/claude-code).
 
 Ask your AI anything:
 

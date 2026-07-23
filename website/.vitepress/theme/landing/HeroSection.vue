@@ -10,7 +10,7 @@
         </h1>
         <p class="lede">
           Every conversation, every idea, every small decision&hellip; held somewhere safe.
-          <br><br>Welcome to the future of memory: <span class="mp-blue">MemPalace</span>
+          <br><br>Welcome to the future of memory: <span class="mp-blue">Cognitive Castle</span>
         </p>
         <form class="waitlist waitlist-hero" data-source="hero" novalidate>
           <div class="waitlist-head">

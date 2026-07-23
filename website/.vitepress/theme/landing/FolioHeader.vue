@@ -1,8 +1,8 @@
 <template>
   <header v-pre class="folio" role="banner">
-    <div class="mark" aria-label="MemPalace">
+    <div class="mark" aria-label="Cognitive Castle">
       <img src="/castle_logo.png" alt="" aria-hidden="true" />
-      <span>MemPalace</span>
+      <span>Cognitive Castle</span>
     </div>
     <nav class="right" aria-label="Primary">
       <a href="#anatomy" class="hide-mobile">Anatomy</a>

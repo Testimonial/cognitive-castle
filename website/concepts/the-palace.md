@@ -1,6 +1,6 @@
 # The Palace
 
-Ancient Greek orators memorized entire speeches by placing ideas in rooms of an imaginary building. Walk through the building, find the idea. MemPalace applies the same principle to AI memory.
+Ancient Greek orators memorized entire speeches by placing ideas in rooms of an imaginary building. Walk through the building, find the idea. Cognitive Castle applies the same principle to AI memory.
 
 ## Structure
 
@@ -84,7 +84,7 @@ Same room. Three wings. The graph can use that shared room name as a bridge.
 
 ### Closets
 
-Closets are the summary layer in the broader MemPalace vocabulary: compact notes that point back to the original content. In the current implementation, the main persisted storage path is still the underlying drawer text plus metadata.
+Closets are the summary layer in the broader Cognitive Castle vocabulary: compact notes that point back to the original content. In the current implementation, the main persisted storage path is still the underlying drawer text plus metadata.
 
 ### Drawers
 

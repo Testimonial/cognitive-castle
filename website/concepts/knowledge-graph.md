@@ -1,6 +1,6 @@
 # Knowledge Graph
 
-MemPalace includes a temporal entity-relationship graph — like Zep's Graphiti, but SQLite instead of Neo4j. Local and free.
+Cognitive Castle includes a temporal entity-relationship graph — like Zep's Graphiti, but SQLite instead of Neo4j. Local and free.
 
 ## What It Stores
 
@@ -83,7 +83,7 @@ Database location: `~/.castle/knowledge_graph.sqlite3`
 ## Related Work
 
 Temporal entity-relationship graphs are a familiar pattern — Zep's
-Graphiti, for example, also exposes a bi-temporal model. MemPalace's
+Graphiti, for example, also exposes a bi-temporal model. Cognitive Castle's
 knowledge graph is local-first (SQLite, everything on disk) and free;
 Zep is a managed service backed by Neo4j with its own pricing, SLAs,
 and compliance surface. See Zep's own [documentation](https://www.getzep.com/)

@@ -15,7 +15,7 @@ const gaId = process.env.CASTLE_DOCS_GA_ID
 
 export default withMermaid(
   defineConfig({
-    title: 'MemPalace',
+    title: 'Cognitive Castle',
     description: 'Give your AI a memory. Local-first storage and retrieval for AI workflows, with benchmark results and MCP tooling.',
     base: docsBase,
 
@@ -26,7 +26,7 @@ export default withMermaid(
       ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
       ['link', { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' }],
       ['link', { href: 'https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap', rel: 'stylesheet' }],
-      ['meta', { property: 'og:title', content: 'MemPalace — AI Memory System' }],
+      ['meta', { property: 'og:title', content: 'Cognitive Castle — AI Memory System' }],
       ['meta', { property: 'og:description', content: '96.6% LongMemEval recall. Zero API calls. Local, free, open source.' }],
       ['meta', { property: 'og:image', content: `${docsBase}castle_logo.png` }],
       ...(gaId ? [
@@ -37,7 +37,7 @@ export default withMermaid(
 
     themeConfig: {
       logo: '/castle_logo.png',
-      siteTitle: 'MemPalace',
+      siteTitle: 'Cognitive Castle',
 
       nav: [
         { text: 'Guide', link: '/guide/getting-started' },
@@ -103,7 +103,7 @@ export default withMermaid(
 
       footer: {
         message: 'Released under the MIT License.',
-        copyright: 'Copyright © 2026 MemPalace contributors',
+        copyright: 'Copyright © 2026 Cognitive Castle contributors',
       },
 
       editLink: {

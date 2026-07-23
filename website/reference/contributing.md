@@ -1,6 +1,6 @@
 # Contributing
 
-PRs welcome. MemPalace is open source and we welcome contributions of all sizes — from typo fixes to new features.
+PRs welcome. Cognitive Castle is open source and we welcome contributions of all sizes — from typo fixes to new features.
 
 ## Getting Started
 

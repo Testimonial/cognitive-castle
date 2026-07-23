@@ -1,6 +1,6 @@
 # Gemini CLI
 
-MemPalace works natively with [Gemini CLI](https://github.com/google/gemini-cli), which handles the MCP server and save hooks automatically.
+Cognitive Castle works natively with [Gemini CLI](https://github.com/google/gemini-cli), which handles the MCP server and save hooks automatically.
 
 ## Prerequisites
 
@@ -32,12 +32,12 @@ python3 -m venv .venv
 You can optionally create or edit:
 
 - **`~/.castle/identity.txt`** — plain text describing your role and focus
-- **`./castle.yaml`** — per-project MemPalace configuration created by `castle init`
+- **`./castle.yaml`** — per-project Cognitive Castle configuration created by `castle init`
 - **`./entities.json`** — per-project entity mappings used by AAAK compression
 
 ## Connect to Gemini CLI
 
-Register MemPalace as an MCP server:
+Register Cognitive Castle as an MCP server:
 
 ```bash
 gemini mcp add --scope user castle \
@@ -80,7 +80,7 @@ chmod +x hooks/*.sh
 ## Usage
 
 Once connected, Gemini CLI will automatically:
-- Start the MemPalace server on launch
+- Start the Cognitive Castle server on launch
 - Use `castle_search` to find relevant past discussions
 - Use the `PreCompress` hook to save memories before context compression
 

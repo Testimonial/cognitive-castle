@@ -19,7 +19,7 @@
 
     <div class="catalog-card">
       <div>
-        <p class="catalog-title">MemPalace <em>&mdash;</em> a memory palace for AI.</p>
+        <p class="catalog-title">Cognitive Castle <em>&mdash;</em> a memory palace for AI.</p>
         <p class="catalog-desc">Verbatim storage, local-first, zero telemetry. Built for people who believe their words are theirs.</p>
       </div>
       <div>

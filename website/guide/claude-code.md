@@ -1,6 +1,6 @@
 # Claude Code Plugin
 
-The recommended way to use MemPalace with Claude Code — native marketplace install.
+The recommended way to use Cognitive Castle with Claude Code — native marketplace install.
 
 ## Installation
 
@@ -14,7 +14,7 @@ Restart Claude Code, then type `/skills` to verify "castle" appears.
 ## How It Works
 
 With the plugin installed, Claude Code automatically:
-- Starts the MemPalace MCP server on launch
+- Starts the Cognitive Castle MCP server on launch
 - Has access to all 29 tools
 - Learns the AAAK dialect and memory protocol from the `castle_status` response
 - Searches the palace before answering questions about past work

@@ -1,6 +1,6 @@
 # Module Map
 
-Complete source file reference for the MemPalace codebase.
+Complete source file reference for the Cognitive Castle codebase.
 
 ## Project Structure
 

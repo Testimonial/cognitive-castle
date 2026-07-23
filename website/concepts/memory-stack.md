@@ -1,6 +1,6 @@
 # Memory Stack
 
-MemPalace uses a 4-layer memory stack. Each layer loads progressively more data only when needed.
+Cognitive Castle uses a 4-layer memory stack. Each layer loads progressively more data only when needed.
 
 ## The Layers
 

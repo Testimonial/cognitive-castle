@@ -1,6 +1,6 @@
 # Local Models
 
-MemPalace works with any local LLM — Llama, Mistral, or any offline model. Since local models generally don't speak MCP yet, there are two approaches.
+Cognitive Castle works with any local LLM — Llama, Mistral, or any offline model. Since local models generally don't speak MCP yet, there are two approaches.
 
 ## Wake-Up Command
 

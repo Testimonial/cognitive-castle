@@ -1,6 +1,6 @@
 # Benchmarks
 
-Curated summary of MemPalace's reproducible benchmark results. For the
+Curated summary of Cognitive Castle's reproducible benchmark results. For the
 complete progression with every experiment, see
 [`benchmarks/BENCHMARKS.md`](https://github.com/Testimonial/cognitive-castle/blob/main/benchmarks/BENCHMARKS.md).
 All headline numbers on this page are reproducible from the committed
@@ -9,7 +9,7 @@ checked in.
 
 ## The Core Finding
 
-MemPalace's benchmarked raw baseline stores the source text and searches
+Cognitive Castle's benchmarked raw baseline stores the source text and searches
 it with the vector store's default embeddings. No extraction or
 summarisation step is required for that baseline, and it reproduces at
 **96.6% R@5** on LongMemEval with no LLM at any stage.
@@ -73,26 +73,26 @@ honest retrieval-recall number for LoCoMo is the top-10 figure.
 ## Other Benchmarks
 
 **ConvoMem** (Salesforce; 50 items per category × 5 categories = 250
-items): MemPalace raw retrieval reaches **92.9% avg recall**. Strongest
+items): Cognitive Castle raw retrieval reaches **92.9% avg recall**. Strongest
 categories: Assistant Facts 100%, User Facts 98%. Weakest: Preferences
 86%. The Salesforce dataset contains ~75K items in total; our headline
 number is from the 250-item sample the benchmark script was designed
 around.
 
-**MemBench** (ACL 2025; 8,500 items, all topics): MemPalace hybrid
+**MemBench** (ACL 2025; 8,500 items, all topics): Cognitive Castle hybrid
 top-5 reaches **80.3% R@5 overall**. Strongest: aggregative 99.3%,
 comparative 98.4%, lowlevel_rec 99.8%. Weakest: noisy 43.4%
 (distractor-heavy by design), conditional 57.3%.
 
 ## Why We Don't Publish a Cross-System Comparison Table
 
-Previous versions of this page placed MemPalace's retrieval recall (R@5)
+Previous versions of this page placed Cognitive Castle's retrieval recall (R@5)
 next to other projects' end-to-end QA accuracy figures under a single
 "LongMemEval R@5" column. Those are different metrics and are not
 comparable. A system can have 100% retrieval recall and 40% QA
 accuracy, and vice versa.
 
-If you are evaluating memory systems against MemPalace and want a fair
+If you are evaluating memory systems against Cognitive Castle and want a fair
 comparison, use the retrieval-recall numbers above and the benchmark
 scripts in the repo; or pick the metric the other project publishes and
 compare on that. Each project's published source is the correct

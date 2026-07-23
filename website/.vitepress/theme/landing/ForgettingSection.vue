@@ -10,7 +10,7 @@
         </h2>
         <p class="lede" style="margin:0;">
           Scroll down and watch. On the left, a model without memory. On the right,
-          the same model with MemPalace. The words are identical — until two weeks
+          the same model with Cognitive Castle. The words are identical — until two weeks
           pass.
         </p>
       </div>

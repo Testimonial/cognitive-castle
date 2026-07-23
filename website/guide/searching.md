@@ -1,6 +1,6 @@
 # Searching Memories
 
-MemPalace uses LanceDB's semantic vector search to find relevant memories. When you search, you get **verbatim text** — the exact words, never summaries.
+Cognitive Castle uses LanceDB's semantic vector search to find relevant memories. When you search, you get **verbatim text** — the exact words, never summaries.
 
 ## CLI Search
 

@@ -1,6 +1,6 @@
 # Mining Your Data
 
-MemPalace ingests your data by **mining** — scanning files and filing their content as verbatim drawers in the palace.
+Cognitive Castle ingests your data by **mining** — scanning files and filing their content as verbatim drawers in the palace.
 
 ## Mining Modes
 
