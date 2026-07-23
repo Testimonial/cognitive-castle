@@ -145,7 +145,7 @@ castle search "why did we switch to graphql"
 castle search "auth flow" --wing myapp --room backend
 ```
 
-→ See [How it works](#how-it-works) or [Connect to Claude Code](#connect-to-claude-code)
+→ See [How it works](#how-it-works) or [Connect to your MCP client](#connect-to-your-mcp-client)
 
 ---
 
@@ -187,7 +187,7 @@ Prerequisites: build Soar 9.6+ with SML Python bindings from [SoarGroup/Soar](ht
 ### Stage 6 — Deterministic quality rerank
 Powered by the vendored [`understanding`](https://github.com/Testimonial/understanding) package: 31 standards-based metrics (IEEE 830, ISO 29148, readability formulas, cognitive load theory) applied as a two-tier threshold (medium ×1.15, high ×1.25) on top of relevance.
 
-**MCP:** the `search_memories` tool takes the same `mode` parameter — `search_memories(query="...", mode="max")`.
+**MCP:** the `castle_search` tool takes the same `mode` parameter — `castle_search(query="...", mode="max")`. The v3.4.0 research shipped a companion tool `castle_info_score(text="...")` that returns a novelty score plus the top-k nearest drawers, callable by AI agents before they file candidate content.
 
 <details>
 <summary><b>Migration from MiniLM</b> — click if you built your palace before the 2026-05 embedder cutover</summary>
@@ -301,112 +301,14 @@ Restart your AI client and the `castle_*` tools become available mid-conversatio
 | `castle status` | Drawer counts per wing/room |
 | `castle reindex --palace <path> --sources <dirs>` | Rebuild the palace from source (e.g., after embedder upgrade) |
 | `castle mcp` | Print the MCP setup command |
+| `castle info-score "text"` | Score how novel a snippet is (v3.4.0 research) |
+| `castle prune-suggest --sample N` | Flag low-info drawers for manual review (read-only) |
 | `castle repair --clean-locks` | Remove stale lock files (>24 h) |
 | `castle repair-status` | Read-only health check |
 
 Full help: `castle --help`, `castle <command> --help`.
 
----
-
-## Benchmarks
-
-Numbers are reproducible from this repository with the commands in
-[`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md). Per-question
-result files are committed under `benchmarks/results_*`.
-
-**LongMemEval — retrieval recall (R@5, 500 questions):**
-
-| Mode | R@5 | LLM required |
-|---|---|---|
-| Raw (semantic search, no heuristics, no LLM) | **96.6%** | None |
-| Hybrid v4, held-out 450q (tuned on 50 dev) | **98.4%** | None |
-| Hybrid v4 + LLM rerank (full 500) | ≥99% | Any capable model |
-
-The raw 96.6% requires no API key, no cloud, and no LLM at any stage.
-The hybrid pipeline adds keyword boosting, temporal-proximity boosting,
-and preference-pattern extraction; the held-out 98.4% is the honest
-generalisable figure.
-
-The rerank pipeline promotes the best candidate out of the top-20
-retrieved sessions using an LLM reader. It works with any reasonably
-capable model. We do not headline a "100%" number because the last 0.6%
-was reached by inspecting specific wrong answers, which
-`benchmarks/BENCHMARKS.md` flags as teaching to the test.
-
-**Other benchmarks (full results in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md)):**
-
-| Benchmark | Metric | Score | Notes |
-|---|---|---|---|
-| LoCoMo (session, top-10, no rerank) | R@10 | 60.3% | 1,986 questions |
-| LoCoMo (hybrid v5, top-10, no rerank) | R@10 | 88.9% | Same set |
-| ConvoMem (all categories, 250 items) | Avg recall | 92.9% | 50 per category |
-| MemBench (ACL 2025, 8,500 items) | R@5 | 80.3% | All categories |
-
-**Reproducing every result:**
-
-```bash
-git clone https://github.com/Testimonial/cognitive-castle.git
-cd cognitive-castle
-pip install -e ".[dev]"
-# see benchmarks/README.md for dataset download commands
-python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json
-```
-
----
-
-## Why Castle vs mem0 / letta / zep
-
-mem0, letta, and zep are excellent AI memory systems. Castle is the choice when you specifically need verbatim recall on your laptop with no service running and no API key.
-
-| | Cognitive Castle | mem0 | letta | zep |
-|---|---|---|---|---|
-| Verbatim storage | ✅ guaranteed | ❌ summarises | ⚠ tiered (verbatim core + summarised archive) | ❌ extracts |
-| Local-first default | ✅ | ⚠ optional | ⚠ self-host | ⚠ self-host |
-| API key required | ❌ none for core | ⚠ for cloud | depends on LLM | ❌ |
-| MCP-native | ✅ plugin | ❌ | ❌ | ❌ |
-| Backend | LanceDB (pluggable) | pgvector/Qdrant | varies | pgvector |
-| Published benchmarks | ✅ 4 datasets | partial | ⚠ | partial |
-
-mem0 excels at multi-agent shared memory in production cloud deployments. letta is the right choice when you want a full agent runtime, not just a memory layer. zep is excellent if you're already building on PostgreSQL and want chat history with extraction.
-
----
-
-## Architecture
-
-```mermaid
-graph TD
-    subgraph Interfaces
-      CLI["castle CLI"]
-      MCP["castle-mcp · 29 tools"]
-    end
-    subgraph Logic
-      Miner
-      Searcher
-      KG["Knowledge Graph"]
-      Hooks
-      Diary
-    end
-    subgraph Abstraction
-      BIF["BaseBackend interface"]
-    end
-    subgraph Storage
-      Lance["LanceDB"]
-      SQL["SQLite (KG)"]
-    end
-    Interfaces --> Logic
-    Logic --> Abstraction
-    Abstraction --> Storage
-    classDef storage fill:#1a4a5e,stroke:#4dc9f6,color:#b0e8ff
-    classDef abstr fill:#2a6584,stroke:#4dc9f6,color:#b0e8ff
-    class Lance,SQL storage
-    class BIF abstr
-```
-
-- **Wings** — top-level groupings (projects, agents, conversations)
-- **Rooms** — topical or structural subdivisions auto-detected from folder layout
-- **Drawers** — verbatim content chunks; each one is searchable independently
-- **Tunnels** — typed cross-references between drawers (graph edges)
-- **Diaries** — per-agent append-only logs
+Reproducible benchmark numbers (LongMemEval, LoCoMo, ConvoMem, MemBench) and full architecture / palace-structure detail live in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) and the `cognitive_castle/` module docstrings.
 
 ---
 
