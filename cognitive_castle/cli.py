@@ -760,6 +760,57 @@ def cmd_info_score(args):
         print(f"  {i}. cos={n.cosine:.3f} {wing} {n.drawer_id}: {excerpt}")
 
 
+def cmd_prune_suggest(args):
+    """List low-information drawers as pruning candidates.
+
+    Read-only — never touches the palace. Uses the same nn_novelty
+    estimator behind `castle info-score` and the v3.4.0 research.
+    """
+    import json as _json
+    import sys as _sys
+
+    from .prune_suggest import suggest_candidates
+
+    try:
+        result = suggest_candidates(
+            palace_path=args.palace,
+            sample=args.sample,
+            threshold=args.threshold,
+            wing=args.wing,
+            seed=args.seed,
+        )
+    except FileNotFoundError as e:
+        print(f"prune-suggest: {e}", file=_sys.stderr)
+        _sys.exit(1)
+
+    if args.json:
+        print(_json.dumps(result.as_dict(), indent=2))
+        return
+
+    print(
+        f"Sampled {result.sampled} drawers, threshold={result.threshold:.2f} → "
+        f"{len(result.candidates)} pruning candidates"
+    )
+    if not result.candidates:
+        print("  (no drawers fell below the threshold — palace looks healthy)")
+        return
+    print("Candidates (lowest novelty first):")
+    for i, c in enumerate(result.candidates[:20], 1):
+        wing = f"[{c.wing}]" if c.wing else ""
+        excerpt = c.text[:80].replace("\n", " ")
+        print(
+            f"  {i:2}. novelty={c.novelty:.3f} nn_cos={c.nearest_neighbour_cosine:.3f} "
+            f"{wing} {c.drawer_id}: {excerpt}"
+        )
+    if len(result.candidates) > 20:
+        print(f"  … and {len(result.candidates) - 20} more (use --json for the full list)")
+    print()
+    print(
+        "This is a read-only signal. Castle's design principle is verbatim always — "
+        "no drawers are pruned automatically. Use these hits to decide what to review manually."
+    )
+
+
 def cmd_repair_status(args):
     """Read-only HNSW capacity health check (#1222)."""
     from .repair import status as repair_status
@@ -1302,6 +1353,25 @@ def build_parser() -> _ParserBundle:
     p_info.add_argument("--json", action="store_true", help="Emit JSON instead of human text")
     p_info.add_argument("--palace", default=None, help="Palace directory (defaults to config)")
 
+    # prune-suggest — flag low-info drawers as pruning candidates (read-only)
+    p_prune = sub.add_parser(
+        "prune-suggest",
+        help="Flag low-information drawers as pruning candidates (read-only)",
+    )
+    p_prune.add_argument(
+        "--sample", type=int, default=200, help="How many drawers to sample (default 200)"
+    )
+    p_prune.add_argument(
+        "--threshold",
+        type=float,
+        default=0.10,
+        help="Novelty below this = pruning candidate (default 0.10 = 'low' band)",
+    )
+    p_prune.add_argument("--wing", default=None, help="Restrict to one wing")
+    p_prune.add_argument("--json", action="store_true", help="Emit JSON instead of human text")
+    p_prune.add_argument("--palace", default=None, help="Palace directory (defaults to config)")
+    p_prune.add_argument("--seed", type=int, default=42, help="RNG seed for reproducibility")
+
     return _ParserBundle(parser=parser, p_hook=p_hook, p_instructions=p_instructions)
 
 
@@ -1344,6 +1414,7 @@ def main():
         "reindex": cmd_reindex,
         "status": cmd_status,
         "info-score": cmd_info_score,
+        "prune-suggest": cmd_prune_suggest,
     }
     dispatch[args.command](args)
 
