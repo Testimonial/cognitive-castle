@@ -16,7 +16,7 @@ AI memory system. Store everything, find anything. Local, free, no API key.
 
 ---
 
-## MCP Tools (19)
+## MCP Tools (29)
 
 ### Palace (read)
 - castle_status -- Palace status and stats

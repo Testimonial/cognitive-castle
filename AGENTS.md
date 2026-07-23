@@ -61,7 +61,7 @@ ruff format --check .
 ## Project Structure
 
 ```
-cognitive-castle/
+cognitive_castle/
 ├── mcp_server.py        # MCP server — all read/write tools
 ├── cli.py               # CLI dispatcher
 ├── config.py            # Configuration + input validation
@@ -71,9 +71,9 @@ cognitive-castle/
 ├── knowledge_graph.py   # Temporal entity-relationship graph (SQLite)
 ├── palace.py            # Shared palace operations
 ├── palace_graph.py      # Room traversal + cross-wing tunnels
-├── backends/            # Pluggable storage backends (ChromaDB default)
+├── backends/            # Storage backend abstraction (LanceDB-only)
 │   ├── base.py          # Abstract interface — implement this for new backends
-│   └── chroma.py        # ChromaDB implementation
+│   └── lancedb_backend.py  # LanceDB implementation
 ├── dialect.py           # AAAK compression dialect
 ├── normalize.py         # Transcript format detection + normalization
 ├── entity_detector.py   # Auto-detect people/projects from content
@@ -82,7 +82,6 @@ cognitive-castle/
 ├── onboarding.py        # Interactive first-run setup
 ├── repair.py            # Palace repair and consistency checks
 ├── dedup.py             # Deduplication
-├── migrate.py           # ChromaDB version migration
 ├── spellcheck.py        # Auto-correct user messages
 ├── exporter.py          # Palace data export
 ├── hooks_cli.py         # Hook management CLI
@@ -90,9 +89,9 @@ cognitive-castle/
 ├── split_mega_files.py  # Split concatenated transcript files
 └── version.py           # Single source of truth for version
 
-hooks/                   # Claude Code hook scripts
-├── mempal_save_hook.sh        # Stop: triggers diary save
-└── mempal_precompact_hook.sh  # PreCompact: saves state before compression
+.claude-plugin/hooks/           # Claude Code hook scripts
+├── castle-stop-hook.sh         # Stop: triggers diary save
+└── castle-precompact-hook.sh   # PreCompact: saves state before compression
 ```
 
 ## Conventions
@@ -102,12 +101,12 @@ hooks/                   # Claude Code hook scripts
 - **Formatter**: ruff format, double quotes
 - **Commits**: conventional commits (`fix:`, `feat:`, `test:`, `docs:`, `ci:`)
 - **Tests**: `tests/test_*.py`, fixtures in `tests/conftest.py`
-- **Coverage**: 85% threshold (80% on Windows due to ChromaDB file lock cleanup)
+- **Coverage**: 85% threshold
 
 ## Architecture
 
 ```
-User → CLI / MCP Server → Storage Backend (ChromaDB default, pluggable)
+User → CLI / MCP Server → Storage Backend (LanceDB)
                         → SQLite (knowledge graph)
 
 Palace structure:
@@ -125,9 +124,9 @@ Knowledge Graph:
 
 ## Key Files for Common Tasks
 
-- **Adding an MCP tool**: `cognitive-castle/mcp_server.py` — add handler function + TOOLS dict entry
-- **Changing search**: `cognitive-castle/searcher.py`
-- **Modifying mining**: `cognitive-castle/miner.py` (project files) or `cognitive-castle/convo_miner.py` (transcripts)
-- **Adding a storage backend**: subclass `cognitive-castle/backends/base.py`, register in `backends/__init__.py`
-- **Input validation**: `cognitive-castle/config.py` — `sanitize_name()` / `sanitize_content()`
+- **Adding an MCP tool**: `cognitive_castle/mcp_server.py` — add handler function + TOOLS dict entry
+- **Changing search**: `cognitive_castle/searcher.py`
+- **Modifying mining**: `cognitive_castle/miner.py` (project files) or `cognitive_castle/convo_miner.py` (transcripts)
+- **Adding a storage backend**: subclass `cognitive_castle/backends/base.py`, register in `backends/__init__.py`
+- **Input validation**: `cognitive_castle/config.py` — `sanitize_name()` / `sanitize_content()`
 - **Tests**: mirror source structure in `tests/test_<module>.py`

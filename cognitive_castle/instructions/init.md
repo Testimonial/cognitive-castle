@@ -16,14 +16,20 @@ report the installed version and skip to Step 4.
 
 ## Step 3: Install cognitive-castle
 
-Run `pip install cognitive-castle`.
+Cognitive Castle is not yet on PyPI. Install from source:
+
+```bash
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
+pip install -e .
+```
 
 ### Error handling -- pip failures
 
-If `pip install cognitive-castle` fails, try these fallbacks in order:
+If `pip install -e .` fails, try these fallbacks in order:
 
-1. Try `pip3 install cognitive-castle`
-2. Try `python -m pip install cognitive-castle` (or `python3 -m pip install cognitive-castle`)
+1. Try `pip3 install -e .`
+2. Try `python -m pip install -e .` (or `python3 -m pip install -e .`)
 3. If the error mentions missing build tools or compilation failures:
    - On Linux/macOS: suggest `sudo apt-get install build-essential python3-dev`
      (Debian/Ubuntu) or `xcode-select --install` (macOS)

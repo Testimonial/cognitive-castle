@@ -19,7 +19,9 @@ castle --version
 If not installed:
 
 ```bash
-pip install cognitive-castle
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
+pip install -e .
 ```
 
 ## Usage

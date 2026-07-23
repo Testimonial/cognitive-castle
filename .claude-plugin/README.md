@@ -5,7 +5,7 @@ A Claude Code plugin that gives your AI a persistent memory system. Mine project
 ## Prerequisites
 
 - Python 3.9+
-- `pip install cognitive-castle` (or `pip install -e .` from a checkout)
+- `git clone https://github.com/Testimonial/cognitive-castle.git && cd cognitive-castle && pip install -e .` (Cognitive Castle is not yet on PyPI)
 
 ## Installation
 
