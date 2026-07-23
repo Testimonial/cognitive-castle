@@ -112,7 +112,7 @@ Raw results are in `benchmarks/results_*.jsonl` and `benchmarks/results_*.json`.
 ## Requirements
 
 - Python 3.9+
-- `chromadb` (the only dependency)
+- `lancedb` (installed automatically by `pip install -e ".[dev]"`)
 - ~300MB disk for LongMemEval data
 - ~5 minutes for each full benchmark run
 - No API key. No internet during benchmark (after data download). No GPU.

@@ -36,9 +36,9 @@ See [benchmarks/README.md](benchmarks/README.md) for data download instructions 
 ## Project Structure
 
 ```
-cognitive-castle/          ← core package (see cognitive-castle/README.md for module guide)
+cognitive_castle/   ← core package (see cognitive_castle/README.md for module guide)
 benchmarks/         ← reproducible benchmark runners
-hooks/              ← Claude Code auto-save hooks
+.claude-plugin/     ← Claude Code plugin (MCP server, hooks, skills, slash commands)
 examples/           ← usage examples
 tests/              ← test suite
 assets/             ← logo + brand
@@ -63,7 +63,7 @@ assets/             ← logo + brand
 - **Naming**: `snake_case` for functions/variables, `PascalCase` for classes
 - **Docstrings**: on all modules and public functions
 - **Type hints**: where they improve readability
-- **Dependencies**: minimize. ChromaDB + PyYAML only. Don't add new deps without discussion.
+- **Dependencies**: minimize. LanceDB + PyYAML are the core storage/config deps. Don't add new deps without discussion.
 
 ## Good First Issues
 
