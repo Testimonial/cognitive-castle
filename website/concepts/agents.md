@@ -3,7 +3,7 @@
 MemPalace currently supports **agent diaries** through MCP tools. The practical model is simple: give an agent a stable name, and write/read diary entries under that agent's wing.
 
 ::: warning Current Scope
-This page documents the diary workflow that exists today. MemPalace does **not** currently ship an agent registry, `~/.mempalace/agents/*.json`, or a `mempalace_list_agents` tool.
+This page documents the diary workflow that exists today. MemPalace does **not** currently ship an agent registry, `~/.castle/agents/*.json`, or a `castle_list_agents` tool.
 :::
 
 ## What Agents Do
@@ -21,7 +21,7 @@ The diary is a lightweight memory stream for one named agent: observations, find
 ### Writing Entries
 
 ```text
-MCP tool: mempalace_diary_write
+MCP tool: castle_diary_write
   arguments: {
     "agent_name": "reviewer",
     "entry": "PR#42|auth.bypass.found|missing.middleware.check|pattern:3rd.time.this.quarter|★★★★"
@@ -31,7 +31,7 @@ MCP tool: mempalace_diary_write
 ### Reading History
 
 ```text
-MCP tool: mempalace_diary_read
+MCP tool: castle_diary_read
   arguments: { "agent_name": "reviewer", "last_n": 10 }
   → returns last 10 findings, compressed in AAAK
 ```
@@ -40,8 +40,8 @@ MCP tool: mempalace_diary_read
 
 | Tool | Description |
 |------|-------------|
-| `mempalace_diary_write` | Write an AAAK diary entry |
-| `mempalace_diary_read` | Read recent diary entries |
+| `castle_diary_write` | Write an AAAK diary entry |
+| `castle_diary_read` | Read recent diary entries |
 
 ## How It Works
 

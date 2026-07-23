@@ -2,15 +2,15 @@
 
 All commands accept `--palace <path>` to override the default palace location.
 
-## `mempalace init`
+## `castle init`
 
 Scan a project directory for people, projects, and rooms, and set up the palace.
 
 ```bash
-mempalace init <dir>                 # <dir> is required
-mempalace init <dir> --yes           # non-interactive mode
-mempalace init ~/projects/myapp      # example
-mempalace init .                     # initialize from the current directory
+castle init <dir>                 # <dir> is required
+castle init <dir> --yes           # non-interactive mode
+castle init ~/projects/myapp      # example
+castle init .                     # initialize from the current directory
 ```
 
 | Option  | Description                                                                  |
@@ -23,20 +23,20 @@ What it does:
 1. Scans `<dir>` for people and projects in file content
 2. Detects rooms from `<dir>`'s folder structure
 3. Saves detected entities to `<dir>/entities.json`
-4. Ensures the global `~/.mempalace/` config directory exists
+4. Ensures the global `~/.castle/` config directory exists
 
-Running `mempalace init` with no argument will exit with
+Running `castle init` with no argument will exit with
 `error: the following arguments are required: dir`.
 
-## `mempalace mine`
+## `castle mine`
 
 Mine files into the palace.
 
 ```bash
-mempalace mine <dir>
-mempalace mine <dir> --mode convos
-mempalace mine <dir> --mode convos --extract general
-mempalace mine <dir> --wing myapp
+castle mine <dir>
+castle mine <dir> --mode convos
+castle mine <dir> --mode convos --extract general
+castle mine <dir> --wing myapp
 ```
 
 | Option | Default | Description |
@@ -44,22 +44,22 @@ mempalace mine <dir> --wing myapp
 | `<dir>` | — | Directory to mine |
 | `--mode` | `projects` | `projects` for code/docs, `convos` for chat exports |
 | `--wing` | directory name | Wing name override |
-| `--agent` | `mempalace` | Agent name tag |
+| `--agent` | `castle` | Agent name tag |
 | `--limit` | `0` (all) | Max files to process |
 | `--dry-run` | — | Preview without filing |
 | `--extract` | `exchange` | `exchange` or `general` (for convos mode) |
 | `--no-gitignore` | — | Don't respect .gitignore |
 | `--include-ignored` | — | Always scan these paths even if ignored |
 
-## `mempalace search`
+## `castle search`
 
 Find anything by semantic search.
 
 ```bash
-mempalace search "query"
-mempalace search "query" --wing myapp
-mempalace search "query" --wing myapp --room auth
-mempalace search "query" --results 10
+castle search "query"
+castle search "query" --wing myapp
+castle search "query" --wing myapp --room auth
+castle search "query" --results 10
 ```
 
 | Option | Default | Description |
@@ -69,15 +69,15 @@ mempalace search "query" --results 10
 | `--room` | all | Filter by room |
 | `--results` | `5` | Number of results |
 
-## `mempalace split`
+## `castle split`
 
 Split concatenated transcript mega-files into per-session files.
 
 ```bash
-mempalace split <dir>
-mempalace split <dir> --dry-run
-mempalace split <dir> --min-sessions 3
-mempalace split <dir> --output-dir ~/split-output/
+castle split <dir>
+castle split <dir> --dry-run
+castle split <dir> --min-sessions 3
+castle split <dir> --output-dir ~/split-output/
 ```
 
 | Option | Default | Description |
@@ -87,27 +87,27 @@ mempalace split <dir> --output-dir ~/split-output/
 | `--dry-run` | — | Preview without writing |
 | `--min-sessions` | `2` | Only split files with N+ sessions |
 
-## `mempalace wake-up`
+## `castle wake-up`
 
 Show L0 + L1 wake-up context (~600–900 tokens).
 
 ```bash
-mempalace wake-up
-mempalace wake-up --wing driftwood
+castle wake-up
+castle wake-up --wing driftwood
 ```
 
 | Option | Description |
 |--------|-------------|
 | `--wing` | Project-specific wake-up |
 
-## `mempalace compress`
+## `castle compress`
 
 Compress drawers using AAAK Dialect.
 
 ```bash
-mempalace compress --wing myapp
-mempalace compress --wing myapp --dry-run
-mempalace compress --config entities.json
+castle compress --wing myapp
+castle compress --wing myapp --dry-run
+castle compress --config entities.json
 ```
 
 | Option | Description |
@@ -116,41 +116,41 @@ mempalace compress --config entities.json
 | `--dry-run` | Preview without storing |
 | `--config` | Entity config JSON file |
 
-## `mempalace status`
+## `castle status`
 
 Show what's been filed — drawer count, wing/room breakdown.
 
 ```bash
-mempalace status
+castle status
 ```
 
-## `mempalace repair`
+## `castle repair`
 
 Rebuild palace vector index from stored data. Fixes segfaults after database corruption.
 
 ```bash
-mempalace repair
+castle repair
 ```
 
 Creates a backup at `<palace_path>.backup` before rebuilding.
 
-## `mempalace mcp`
+## `castle mcp`
 
 Helper command that outputs setup syntax (like `claude mcp add...`) to connect MemPalace to your AI client, automatically handling paths.
 
 ```bash
-mempalace mcp
-mempalace mcp --palace ~/.custom-palace
+castle mcp
+castle mcp --palace ~/.custom-palace
 ```
 
-## `mempalace hook`
+## `castle hook`
 
 Run hook logic for Claude Code / Codex integration.
 
 ```bash
-mempalace hook run --hook stop --harness claude-code
-mempalace hook run --hook precompact --harness claude-code
-mempalace hook run --hook session-start --harness codex
+castle hook run --hook stop --harness claude-code
+castle hook run --hook precompact --harness claude-code
+castle hook run --hook session-start --harness codex
 ```
 
 | Option | Values | Description |
@@ -158,14 +158,14 @@ mempalace hook run --hook session-start --harness codex
 | `--hook` | `session-start`, `stop`, `precompact` | Hook name |
 | `--harness` | `claude-code`, `codex` | Harness type |
 
-## `mempalace instructions`
+## `castle instructions`
 
 Output skill instructions to stdout.
 
 ```bash
-mempalace instructions init
-mempalace instructions search
-mempalace instructions mine
-mempalace instructions help
-mempalace instructions status
+castle instructions init
+castle instructions search
+castle instructions mine
+castle instructions help
+castle instructions status
 ```

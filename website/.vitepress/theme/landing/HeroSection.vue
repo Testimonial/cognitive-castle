@@ -44,7 +44,7 @@
         <div class="hero-secondary">
           <a href="/guide/getting-started">Read the docs</a>
           <span class="sep" aria-hidden="true">·</span>
-          <a href="https://github.com/MemPalace/mempalace">GitHub ↗</a>
+          <a href="https://github.com/Testimonial/cognitive-castle">GitHub ↗</a>
         </div>
       </div>
 

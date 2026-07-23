@@ -23,7 +23,7 @@
     <div class="forgetting-compare" id="forgetting-compare" aria-label="Comparison demo">
       <article class="demo-pane demo-forget">
         <header>
-          <span class="pane-tag">without mempalace</span>
+          <span class="pane-tag">without castle</span>
           <span class="pane-meta">session <em>resets</em> &middot; no recall</span>
         </header>
         <div class="chat" data-pane="forget" aria-live="polite"></div>
@@ -33,7 +33,7 @@
 
       <article class="demo-pane demo-remember">
         <header>
-          <span class="pane-tag">with mempalace</span>
+          <span class="pane-tag">with castle</span>
           <span class="pane-meta">verbatim &middot; retrieved <em>instantly</em></span>
         </header>
         <div class="chat" data-pane="remember" aria-live="polite"></div>

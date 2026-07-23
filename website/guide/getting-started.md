@@ -2,31 +2,23 @@
 
 ## Installation
 
-Install MemPalace from PyPI:
+Cognitive Castle is installed from source (not published to PyPI):
 
 ```bash
-pip install mempalace
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
+pip install -e ".[dev]"
 ```
 
-::: danger Security Warning
-The domain `mempalace.tech` is a **brand-squatting site** not affiliated with this project. It is known to run ad-redirects and potential malware. The official MemPalace distribution is only available via this [GitHub repository](https://github.com/MemPalace/mempalace) and [PyPI](https://pypi.org/project/mempalace/). Never install binaries or scripts from unofficial domains.
-:::
+After install, the `castle` and `castle-mcp` commands are on `$PATH`.
 
 ### Requirements
 
 - Python 3.9+
-- `chromadb>=0.5.0` (installed automatically)
+- `lancedb>=0.20` (installed automatically)
 - `pyyaml>=6.0` (installed automatically)
 
 No API key required for the core local workflow. After installation, the main storage and retrieval path runs locally.
-
-### From Source
-
-```bash
-git clone https://github.com/MemPalace/mempalace.git
-cd mempalace
-pip install -e ".[dev]"
-```
 
 ## Quick Start
 
@@ -34,32 +26,32 @@ Three steps: **init**, **mine**, **search**.
 
 ### 1. Initialize Your Palace
 
-`mempalace init` requires a project directory to scan. Pass a path,
+`castle init` requires a project directory to scan. Pass a path,
 or `.` to use the current directory.
 
 ```bash
-mempalace init ~/projects/myapp
+castle init ~/projects/myapp
 # or, from inside the project:
-mempalace init .
+castle init .
 ```
 
 This scans your project directory and:
 
 - Detects people and projects from file content
 - Creates rooms from your folder structure
-- Ensures the `~/.mempalace/` config directory exists
+- Ensures the `~/.castle/` config directory exists
 
 ### 2. Mine Your Data
 
 ```bash
 # Mine project files (code, docs, notes)
-mempalace mine ~/projects/myapp
+castle mine ~/projects/myapp
 
 # Mine conversation exports (Claude, ChatGPT, Slack)
-mempalace mine ~/chats/ --mode convos
+castle mine ~/chats/ --mode convos
 
 # Mine with auto-classification into memory types
-mempalace mine ~/chats/ --mode convos --extract general
+castle mine ~/chats/ --mode convos --extract general
 ```
 
 Two mining modes plus one extraction strategy:
@@ -70,7 +62,7 @@ Two mining modes plus one extraction strategy:
 ### 3. Search
 
 ```bash
-mempalace search "why did we switch to GraphQL"
+castle search "why did we switch to GraphQL"
 ```
 
 That gives you a working local memory index.
@@ -83,7 +75,7 @@ Ask your AI anything:
 
 > *"What did we decide about auth last month?"*
 
-It calls `mempalace_search` automatically, gets verbatim results, and answers you. You never type `mempalace search` again.
+It calls `castle_search` automatically, gets verbatim results, and answers you. You never type `castle search` again.
 
 ## Next Steps
 

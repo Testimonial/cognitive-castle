@@ -25,8 +25,8 @@
         </div>
         <span class="eyebrow no-rule"><span class="n">— 01</span></span>
         <h3>Local-<em>first</em></h3>
-        <p>ChromaDB on disk. SQLite for the knowledge graph. Nothing is uploaded. Nothing is synced. Your palace lives under a single directory on your machine.</p>
-        <div class="metric">path · <b>~/.mempalace</b></div>
+        <p>LanceDB on disk. SQLite for the knowledge graph. Nothing is uploaded. Nothing is synced. Your palace lives under a single directory on your machine.</p>
+        <div class="metric">path · <b>~/.castle</b></div>
       </article>
 
       <article class="mech">

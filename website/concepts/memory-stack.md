@@ -15,7 +15,7 @@ In the current implementation, a typical wake-up is roughly **~600-900 tokens** 
 
 ## Layer 0: Identity
 
-A plain text file at `~/.mempalace/identity.txt`. Always loaded as the AI's self-concept.
+A plain text file at `~/.castle/identity.txt`. Always loaded as the AI's self-concept.
 
 ```text
 I am Atlas, a personal AI assistant for Alice.
@@ -31,7 +31,7 @@ Project: A journaling app that helps people process emotions.
 Auto-generated from the highest-importance drawers in the palace. Groups by room, picks the top moments, and keeps the output bounded.
 
 The generation process:
-1. Reads all drawers from ChromaDB
+1. Reads all drawers from LanceDB
 2. Scores each by importance/emotional weight
 3. Takes the top 15 moments
 4. Groups by room for readability
@@ -77,16 +77,16 @@ The point of the stack is bounded startup context, not a fixed universal token c
 
 ```bash
 # Wake-up context (L0 + L1)
-mempalace wake-up
+castle wake-up
 
 # Project-specific wake-up
-mempalace wake-up --wing driftwood
+castle wake-up --wing driftwood
 ```
 
 ### Python API
 
 ```python
-from mempalace.layers import MemoryStack
+from cognitive_castle.layers import MemoryStack
 
 stack = MemoryStack()
 

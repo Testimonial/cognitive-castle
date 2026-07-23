@@ -11,8 +11,8 @@ MemPalace works natively with [Gemini CLI](https://github.com/google/gemini-cli)
 
 ```bash
 # Clone the repository
-git clone https://github.com/MemPalace/mempalace.git
-cd mempalace
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
 
 # Create a virtual environment
 python3 -m venv .venv
@@ -24,15 +24,15 @@ python3 -m venv .venv
 ## Initialize the Palace
 
 ```bash
-.venv/bin/python3 -m mempalace init .
+.venv/bin/python3 -m cognitive_castle init .
 ```
 
 ### Identity and Project Configuration (Optional)
 
 You can optionally create or edit:
 
-- **`~/.mempalace/identity.txt`** — plain text describing your role and focus
-- **`./mempalace.yaml`** — per-project MemPalace configuration created by `mempalace init`
+- **`~/.castle/identity.txt`** — plain text describing your role and focus
+- **`./castle.yaml`** — per-project MemPalace configuration created by `castle init`
 - **`./entities.json`** — per-project entity mappings used by AAAK compression
 
 ## Connect to Gemini CLI
@@ -40,14 +40,14 @@ You can optionally create or edit:
 Register MemPalace as an MCP server:
 
 ```bash
-gemini mcp add --scope user mempalace \
-  -- /absolute/path/to/mempalace/.venv/bin/python -m mempalace.mcp_server
+gemini mcp add --scope user castle \
+  -- /absolute/path/to/cognitive-castle/.venv/bin/python -m cognitive_castle.mcp_server
 ```
 
 ::: warning
 Use the **absolute path** to the Python binary so the server starts from any
 working directory. The `--` separator prevents Gemini from parsing
-`-m mempalace.mcp_server` as its own flags.
+`-m cognitive_castle.mcp_server` as its own flags.
 :::
 
 ## Enable Auto-Saving
@@ -63,7 +63,7 @@ Add a `PreCompress` hook to `~/.gemini/settings.json`:
         "hooks": [
           {
             "type": "command",
-            "command": "/absolute/path/to/mempalace/hooks/mempal_precompact_hook.sh"
+            "command": "/absolute/path/to/cognitive-castle/hooks/castle-precompact-hook.sh"
           }
         ]
       }
@@ -81,18 +81,18 @@ chmod +x hooks/*.sh
 
 Once connected, Gemini CLI will automatically:
 - Start the MemPalace server on launch
-- Use `mempalace_search` to find relevant past discussions
+- Use `castle_search` to find relevant past discussions
 - Use the `PreCompress` hook to save memories before context compression
 
 ### Manual Mining
 
 Mine existing code or docs:
 ```bash
-.venv/bin/python3 -m mempalace mine /path/to/your/project
+.venv/bin/python3 -m cognitive_castle mine /path/to/your/project
 ```
 
 ### Verification
 
 In a Gemini CLI session:
-- `/mcp list` — verify `mempalace` is `CONNECTED`
+- `/mcp list` — verify `castle` is `CONNECTED`
 - `/hooks panel` — verify the `PreCompress` hook is active

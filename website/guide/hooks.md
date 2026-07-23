@@ -22,14 +22,14 @@ Add to `.claude/settings.local.json`:
       "matcher": "*",
       "hooks": [{
         "type": "command",
-        "command": "/absolute/path/to/hooks/mempal_save_hook.sh",
+        "command": "/absolute/path/to/hooks/castle-stop-hook.sh",
         "timeout": 30
       }]
     }],
     "PreCompact": [{
       "hooks": [{
         "type": "command",
-        "command": "/absolute/path/to/hooks/mempal_precompact_hook.sh",
+        "command": "/absolute/path/to/hooks/castle-precompact-hook.sh",
         "timeout": 30
       }]
     }]
@@ -39,7 +39,7 @@ Add to `.claude/settings.local.json`:
 
 Make them executable:
 ```bash
-chmod +x hooks/mempal_save_hook.sh hooks/mempal_precompact_hook.sh
+chmod +x hooks/castle-stop-hook.sh hooks/castle-precompact-hook.sh
 ```
 
 ## Install — Codex CLI
@@ -50,12 +50,12 @@ Add to `.codex/hooks.json`:
 {
   "Stop": [{
     "type": "command",
-    "command": "/absolute/path/to/hooks/mempal_save_hook.sh",
+    "command": "/absolute/path/to/hooks/castle-stop-hook.sh",
     "timeout": 30
   }],
   "PreCompact": [{
     "type": "command",
-    "command": "/absolute/path/to/hooks/mempal_precompact_hook.sh",
+    "command": "/absolute/path/to/hooks/castle-precompact-hook.sh",
     "timeout": 30
   }]
 }
@@ -63,11 +63,11 @@ Add to `.codex/hooks.json`:
 
 ## Configuration
 
-Edit `mempal_save_hook.sh` to change:
+Edit `castle-stop-hook.sh` to change:
 
 - **`SAVE_INTERVAL=15`** — How many messages between saves. Lower = more frequent, higher = less interruption.
-- **`STATE_DIR`** — Where hook state is stored (defaults to `~/.mempalace/hook_state/`)
-- **`MEMPAL_DIR`** — Optional. Set to a conversations directory to auto-run `mempalace mine` on each save trigger.
+- **`STATE_DIR`** — Where hook state is stored (defaults to `~/.castle/hook_state/`)
+- **`CASTLE_MINE_DIR`** — Optional. Set to a conversations directory to auto-run `castle mine` on each save trigger.
 
 ## How It Works
 
@@ -100,7 +100,7 @@ No counting needed — compaction always warrants a save.
 ## Debugging
 
 ```bash
-cat ~/.mempalace/hook_state/hook.log
+cat ~/.castle/hook_state/hook.log
 ```
 
 Example output:

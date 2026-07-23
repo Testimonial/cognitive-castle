@@ -17,7 +17,7 @@ AAAK is a separate compression layer, **not the storage default**. The 96.6% ben
 
 - **Not lossless compression.** The original text cannot be reconstructed.
 - **Not efficient at small scale.** Short text already tokenizes efficiently — AAAK overhead costs more than it saves.
-- **Not the default storage format.** MemPalace stores raw verbatim text in ChromaDB.
+- **Not the default storage format.** MemPalace stores raw verbatim text in LanceDB.
 
 ## Format
 
@@ -78,16 +78,16 @@ was excited about the schema-first approach.
 
 ```bash
 # Preview compression
-mempalace compress --wing myapp --dry-run
+castle compress --wing myapp --dry-run
 
 # Compress and store
-mempalace compress --wing myapp
+castle compress --wing myapp
 ```
 
 ### With entity config
 
 ```bash
-mempalace compress --wing myapp --config entities.json
+castle compress --wing myapp --config entities.json
 ```
 
 Entity config format:
@@ -101,7 +101,7 @@ Entity config format:
 ### Python API
 
 ```python
-from mempalace.dialect import Dialect
+from cognitive_castle.dialect import Dialect
 
 # Basic compression
 dialect = Dialect()

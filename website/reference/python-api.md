@@ -7,7 +7,7 @@ High-level overview of the key Python interfaces you'd use to integrate MemPalac
 The primary way to query the palace programmatically.
 
 ```python
-from mempalace.searcher import search_memories
+from cognitive_castle.searcher import search_memories
 
 results = search_memories(
     query="why did we switch to GraphQL",
@@ -31,9 +31,9 @@ results = search_memories(
 The 4-layer memory system with a unified interface.
 
 ```python
-from mempalace.layers import MemoryStack
+from cognitive_castle.layers import MemoryStack
 
-stack = MemoryStack()  # uses default paths from MempalaceConfig
+stack = MemoryStack()  # uses default paths from CognitiveCastleConfig
 
 # Wake-up: L0 (identity) + L1 (essential story)
 context = stack.wake_up(wing="myapp")  # ~600-900 tokens
@@ -53,9 +53,9 @@ status = stack.status()
 Temporal entity-relationship graph built on SQLite.
 
 ```python
-from mempalace.knowledge_graph import KnowledgeGraph
+from cognitive_castle.knowledge_graph import KnowledgeGraph
 
-kg = KnowledgeGraph()  # uses default path: ~/.mempalace/knowledge_graph.sqlite3
+kg = KnowledgeGraph()  # uses default path: ~/.castle/knowledge_graph.sqlite3
 
 # Write
 kg.add_entity("Kai", entity_type="person")
@@ -71,10 +71,10 @@ stats = kg.stats()
 
 ## Palace Graph
 
-Room-based navigation graph built from ChromaDB metadata.
+Room-based navigation graph built from LanceDB metadata.
 
 ```python
-from mempalace.palace_graph import build_graph, traverse, find_tunnels, graph_stats
+from cognitive_castle.palace_graph import build_graph, traverse, find_tunnels, graph_stats
 
 # Build the graph
 nodes, edges = build_graph()
@@ -90,7 +90,7 @@ stats = graph_stats()
 Lossy compression for token density at scale.
 
 ```python
-from mempalace.dialect import Dialect
+from cognitive_castle.dialect import Dialect
 
 # Basic
 dialect = Dialect()
@@ -111,11 +111,11 @@ stats = dialect.compression_stats(text, compressed)
 ## Configuration
 
 ```python
-from mempalace.config import MempalaceConfig
+from cognitive_castle.config import CognitiveCastleConfig
 
-config = MempalaceConfig()
-print(config.palace_path)       # ~/.mempalace/palace
-print(config.collection_name)   # mempalace_drawers
+config = CognitiveCastleConfig()
+print(config.palace_path)       # ~/.castle/palace
+print(config.collection_name)   # castle_drawers
 ```
 
 For detailed parameter documentation, see [API Reference](/reference/api-reference).

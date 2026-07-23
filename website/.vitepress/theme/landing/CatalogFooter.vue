@@ -34,10 +34,10 @@
       <div>
         <h4>The project</h4>
         <ul>
-          <li><a href="https://github.com/MemPalace/mempalace">GitHub</a></li>
-          <li><a href="https://github.com/MemPalace/mempalace/blob/main/README.md">Readme</a></li>
-          <li><a href="https://github.com/MemPalace/mempalace/blob/main/ROADMAP.md">Roadmap</a></li>
-          <li><a href="https://github.com/MemPalace/mempalace/blob/main/CHANGELOG.md">Changelog</a></li>
+          <li><a href="https://github.com/Testimonial/cognitive-castle">GitHub</a></li>
+          <li><a href="https://github.com/Testimonial/cognitive-castle/blob/main/README.md">Readme</a></li>
+          <li><a href="https://github.com/Testimonial/cognitive-castle/blob/main/ROADMAP.md">Roadmap</a></li>
+          <li><a href="https://github.com/Testimonial/cognitive-castle/blob/main/CHANGELOG.md">Changelog</a></li>
         </ul>
       </div>
     </div>

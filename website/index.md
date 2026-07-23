@@ -1,6 +1,6 @@
 ---
 layout: page
-pageClass: mempalace-home
+pageClass: castle-home
 ---
 
 <Landing />

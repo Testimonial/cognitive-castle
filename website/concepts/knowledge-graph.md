@@ -17,7 +17,7 @@ Facts have time windows. When something stops being true, you invalidate it — 
 ### Python API
 
 ```python
-from mempalace.knowledge_graph import KnowledgeGraph
+from cognitive_castle.knowledge_graph import KnowledgeGraph
 
 kg = KnowledgeGraph()
 
@@ -55,11 +55,11 @@ Through the MCP server, the knowledge graph is available as tools:
 
 | Tool | Description |
 |------|-------------|
-| `mempalace_kg_query` | Query entity relationships with time filtering |
-| `mempalace_kg_add` | Add facts |
-| `mempalace_kg_invalidate` | Mark facts as ended |
-| `mempalace_kg_timeline` | Chronological entity story |
-| `mempalace_kg_stats` | Graph overview |
+| `castle_kg_query` | Query entity relationships with time filtering |
+| `castle_kg_add` | Add facts |
+| `castle_kg_invalidate` | Mark facts as ended |
+| `castle_kg_timeline` | Chronological entity story |
+| `castle_kg_stats` | Graph overview |
 
 ## Storage
 
@@ -78,7 +78,7 @@ The knowledge graph uses SQLite with two tables:
 - `confidence` — 0.0 to 1.0
 - `source_closet` — link back to the verbatim memory
 
-Database location: `~/.mempalace/knowledge_graph.sqlite3`
+Database location: `~/.castle/knowledge_graph.sqlite3`
 
 ## Related Work
 

@@ -5,8 +5,8 @@ PRs welcome. MemPalace is open source and we welcome contributions of all sizes 
 ## Getting Started
 
 ```bash
-git clone https://github.com/MemPalace/mempalace.git
-cd mempalace
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
 pip install -e ".[dev]"
 ```
 
@@ -49,11 +49,11 @@ See [Benchmarks](/reference/benchmarks) for data download instructions.
 - **Naming**: `snake_case` for functions/variables, `PascalCase` for classes
 - **Docstrings**: on all modules and public functions
 - **Type hints**: where they improve readability
-- **Dependencies**: minimize — ChromaDB + PyYAML only. Don't add new deps without discussion.
+- **Dependencies**: minimize — LanceDB + PyYAML only. Don't add new deps without discussion.
 
 ## Good First Issues
 
-Check the [Issues](https://github.com/MemPalace/mempalace/issues) tab:
+Check the [Issues](https://github.com/Testimonial/cognitive-castle/issues) tab:
 
 - **New chat formats** — add import support for Cursor, Copilot, or other AI tool exports
 - **Room detection** — improve pattern matching in `room_detector_local.py`
@@ -73,8 +73,8 @@ If you're planning a significant change, open an issue first. Key principles:
 ## Community
 
 - [Discord](https://discord.com/invite/ycTQQCu6kn)
-- [GitHub Issues](https://github.com/MemPalace/mempalace/issues) — bug reports and feature requests
-- [GitHub Discussions](https://github.com/MemPalace/mempalace/discussions) — questions and ideas
+- [GitHub Issues](https://github.com/Testimonial/cognitive-castle/issues) — bug reports and feature requests
+- [GitHub Discussions](https://github.com/Testimonial/cognitive-castle/discussions) — questions and ideas
 
 ## License
 

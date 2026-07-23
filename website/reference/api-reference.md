@@ -2,7 +2,7 @@
 
 Comprehensive parameter-level documentation for all public Python APIs.
 
-## `mempalace.searcher`
+## `cognitive_castle.searcher`
 
 ### `search(query, palace_path, wing=None, room=None, n_results=5)`
 
@@ -11,7 +11,7 @@ CLI-oriented search that prints results to stdout.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `query` | `str` | — | Search query text |
-| `palace_path` | `str` | — | Path to ChromaDB palace directory |
+| `palace_path` | `str` | — | Path to LanceDB palace directory |
 | `wing` | `str` | `None` | Filter by wing name |
 | `room` | `str` | `None` | Filter by room name |
 | `n_results` | `int` | `5` | Maximum number of results |
@@ -27,7 +27,7 @@ Programmatic search returning a dict. Used by the MCP server.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `query` | `str` | — | Search query text |
-| `palace_path` | `str` | — | Path to ChromaDB palace directory |
+| `palace_path` | `str` | — | Path to LanceDB palace directory |
 | `wing` | `str` | `None` | Filter by wing name |
 | `room` | `str` | `None` | Filter by room name |
 | `n_results` | `int` | `5` | Maximum number of results |
@@ -53,11 +53,11 @@ On error: `{"error": str, "hint": str}`
 
 ---
 
-## `mempalace.layers`
+## `cognitive_castle.layers`
 
 ### `class Layer0(identity_path=None)`
 
-Identity layer (~50 tokens). Reads from `~/.mempalace/identity.txt`.
+Identity layer (~50 tokens). Reads from `~/.castle/identity.txt`.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -115,11 +115,11 @@ Unified 4-layer interface.
 
 ---
 
-## `mempalace.knowledge_graph`
+## `cognitive_castle.knowledge_graph`
 
 ### `class KnowledgeGraph(db_path=None)`
 
-Default path: `~/.mempalace/knowledge_graph.sqlite3`
+Default path: `~/.castle/knowledge_graph.sqlite3`
 
 #### Write Methods
 
@@ -156,11 +156,11 @@ Default path: `~/.mempalace/knowledge_graph.sqlite3`
 
 ---
 
-## `mempalace.palace_graph`
+## `cognitive_castle.palace_graph`
 
 ### `build_graph(col=None, config=None) → (nodes, edges)`
 
-Build the palace graph from ChromaDB metadata.
+Build the palace graph from LanceDB metadata.
 
 **Returns:**
 - `nodes`: `dict` of `{room: {wings: list, halls: list, count: int, dates: list}}`
@@ -195,7 +195,7 @@ Find rooms spanning multiple wings.
 
 ---
 
-## `mempalace.dialect`
+## `cognitive_castle.dialect`
 
 ### `class Dialect(entities=None, skip_names=None)`
 
@@ -230,16 +230,16 @@ Find rooms spanning multiple wings.
 
 ---
 
-## `mempalace.config`
+## `cognitive_castle.config`
 
-### `class MempalaceConfig()`
+### `class CognitiveCastleConfig()`
 
-Reads from `~/.mempalace/config.json` and environment variables.
+Reads from `~/.castle/config.json` and environment variables.
 
 | Property | Type | Default | Description |
 |----------|------|---------|-------------|
-| `palace_path` | `str` | `~/.mempalace/palace` | ChromaDB storage path |
-| `collection_name` | `str` | `mempalace_drawers` | ChromaDB collection name |
+| `palace_path` | `str` | `~/.castle/palace` | LanceDB storage path |
+| `collection_name` | `str` | `castle_drawers` | LanceDB table name |
 
 | Method | Description |
 |--------|-------------|

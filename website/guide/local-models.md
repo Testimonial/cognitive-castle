@@ -7,7 +7,7 @@ MemPalace works with any local LLM — Llama, Mistral, or any offline model. Sin
 Load your world into the model's context:
 
 ```bash
-mempalace wake-up > context.txt
+castle wake-up > context.txt
 # Paste context.txt into your local model's system prompt
 ```
 
@@ -17,7 +17,7 @@ This gives your local model a bounded wake-up context, typically around **~600-9
 
 For project-specific context:
 ```bash
-mempalace wake-up --wing driftwood > context.txt
+castle wake-up --wing driftwood > context.txt
 ```
 
 ## CLI Search
@@ -25,7 +25,7 @@ mempalace wake-up --wing driftwood > context.txt
 Query on demand, feed results into your prompt:
 
 ```bash
-mempalace search "auth decisions" > results.txt
+castle search "auth decisions" > results.txt
 # Include results.txt in your prompt
 ```
 
@@ -34,11 +34,11 @@ mempalace search "auth decisions" > results.txt
 For programmatic integration with your local model pipeline:
 
 ```python
-from mempalace.searcher import search_memories
+from cognitive_castle.searcher import search_memories
 
 results = search_memories(
     "auth decisions",
-    palace_path="~/.mempalace/palace",
+    palace_path="~/.castle/palace",
 )
 
 # Format results for your model's context
@@ -56,7 +56,7 @@ prompt = f"Context from memory:\n{context}\n\nUser: What did we decide about aut
 Use [AAAK dialect](/concepts/aaak-dialect) to compress wake-up context further:
 
 ```bash
-mempalace compress --wing myapp --dry-run
+castle compress --wing myapp --dry-run
 ```
 
 AAAK is readable by any LLM that reads text — Claude, GPT, Gemini, Llama, Mistral — without a decoder.
@@ -64,7 +64,7 @@ AAAK is readable by any LLM that reads text — Claude, GPT, Gemini, Llama, Mist
 ## Full Offline Stack
 
 The core memory stack can run offline:
-- **ChromaDB** on your machine — vector storage and search
+- **LanceDB** on your machine — vector storage and search
 - **Local model** on your machine — reasoning and responses
 - **AAAK** for compression — optional, no cloud dependency
 - **Optional reranking or external model integrations** may introduce cloud calls, depending on how you configure the system

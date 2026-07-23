@@ -9,12 +9,13 @@ onMounted(() => {
   if (typeof document === 'undefined') return
 
   // Hide VitePress chrome while the landing component is live, restore on leave.
-  document.body.classList.add('mempalace-active')
+  document.body.classList.add('castle-active')
 
   /* ---------- Waitlist submission ---------- */
   ;(function initWaitlist(){
-    const ENDPOINT = 'https://br.staging.mempalaceofficial.com/waitlist'
-    const forms = document.querySelectorAll('.mempalace-landing .waitlist')
+    // TODO(infra): point at Cognitive Castle waitlist endpoint once provisioned.
+    const ENDPOINT = 'https://br.staging.cognitive-castle.dev/waitlist'
+    const forms = document.querySelectorAll('.castle-landing .waitlist')
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
     forms.forEach(form => {
@@ -94,7 +95,7 @@ onMounted(() => {
   /* ---------- Reveal-on-scroll for cards ---------- */
   ;(function(){
     if (!('IntersectionObserver' in window)) return
-    const items = document.querySelectorAll('.mempalace-landing .stratum, .mempalace-landing .mech, .mempalace-landing .slab')
+    const items = document.querySelectorAll('.castle-landing .stratum, .castle-landing .mech, .castle-landing .slab')
     items.forEach(el => {
       el.style.opacity = '0'
       el.style.transform = 'translateY(20px)'
@@ -397,7 +398,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   if (typeof document === 'undefined') return
-  document.body.classList.remove('mempalace-active')
+  document.body.classList.remove('castle-active')
   while (cleanups.length) {
     const fn = cleanups.pop()
     try { fn() } catch (_) { /* swallow — teardown best-effort */ }

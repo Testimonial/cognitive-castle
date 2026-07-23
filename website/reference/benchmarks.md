@@ -2,7 +2,7 @@
 
 Curated summary of MemPalace's reproducible benchmark results. For the
 complete progression with every experiment, see
-[`benchmarks/BENCHMARKS.md`](https://github.com/MemPalace/mempalace/blob/main/benchmarks/BENCHMARKS.md).
+[`benchmarks/BENCHMARKS.md`](https://github.com/Testimonial/cognitive-castle/blob/main/benchmarks/BENCHMARKS.md).
 All headline numbers on this page are reproducible from the committed
 repository — datasets, scripts, and per-question result JSONLs are all
 checked in.
@@ -111,8 +111,8 @@ reference:
 Every benchmark runs deterministically from this repository.
 
 ```bash
-git clone https://github.com/MemPalace/mempalace.git
-cd mempalace
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
 pip install -e ".[dev]"
 
 # LongMemEval — raw (96.6%)
@@ -128,12 +128,12 @@ python benchmarks/longmemeval_bench.py /tmp/longmemeval_s_cleaned.json \
 git clone https://github.com/snap-research/locomo.git /tmp/locomo
 python benchmarks/locomo_bench.py /tmp/locomo/data/locomo10.json \
   --granularity session --top-k 10
-
-# LongMemEval — hybrid v4 + rerank, any OpenAI-compatible endpoint
-python benchmarks/longmemeval_bench.py /tmp/longmemeval_s_cleaned.json \
-  --mode hybrid_v4 --llm-rerank \
-  --llm-backend ollama --llm-model <your-model-tag>
 ```
+
+For the optional LLM rerank pass (99.2% row), see
+[`benchmarks/BENCHMARKS.md`](https://github.com/Testimonial/cognitive-castle/blob/main/benchmarks/BENCHMARKS.md)
+— rerank flags belong to the benchmark script, not the user-facing
+`castle search` CLI (which uses `--mode {fast|standard|boosted|max}`).
 
 ::: tip
 Results are deterministic: same data, same script, same split seed →
@@ -144,4 +144,4 @@ individual answer is auditable — not just the aggregate.
 
 For the complete progression (hybrid v1 → v4, diary mode, palace mode,
 LoCoMo architecture iterations, methodology integrity notes), see
-[`benchmarks/BENCHMARKS.md`](https://github.com/MemPalace/mempalace/blob/main/benchmarks/BENCHMARKS.md).
+[`benchmarks/BENCHMARKS.md`](https://github.com/Testimonial/cognitive-castle/blob/main/benchmarks/BENCHMARKS.md).

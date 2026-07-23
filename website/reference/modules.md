@@ -5,9 +5,9 @@ Complete source file reference for the MemPalace codebase.
 ## Project Structure
 
 ```
-mempalace/
+cognitive-castle/
 ├── README.md                  ← project documentation
-├── mempalace/                 ← core package
+├── cognitive_castle/          ← core package
 │   ├── cli.py                 ← CLI entry point
 │   ├── mcp_server.py          ← MCP server (29 tools)
 │   ├── knowledge_graph.py     ← temporal entity graph
@@ -36,8 +36,8 @@ mempalace/
 │   ├── membench_bench.py      ← MemBench runner
 │   └── convomem_bench.py      ← ConvoMem runner
 ├── hooks/                     ← Claude Code auto-save hooks
-│   ├── mempal_save_hook.sh    ← save every N messages
-│   └── mempal_precompact_hook.sh ← emergency save
+│   ├── castle-stop-hook.sh    ← save every N messages
+│   └── castle-precompact-hook.sh ← emergency save
 ├── examples/                  ← usage examples
 │   ├── basic_mining.py
 │   ├── convo_import.py
@@ -60,7 +60,7 @@ JSON-RPC over stdin/stdout. Implements the MCP protocol with 29 tools covering p
 
 ### `searcher.py` — Semantic Search
 
-Two functions: `search()` for CLI output and `search_memories()` for programmatic use. Both query ChromaDB with optional wing/room filters and return verbatim drawer content with similarity scores.
+Two functions: `search()` for CLI output and `search_memories()` for programmatic use. Both query LanceDB with optional wing/room filters and return verbatim drawer content with similarity scores.
 
 ### `layers.py` — Memory Stack
 
@@ -72,7 +72,7 @@ SQLite-backed entity-relationship graph with temporal validity windows. Supports
 
 ### `palace_graph.py` — Navigation Graph
 
-Builds a graph from ChromaDB metadata where nodes = rooms and edges = tunnels (rooms spanning multiple wings). Supports BFS traversal and tunnel finding.
+Builds a graph from LanceDB metadata where nodes = rooms and edges = tunnels (rooms spanning multiple wings). Supports BFS traversal and tunnel finding.
 
 ### `dialect.py` — AAAK Compression
 
@@ -108,13 +108,13 @@ Manages entity name → code mappings for AAAK dialect.
 
 ### `room_detector_local.py` — Room Detection
 
-Detects rooms from folder structure during `mempalace init`.
+Detects rooms from folder structure during `castle init`.
 
 ## Utility Modules
 
 ### `config.py` — Configuration
 
-Loads settings from `~/.mempalace/config.json` and environment variables.
+Loads settings from `~/.castle/config.json` and environment variables.
 
 ### `split_mega_files.py` — Transcript Splitting
 
@@ -122,7 +122,7 @@ Splits concatenated transcripts into per-session files based on session boundary
 
 ### `onboarding.py` — Guided Setup
 
-Interactive setup wizard for `mempalace init`. Generates AAAK bootstrap and wing config.
+Interactive setup wizard for `castle init`. Generates AAAK bootstrap and wing config.
 
 ### `spellcheck.py` — Spell Checking
 

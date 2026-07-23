@@ -11,7 +11,7 @@ function normalizeBase(base?: string): string {
 
 const docsBase = normalizeBase(process.env.DOCS_BASE || '/')
 const editBranch = process.env.DOCS_EDIT_BRANCH || 'main'
-const gaId = process.env.MEMPALACE_DOCS_GA_ID
+const gaId = process.env.CASTLE_DOCS_GA_ID
 
 export default withMermaid(
   defineConfig({
@@ -20,7 +20,7 @@ export default withMermaid(
     base: docsBase,
 
     head: [
-      ['link', { rel: 'icon', href: `${docsBase}mempalace_logo.png` }],
+      ['link', { rel: 'icon', href: `${docsBase}castle_logo.png` }],
       ['link', { rel: 'preconnect', href: 'https://api.fontshare.com' }],
       ['link', { href: 'https://api.fontshare.com/v2/css?f[]=neue-machina@300,400,500,700,800&f[]=satoshi@300,400,500,700&display=swap', rel: 'stylesheet' }],
       ['link', { rel: 'preconnect', href: 'https://fonts.googleapis.com' }],
@@ -28,7 +28,7 @@ export default withMermaid(
       ['link', { href: 'https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap', rel: 'stylesheet' }],
       ['meta', { property: 'og:title', content: 'MemPalace — AI Memory System' }],
       ['meta', { property: 'og:description', content: '96.6% LongMemEval recall. Zero API calls. Local, free, open source.' }],
-      ['meta', { property: 'og:image', content: `${docsBase}mempalace_logo.png` }],
+      ['meta', { property: 'og:image', content: `${docsBase}castle_logo.png` }],
       ...(gaId ? [
         ['script', { async: '', src: `https://www.googletagmanager.com/gtag/js?id=${gaId}` }],
         ['script', {}, `window.dataLayer = window.dataLayer || [];\nfunction gtag(){dataLayer.push(arguments);}\ngtag('js', new Date());\ngtag('config', '${gaId}');`],
@@ -36,7 +36,7 @@ export default withMermaid(
     ],
 
     themeConfig: {
-      logo: '/mempalace_logo.png',
+      logo: '/castle_logo.png',
       siteTitle: 'MemPalace',
 
       nav: [
@@ -93,7 +93,7 @@ export default withMermaid(
       },
 
       socialLinks: [
-        { icon: 'github', link: 'https://github.com/MemPalace/mempalace' },
+        { icon: 'github', link: 'https://github.com/Testimonial/cognitive-castle' },
         { icon: 'discord', link: 'https://discord.com/invite/ycTQQCu6kn' },
       ],
 
@@ -107,7 +107,7 @@ export default withMermaid(
       },
 
       editLink: {
-        pattern: `https://github.com/MemPalace/mempalace/edit/${editBranch}/website/:path`,
+        pattern: `https://github.com/Testimonial/cognitive-castle/edit/${editBranch}/website/:path`,
         text: 'Edit this page on GitHub',
       },
     },

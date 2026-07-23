@@ -58,7 +58,7 @@ Every project, person, or topic gets its own wing in the palace. Wings are the t
 
 Specific topics within a wing. Examples: `auth-migration`, `graphql-switch`, `ci-pipeline`.
 
-Rooms are named ideas. They're auto-detected from your folder structure during `mempalace init`, and you can create additional rooms manually.
+Rooms are named ideas. They're auto-detected from your folder structure during `castle init`, and you can create additional rooms manually.
 
 ### Halls
 
@@ -101,11 +101,11 @@ This is standard metadata filtering in the underlying vector store, not a novel 
 The palace supports graph traversal across wings:
 
 ```text
-MCP tool: mempalace_traverse
+MCP tool: castle_traverse
   arguments: { "start_room": "auth-migration" }
   → discovers rooms in wing_kai, wing_driftwood, wing_priya
 
-MCP tool: mempalace_find_tunnels
+MCP tool: castle_find_tunnels
   arguments: { "wing_a": "wing_code", "wing_b": "wing_team" }
   → auth-migration, deploy-process, ci-pipeline
 ```

@@ -5,18 +5,18 @@ The recommended way to use MemPalace with Claude Code — native marketplace ins
 ## Installation
 
 ```bash
-claude plugin marketplace add MemPalace/mempalace
-claude plugin install --scope user mempalace
+claude plugin marketplace add Testimonial/cognitive-castle
+claude plugin install --scope user castle
 ```
 
-Restart Claude Code, then type `/skills` to verify "mempalace" appears.
+Restart Claude Code, then type `/skills` to verify "castle" appears.
 
 ## How It Works
 
 With the plugin installed, Claude Code automatically:
 - Starts the MemPalace MCP server on launch
 - Has access to all 29 tools
-- Learns the AAAK dialect and memory protocol from the `mempalace_status` response
+- Learns the AAAK dialect and memory protocol from the `castle_status` response
 - Searches the palace before answering questions about past work
 
 No manual configuration needed. Just ask:
@@ -28,7 +28,7 @@ No manual configuration needed. Just ask:
 If you prefer manual setup over the marketplace plugin:
 
 ```bash
-claude mcp add mempalace -- python -m mempalace.mcp_server
+claude mcp add castle -- python -m cognitive_castle.mcp_server
 ```
 
 Both approaches give identical functionality. The plugin approach handles server lifecycle automatically.
