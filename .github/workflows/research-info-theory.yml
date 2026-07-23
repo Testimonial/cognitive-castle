@@ -9,6 +9,7 @@ on:
   pull_request:
     paths:
       - 'research/info_theory/**'
+      - '.github/workflows/research-info-theory.yml'
 
 jobs:
   unit-and-integration:
