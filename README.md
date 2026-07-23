@@ -251,7 +251,16 @@ Three input streams (project files, conversation exports, auto-save hooks) feed 
 
 ---
 
-## Connect to Claude Code
+## Connect to your MCP client
+
+Castle is MCP-native. Claude Code gets the fullest integration (plugin
+auto-registers MCP server + Stop/PreCompact hooks + slash commands).
+Other MCP clients (Codex, Cursor, VS Code + Copilot, Gemini CLI, any
+generic MCP consumer) get the same `castle_*` tools — see
+[**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) for one-liner config
+per client and a feature-parity matrix.
+
+### Claude Code
 
 Cognitive Castle ships as a Claude Code plugin that auto-registers the MCP server and both auto-save hooks (Stop + PreCompact).
 
