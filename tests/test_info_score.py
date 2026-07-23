@@ -52,7 +52,7 @@ def test_score_novelty_returns_expected_shape():
 
     with (
         patch("cognitive_castle.embedding.embed_texts", return_value=[[0.1] * 1024]),
-        patch("cognitive_castle.backends.registry.get_backend", return_value=mock_backend),
+        patch("cognitive_castle.palace.get_collection", return_value=mock_backend),
     ):
         result = score_novelty("some query text", palace_path="/tmp/palace-mock")
 
@@ -71,7 +71,7 @@ def test_score_novelty_empty_palace_returns_max_novelty():
     mock_backend.vector_search.return_value = []
     with (
         patch("cognitive_castle.embedding.embed_texts", return_value=[[0.1] * 1024]),
-        patch("cognitive_castle.backends.registry.get_backend", return_value=mock_backend),
+        patch("cognitive_castle.palace.get_collection", return_value=mock_backend),
     ):
         result = score_novelty("first drawer ever", palace_path="/tmp/palace-mock")
     assert result.novelty == 1.0
@@ -84,7 +84,7 @@ def test_wing_filter_reaches_backend_where_clause():
     mock_backend.vector_search.return_value = []
     with (
         patch("cognitive_castle.embedding.embed_texts", return_value=[[0.1] * 1024]),
-        patch("cognitive_castle.backends.registry.get_backend", return_value=mock_backend),
+        patch("cognitive_castle.palace.get_collection", return_value=mock_backend),
     ):
         score_novelty("q", palace_path="/tmp/p", wing="projects")
     _, kwargs = mock_backend.vector_search.call_args

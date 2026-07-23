@@ -100,17 +100,16 @@ def score_novelty(
         raise ValueError("info-score requires non-empty text")
 
     from .embedding import embed_texts
-    from .backends.registry import get_backend
+    from .palace import get_collection
 
     cfg = CognitiveCastleConfig()
     palace = os.path.expanduser(palace_path) if palace_path else cfg.palace_path
 
     query_vec = embed_texts([text])[0]
 
-    backend = get_backend(cfg)
-    backend.connect(palace)
+    col = get_collection(palace, collection_name="castle_drawers", create=False)
     where_clause = f"wing = '{wing}'" if wing else None
-    hits = backend.vector_search(query_vec, n_results=top_k, where=where_clause)
+    hits = col.vector_search(query_vec, n_results=top_k, where=where_clause)
 
     if not hits:
         return InfoScoreResult(novelty=1.0, band="high", neighbours=[])

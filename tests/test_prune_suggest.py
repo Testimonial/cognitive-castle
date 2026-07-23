@@ -62,7 +62,7 @@ def test_suggest_flags_below_threshold_ordered_ascending():
     backend.vector_search.side_effect = fake_vs
 
     with patch(
-        "cognitive_castle.backends.registry.get_backend", return_value=backend
+        "cognitive_castle.palace.get_collection", return_value=backend
     ):
         result = suggest_candidates(palace_path="/tmp/p", sample=2, threshold=0.10)
 
@@ -80,7 +80,7 @@ def test_suggest_skips_drawers_without_vectors():
     backend = MagicMock()
     backend.get_all_drawers = MagicMock(return_value=[{"id": "d1", "wing": "w"}])
     with patch(
-        "cognitive_castle.backends.registry.get_backend", return_value=backend
+        "cognitive_castle.palace.get_collection", return_value=backend
     ):
         result = suggest_candidates(palace_path="/tmp/p", sample=1, threshold=0.10)
     assert result.candidates == []
@@ -112,14 +112,19 @@ def test_as_dict_truncates_long_text_excerpt():
 
 
 def test_fallback_get_all_used_when_backend_lacks_bulk_read():
-    """Backend without `get_all_drawers` still works via vector_search fallback."""
-    backend = MagicMock(spec=["vector_search", "connect"])  # no get_all_drawers
-    backend.vector_search.return_value = []  # empty palace
+    """Backend without `get_all_drawers` reads the underlying arrow table."""
+    import pyarrow as pa
+
+    # A LanceCollection-shaped mock: no `get_all_drawers`, but has _table
+    # exposing `.to_arrow()` (empty).
+    empty_table = pa.table({"id": pa.array([], type=pa.string()), "wing": pa.array([], type=pa.string())})
+    col = MagicMock(spec=["vector_search", "connect", "_table"])
+    col._table.to_arrow.return_value = empty_table
     with patch(
-        "cognitive_castle.backends.registry.get_backend", return_value=backend
+        "cognitive_castle.palace.get_collection", return_value=col
     ):
         result = suggest_candidates(palace_path="/tmp/p", sample=1, threshold=0.10)
-    # First vector_search call is the fallback bulk read
-    assert backend.vector_search.called
+    # Fallback consulted the underlying pyarrow table
+    assert col._table.to_arrow.called
     assert result.sampled == 0
     assert result.candidates == []

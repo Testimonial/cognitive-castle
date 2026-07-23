@@ -102,16 +102,15 @@ def suggest_candidates(
         PruneSuggestion with the sampled count, threshold, and flagged
         candidates sorted by novelty ascending (lowest = most duplicate-y).
     """
-    from .backends.registry import get_backend
+    from .palace import get_collection
 
     cfg = CognitiveCastleConfig()
     palace = os.path.expanduser(palace_path) if palace_path else cfg.palace_path
 
-    backend = get_backend(cfg)
-    backend.connect(palace)
+    col = get_collection(palace, collection_name="castle_drawers", create=False)
 
-    all_drawers = backend.get_all_drawers(wing=wing) if hasattr(backend, "get_all_drawers") \
-        else _fallback_get_all(backend, wing)
+    all_drawers = col.get_all_drawers(wing=wing) if hasattr(col, "get_all_drawers") \
+        else _fallback_get_all(col, wing)
 
     sampled = _sample_drawers(all_drawers, sample, seed)
 
@@ -122,7 +121,7 @@ def suggest_candidates(
             continue
         # nn_novelty against top-2 (top-1 is likely the drawer itself if
         # LanceDB indexed it; take the next best).
-        hits = backend.vector_search(
+        hits = col.vector_search(
             list(vec),
             n_results=3,
             where=f"wing = '{target.get('wing')}'" if target.get("wing") else None,
@@ -152,15 +151,19 @@ def suggest_candidates(
     return PruneSuggestion(sampled=len(sampled), threshold=threshold, candidates=candidates)
 
 
-def _fallback_get_all(backend, wing: Optional[str]) -> list[dict]:
-    """When the backend doesn't expose get_all_drawers, use a large search.
+def _fallback_get_all(col, wing: Optional[str]) -> list[dict]:
+    """Read all drawers directly from the underlying LanceDB table.
 
-    This is a degraded path — it fetches up to 10k drawers with an empty
-    vector query. Not efficient at scale, but keeps prune-suggest working
-    on backends that don't ship a bulk-read method.
+    LanceCollection doesn't expose a `get_all_drawers` method; the
+    underlying pyarrow table does. We read it wholesale — for a
+    typical 65k-drawer palace this is ~260 MB of vectors + text
+    metadata, comfortable on any dev machine.
     """
-    where = f"wing = '{wing}'" if wing else None
-    # Empty-vector search returns everything sorted by an arbitrary distance,
-    # which is fine — we only need the drawer metadata + vectors.
-    dim = 1024  # bge-m3 default; wrong dim will fail loudly, that's fine
-    return backend.vector_search([0.0] * dim, n_results=10_000, where=where)
+    try:
+        table = col._table.to_arrow()
+    except AttributeError:
+        return []
+    rows = table.to_pylist()
+    if wing is None:
+        return rows
+    return [r for r in rows if r.get("wing") == wing]
