@@ -2536,11 +2536,15 @@ def test_bh_correction_known_case():
     """BH q=0.05: of these p-values, how many survive?"""
     p_values = [0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.5]
     survivors = benjamini_hochberg(p_values, q=0.05)
-    # By BH formula, p=0.041 survives if it's ≤ (4/7)*0.05 = 0.0286 → no
-    # So first three survive: 0.001, 0.008, 0.039
-    assert sum(survivors) == 3
-    assert survivors[0] and survivors[1] and survivors[2]
-    assert not survivors[3]
+    # BH formula requires p_(k) ≤ (k/m)·q. With m=7, q=0.05:
+    #   rank 1: 0.001 ≤ 0.00714 ✓
+    #   rank 2: 0.008 ≤ 0.01429 ✓
+    #   rank 3: 0.039 ≤ 0.02143 ✗   ← p=0.039 fails, so largest k is 2
+    #   ranks 4-7: all fail
+    # Only first two (0.001, 0.008) survive.
+    assert sum(survivors) == 2
+    assert survivors[0] and survivors[1]
+    assert not survivors[2] and not survivors[3]
 
 
 def test_bh_correction_all_significant():
@@ -2559,7 +2563,11 @@ def test_compute_n_star_finds_saturation():
     # First 100: decreasing from 1.0 to 0.1; remainder: stays ~0.05
     info = np.concatenate([np.linspace(1.0, 0.1, 100),
                            np.full(200, 0.05)])
-    shuffled_null = np.full(300, 0.5)  # null IQR ~0
+    # Null needs positive IQR so threshold = threshold_factor × IQR > 0.
+    # A constant null (e.g., np.full(300, 0.5)) → IQR=0 → threshold=0 → smoothed<0
+    # is always False → never saturates. Linspace gives IQR ≈ 0.15 so the
+    # saturated tail at 0.05 falls below the threshold cleanly.
+    shuffled_null = np.linspace(0.05, 0.35, 300)
     n_star = compute_n_star(N, info, shuffled_null,
                              threshold_factor=1.0,
                              persistence_factor=0.1)
