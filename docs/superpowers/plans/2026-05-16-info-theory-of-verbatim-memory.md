@@ -948,7 +948,8 @@ from pipeline.embed import embed_drawers, _fingerprint_inputs
 
 def _mock_embedder(dim=1024):
     e = MagicMock()
-    e.encode = lambda texts, **kw: np.random.rand(len(texts), dim).astype(np.float32)
+    # NOTE: use side_effect (not direct assignment) so MagicMock's call_count tracking survives.
+    e.encode.side_effect = lambda texts, **kw: np.random.rand(len(texts), dim).astype(np.float32)
     e.model_revision = "bge-m3@abc123"
     return e
 
@@ -987,9 +988,19 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `embed.py`**
 
+Castle's `cognitive_castle/embedding.py` exposes `embed_texts(texts, device=None)` and `get_embedding_function()` (a callable), **not** a `get_embedder()` object with `.encode`/`.model_revision`. We wrap Castle's real API in a local adapter so the plan's mocking interface still works.
+
 ```python
 # pipeline/embed.py
-"""Embed drawer texts via Castle's bge-m3 embedder. Cached as Parquet."""
+"""Embed drawer texts via Castle's bge-m3 embedder. Cached as Parquet.
+
+Castle exposes ``embed_texts`` and ``get_embedding_function`` (returning a
+callable) rather than a ``get_embedder()`` object with ``.encode`` and
+``.model_revision``. To keep this stage's interface aligned with the research
+plan (and to make mocking trivial), we wrap Castle's real API in a small
+adapter and expose it as ``get_embedder`` at module scope. Tests patch
+``pipeline.embed.get_embedder`` directly.
+"""
 
 from __future__ import annotations
 import hashlib
@@ -999,7 +1010,25 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from cognitive_castle.embedding import get_embedder
+from cognitive_castle.embedding import embed_texts
+
+
+class _CastleEmbedderAdapter:
+    """Adapter over Castle's ``embed_texts`` to match the plan's expected
+    ``.encode(texts) -> np.ndarray`` and ``.model_revision`` interface."""
+
+    def __init__(self) -> None:
+        from cognitive_castle.embedding import _resolve_model_name
+        self.model_revision = _resolve_model_name()
+
+    def encode(self, texts, **kwargs) -> np.ndarray:
+        vecs = embed_texts(list(texts))
+        return np.asarray(vecs, dtype=np.float32)
+
+
+def get_embedder() -> _CastleEmbedderAdapter:
+    """Return a Castle-backed embedder with ``.encode`` and ``.model_revision``."""
+    return _CastleEmbedderAdapter()
 
 
 def _fingerprint_inputs(table: pa.Table) -> str:
@@ -1028,20 +1057,26 @@ def embed_drawers(
 
     embedder = get_embedder()
     texts = table.column("text").to_pylist()
-    vectors = []
+    vectors: list = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         vectors.extend(embedder.encode(batch))
-    vec_array = pa.array([v.tolist() for v in vectors], type=pa.list_(pa.float32()))
+    vec_array = pa.array(
+        [np.asarray(v, dtype=np.float32).tolist() for v in vectors],
+        type=pa.list_(pa.float32()),
+    )
     out = table.append_column("vector", vec_array)
 
     if cache_path:
         meta = {b"fingerprint": fp.encode(),
                 b"embedder_revision": embedder.model_revision.encode()}
         out = out.replace_schema_metadata(meta)
+        Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(out, cache_path)
     return out
 ```
+
+**Cache-key note:** Task 6 uses schema-metadata key `b"fingerprint"`. The shared `cache_utils.write_cached` used by other stages writes `b"inputs_fingerprint"`. This is intentional — Task 6 predates the shared helper's adoption for embedding — but any future reader must use the right key when opening this cache directly.
 
 - [ ] **Step 4: Run tests, verify pass**
 
