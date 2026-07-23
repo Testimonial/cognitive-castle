@@ -1,74 +1,40 @@
 # Cognitive Castle Roadmap
 
-## v3.1.1 — Stability Patch (this week)
+_Last refreshed: 2026-07-23. Current release: [v3.4.0](https://github.com/Testimonial/cognitive-castle/releases/tag/v3.4.0)._
 
-Bug fixes and hardening merged to `develop`, releasing soon.
+## Shipped in v3.4.0 (this release)
 
-**Merged:**
-- Security hardening: input validation, KG threading locks, WAL permission fixes (#647)
-- MCP tools: drawer CRUD, paginated export, hook settings (#667)
-- Backend storage seam: ChromaDB abstraction layer enabling swappable backends (#413)
-- MCP ping health check for AnythingLLM compatibility (#600)
-- Windows reparse point crash fix (#558)
-- `castle compress` KeyError crash fix (#569)
-- Token count estimate fix (#609)
-- Mtime float precision fix preventing unnecessary re-mines (#610)
+- **LanceDB backend** replacing upstream Chroma
+- **3-stage retrieval pipeline** — dense (bge-m3) + Tantivy FTS + KG-hop → weighted RRF + recency → cross-encoder rerank (bge-reranker-v2-m3)
+- **Stage 4 LLM-as-judge**, **Stage 5 SOAR symbolic re-ranking**, **Stage 6 deterministic quality re-rank** (via vendored `understanding` package). Selectable via `castle search --mode {fast|standard|boosted|max}`
+- **Claude Code plugin** — auto-registers MCP server + Stop / PreCompact background-mining hooks
+- **MCP `initialize.instructions` injection** — bakes `PALACE_PROTOCOL` + AAAK spec + live palace state into the client's system prompt at session start
+- **`claude-cli` LLM provider** — reuses parent Claude Code's auth for Stage 4 judge, no separate `ANTHROPIC_API_KEY` required
+- **Research subproject** — an information-theoretic study of verbatim personal memory. Full pipeline, 108 unit tests, paper draft. First full-palace headline: ρ(nn_novelty, LLE_residual) = 0.9820 on 65,779 drawers across 7 wings.
 
-**In review (merging this week):**
-- Auto-repair BLOB seq_ids from chromadb 0.6→1.5 migration (#664)
-- Graph cache with write-invalidation (#661)
-- L1 importance pre-filter for large palaces (#660)
-- Windows Chinese/Unicode encoding fix (#631)
-- HNSW index bloat prevention — 441GB→433KB on large palaces (#346, pending rebase)
-- ~25 additional small bug fixes and platform compatibility patches
+Full detail: [CHANGELOG.md](CHANGELOG.md#340--2026-07-23).
 
-## v4.0.0-alpha — Next Generation (this week)
+## Next up (unversioned; ordered by likelihood)
 
-The v4 alpha introduces three major capabilities: pluggable storage backends, local NLP processing, and improved retrieval quality.
+- **PyPI publication** — `pip install cognitive-castle` currently 404s. Publishing v3.4.0 to PyPI is the single biggest adoption barrier to lift. No blockers, just needs a `pypa/gh-action-pypi-publish` step in CI.
+- **Estimator C (`llm_surprise`) full-palace numbers** — 925-drawer stratified subsample running via `claude-cli`. Landing this closes the paper's headline `A↔C` and `B↔C` correlation claims and unblocks a v3.5.0 release with the completed research artifact.
+- **H3 downstream R@5 evaluation** — validates the paper's applied claim: do info-scores predict retrieval utility? Runs on LongMemEval; deferred to future work per the current preprint's Limitations section.
+- **Cross-user validation** — the v3.4.0 research is n=1 (one palace). Recruiting a second, structurally-different palace for reproducibility is the highest-value single validation step.
+- **Docs surface consolidation** — the recent audit (PRs #60, #61) hit the top-level README + 15 Priority-1 files. The `website/` subtree has confirmed drift of the same kind and needs its own PR.
+- **CI red on develop for pre-existing failures** (test-linux 3.9 setup errors, macOS/Windows lint) — these have been red for 3+ months and no dependabot bump can go through with green checks. Getting to green is a modest cleanup, but signals maintenance discipline.
+- **`castle-info-theory` CLI runnable end-to-end** — the current `run_experiment.py` driver works but the STAGES-based `castle-info-theory run --all` path has no `run_default` entry-points wired. Either add them or archive the STAGES registry.
+- **Cross-encoder swap sensitivity study** — `mxbai-rerank-large-v2` outperforms `bge-reranker-v2-m3` on English MTEB but is English-only. A controlled cross-lingual comparison would settle whether the default should change. (Currently deferred; burden-of-proof on any future swap is on cross-lingual perf.)
 
-### Swappable Storage
-
-ChromaDB remains the default, but v4 introduces a backend abstraction (shipped in #413) that enables drop-in replacements:
-
-- **PostgreSQL backend** with pg_sorted_heap support (#665) — for production deployments needing ACID guarantees, concurrent access, and standard backup/restore
-- **LanceDB backend** (#574) — for local-first deployments wanting multi-device sync without a database server
-- **PalaceStore** (#643) — bespoke storage layer purpose-built for Cognitive Castle's access patterns (draft, evaluating)
-
-Users choose their backend at init time. Existing ChromaDB palaces continue to work unchanged.
-
-### Local NLP
-
-On-device natural language processing via local models (#507):
-
-- Entity extraction, relationship detection, and topic classification without external API calls
-- Feature-flagged and optional — falls back to existing heuristic extractors
-- Runs on consumer hardware (no GPU required, GPU-accelerated when available)
-
-### Improved Retrieval
-
-- **Hybrid search**: keyword text-match fallback when vector similarity misses exact terms (#662)
-- **Stale index detection**: automatic reconnection when the HNSW index changes on disk (#663)
-- **Time-decay scoring**: recent memories surface before older ones (#337)
-- **Query sanitization**: system prompt contamination mitigation already shipped in v3.1 (#385)
-
-### What's Not in v4 Alpha
-
-These are under consideration for v4 stable or later:
-
-- Synapse advanced retrieval — MMR, pinned memory, query expansion (#596)
-- Multi-device sync (#575) — depends on LanceDB backend
-- Multilingual embedding support (#488, #442)
-- Qdrant vector search backend (#381)
-
-## Branch Model
+## Branch model
 
 ```
-main            ← tagged production releases
-develop         ← active development (PRs merge here)
-release/3.1     ← hotfixes for current stable (v3.1.x)
-release/3.0     ← hotfixes for prior stable
+develop     ← the default branch; PRs merge here, releases tag here
+feature/*   ← short-lived branches, merged and deleted via
+              `gh pr merge --merge --delete-branch`
 ```
+
+There is no `main` — `develop` is the release branch (`v3.4.0` was tagged on develop).
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines. PRs should target `develop`. We review all contributions for correctness, security, and compatibility before merging.
+See [CONTRIBUTING.md](CONTRIBUTING.md). PRs target `develop`. Design principles from [CLAUDE.md](CLAUDE.md#design-principles) are non-negotiable — verbatim always, incremental only, entity-first, local-first, zero external API by default.
