@@ -1135,3 +1135,50 @@ def test_initialize_instructions_contains_protocol_and_aaak():
     # AAAK marker
     assert "AAAK" in text
     assert "ENTITIES:" in text
+
+
+def test_tool_info_score_registered():
+    """The `castle_info_score` MCP tool is in the TOOLS registry with a handler."""
+    from cognitive_castle.mcp_server import TOOLS
+
+    assert "castle_info_score" in TOOLS
+    spec = TOOLS["castle_info_score"]
+    assert callable(spec["handler"])
+    schema = spec["input_schema"]
+    assert schema["required"] == ["text"]
+    assert "text" in schema["properties"]
+    assert "wing" in schema["properties"]
+    assert "top_k" in schema["properties"]
+
+
+def test_tool_info_score_error_on_empty(monkeypatch):
+    """Empty text triggers the ValueError-wrapped error path."""
+    from cognitive_castle.mcp_server import tool_info_score
+
+    out = tool_info_score(text="")
+    assert "error" in out
+    assert "non-empty" in out["error"]
+
+
+def test_tool_info_score_delegates_to_score_novelty(monkeypatch):
+    """Happy path: forwards args + returns InfoScoreResult.as_dict()."""
+    from cognitive_castle import mcp_server
+
+    class FakeResult:
+        def as_dict(self):
+            return {"novelty": 0.4, "band": "medium", "neighbours": []}
+
+    called = {}
+
+    def fake_score(text, top_k=5, wing=None):
+        called["text"] = text
+        called["top_k"] = top_k
+        called["wing"] = wing
+        return FakeResult()
+
+    monkeypatch.setattr("cognitive_castle.info_score.score_novelty", fake_score)
+    out = mcp_server.tool_info_score(text="hello", wing="projects", top_k=3)
+
+    assert called == {"text": "hello", "top_k": 3, "wing": "projects"}
+    assert out["novelty"] == 0.4
+    assert out["band"] == "medium"
