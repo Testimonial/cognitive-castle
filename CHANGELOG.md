@@ -6,6 +6,99 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [3.4.0] — 2026-07-23
+
+First Castle-branded release since forking from
+[MemPalace v3.3.3](https://github.com/MemPalace/mempalace) (2026-04-23).
+Summarises 463 non-merge commits of Castle-specific work. See the
+[Acknowledgements](README.md#acknowledgements) for the split between
+upstream (MemPalace / Milla Jovovich) design and Castle's integration
+layer.
+
+### Added
+
+- **LanceDB backend** replaces upstream Chroma across storage, mining,
+  and retrieval. All Castle work is exercised against LanceDB; a
+  reindex is required for palaces built pre-cutover (see README
+  "Migration from MiniLM" section for the exact command). The
+  abstraction in `cognitive_castle/backends/base.py` keeps future
+  backends possible.
+- **3-stage retrieval pipeline** — parallel dense (BAAI/bge-m3 default,
+  paraphrase-multilingual-MiniLM legacy) + sparse Tantivy FTS +
+  KG-hop → weighted Reciprocal Rank Fusion + recency multiplier →
+  cross-encoder rerank (BAAI/bge-reranker-v2-m3 default; opt-in
+  mxbai-rerank-large-v2 for English-only corpora).
+- **Stage 4 LLM-as-judge re-rank** (`--llm-rerank`) — reorders Stage 3
+  top-N via a configured LLM. Graceful fallback to Stage 3 on any
+  LLM failure; `JUDGE` audit line records what happened.
+- **Stage 5 SOAR symbolic re-ranking** (opt-in via
+  `CASTLE_SOAR_ENABLED=1` + `--soar-boost`) — 4 hand-crafted
+  productions (recency-boost, same-project, entity-match, type-match)
+  add boost-tags with full audit trail. Composable with Stage 4 via
+  `--soar-first`.
+- **Stage 6 deterministic text-quality re-rank** — powered by the
+  vendored `understanding` package (v3.7.0, MIT). 31 standards-based
+  metrics (IEEE 830, ISO 29148, readability, cognitive load) applied
+  as a two-tier threshold (medium ×1.15, high ×1.25) on top of
+  relevance ranking.
+- **Claude Code plugin** (`.claude-plugin/`) — auto-registers the MCP
+  server + Stop / PreCompact background-mining hooks. Install with
+  `/plugin marketplace add /path && /plugin install castle@cognitive-castle`.
+- **MCP `initialize.instructions` injection** (PR #48) — bakes
+  `PALACE_PROTOCOL` + AAAK spec + live palace state into the client's
+  system prompt at session start.
+- **`claude-cli` LLM provider** (PR #49) — reuses the parent Claude
+  Code's auth for Stage 4 judge instead of requiring a separate
+  `ANTHROPIC_API_KEY`.
+- **Research subproject** `research/info_theory/` (PR #56) — an
+  information-theoretic study of verbatim personal memory. Three
+  drop-in estimators (`nn_novelty`, LLE `recon_residual` with
+  Tikhonov, `llm_surprise`), full statistical stack (weighted
+  power-law + exponential fits with AIC selection, source-aware block
+  bootstrap, Kruskal-Wallis + ε², Benjamini-Hochberg FDR at q=0.05,
+  LOWESS-based N* saturation), 108 unit tests, resumable driver
+  (`run_experiment.py`), CLI orchestrator, reproducibility manifest,
+  paper skeleton, CI workflow. First full-palace run headline
+  (65,779 drawers, 7 wings): $\rho(A, B) = 0.9820$ with 95% CI
+  $[0.9817, 0.9823]$; exponential decay wins over power-law in all
+  6 fittable strata; source-type heterogeneity real but modest
+  ($H = 5360$, $p \approx 0$, $\varepsilon^2 = 0.081$).
+- **Vectorised KNN** `compute_all_neighbors` — ~100× speedup unlocks
+  full-palace analysis at 65k drawers in minutes instead of days.
+
+### Improvements
+
+- **CLI rebranding** — `castle` console script (preferred) alongside
+  `castle-mcp`. `python -m cognitive_castle.cli` still supported.
+- **Attribution** — README restructured; MemPalace inspiration credit
+  moved to a prominent box after the pitch. New "Research &
+  Mathematics" section at the bottom links to the info-theory paper
+  and estimator formulas.
+- **CI** — new `research-info-theory.yml` workflow runs the research
+  subproject's unit + integration tests on Python 3.11 and 3.12,
+  plus a conditional Tier-4 reproducibility check when
+  `paper/results.yaml` changes in a PR.
+
+### Bug Fixes
+
+- `load_palace` now returns the drawer identifier as `drawer_id` (not
+  the raw LanceDB `id`), matching the cross-loader contract with
+  `load_longmemeval`.
+- `cmd_pilot` graceful missing-data path — surfaces a clear message
+  instead of `TypeError` when the LongMemEval JSON is not present.
+
+### Notes
+
+- The `## [3.3.4] — unreleased` and `## [3.3.5] — unreleased` sections
+  below are upstream MemPalace draft entries inherited at fork time.
+  They have not been vetted against Castle's LanceDB architecture and
+  may not apply. A separate audit will decide which entries land in
+  a future Castle release.
+- No PyPI publication is automated; the release is tag + GitHub
+  release page only.
+
+---
+
 ## [3.3.5] — unreleased
 
 ### Bug Fixes
