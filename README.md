@@ -278,13 +278,16 @@ Cognitive Castle ships as a Claude Code plugin that auto-registers the MCP serve
 
 After reopening, run `/castle:init` once to complete palace setup.
 
-**Manual setup for non-Claude-Code MCP clients:**
+**Manual setup for Claude Code without the plugin:**
 
 ```bash
 claude mcp add castle -- castle-mcp
 ```
 
-Restart your AI client and the `castle_*` tools become available mid-conversation.
+Restart Claude Code and the `castle_*` tools become available mid-conversation.
+
+**Other MCP clients (Codex, Cursor, VS Code + Copilot, Gemini CLI):**
+see [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) — one-line config per client, plus a feature-parity matrix.
 
 ---
 
@@ -422,4 +425,4 @@ preserved with credit to the upstream authors.
 [python-shield]: https://img.shields.io/badge/python-3.9+-7dd8f8?style=flat-square&labelColor=0a0e14&logo=python&logoColor=7dd8f8
 [python-link]: https://www.python.org/
 [license-shield]: https://img.shields.io/badge/license-MIT-b0e8ff?style=flat-square&labelColor=0a0e14
-[license-link]: https://github.com/Testimonial/cognitive-castle/blob/main/LICENSE
+[license-link]: https://github.com/Testimonial/cognitive-castle/blob/develop/LICENSE
