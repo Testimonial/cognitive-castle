@@ -18,6 +18,9 @@ dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+  "tier4: tier 4 reproducibility test — LME-only full-pipeline check",
+]
 
 [tool.setuptools]
 packages = ["pipeline", "analysis"]
