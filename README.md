@@ -130,8 +130,10 @@ Full attribution and per-component credit in
 ## Quickstart
 
 ```bash
-# 1. Install
-pip install cognitive-castle
+# 1. Install from source (PyPI package coming soon)
+git clone https://github.com/Testimonial/cognitive-castle.git
+cd cognitive-castle
+pip install -e .
 
 # 2. Build your first palace from a project directory
 castle init ~/projects/myapp --yes
@@ -147,13 +149,50 @@ castle search "auth flow" --wing myapp --room backend
 
 ---
 
-## Migration from MiniLM (pre-cutover users)
+## Retrieval modes
 
-If you built your palace before the 2026-05 cutover, it uses
-`paraphrase-multilingual-MiniLM-L12-v2` (384-dim). The current default is
-`BAAI/bge-m3` (1024-dim), which has stronger retrieval — but your old palace
-was indexed against MiniLM, so Castle will fail loudly on the next search
-with a friendly migration prompt rather than a cryptic LanceDB error.
+`castle search` runs a multi-stage retrieval pipeline. Pick the mode by trade-off with `--mode`:
+
+| Mode | Stages | Use when |
+|---|---|---|
+| `--mode fast` | Stage 3 (cross-encoder rerank) | Hooks / low-latency wake-up |
+| `--mode standard` | Stage 3 + Stage 6 (quality rerank) | Balanced |
+| `--mode boosted` | Stage 3 + Stage 5 (SOAR boost-tags) + Stage 6 | With hand-crafted rules |
+| `--mode max` (default) | Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6 | Best quality |
+
+### Stage 4 — LLM-as-judge
+Uses the LLM configured at `castle init` (Ollama, LM Studio, Anthropic, OpenAI-compat, or `claude-cli` — reuses parent Claude Code auth). Configure via `castle.yaml`:
+
+```yaml
+llm_provider: ollama       # or "anthropic" / "openai-compat" / "claude-cli"
+llm_model: llama3.1:8b
+# llm_endpoint:            # openai-compat / custom Ollama only
+# llm_api_key:             # external providers only
+```
+
+Or env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`, `CASTLE_LLM_JUDGE_TOP_N`. **Graceful fallback**: on any LLM failure, Castle returns Stage 3's ordering with a one-line stderr warning and a `JUDGE` audit line.
+
+### Stage 5 — SOAR symbolic re-ranking
+Four hand-crafted productions apply boost-tags with full audit trail. Boosts compound multiplicatively; final boost clamped to `[0.1, 10.0]`.
+
+- `recency-boost`: drawer accessed within 7 days → `score × 1.25`
+- `same-project`: drawer's wing matches `CASTLE_PROJECT` env → `score × 1.15`
+- `entity-match`: drawer's entities overlap the query's
+- `type-match`: drawer source type aligns with the query intent
+
+Every boosted hit exposes three fields (`score_pre_soar`, `soar_boost`, `soar_tags`) so every score change has a name.
+
+Prerequisites: build Soar 9.6+ with SML Python bindings from [SoarGroup/Soar](https://github.com/SoarGroup/Soar) so `python -c "import Python_sml_ClientInterface"` succeeds. Point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend the production set.
+
+### Stage 6 — Deterministic quality rerank
+Powered by the vendored [`understanding`](https://github.com/Testimonial/understanding) package: 31 standards-based metrics (IEEE 830, ISO 29148, readability formulas, cognitive load theory) applied as a two-tier threshold (medium ×1.15, high ×1.25) on top of relevance.
+
+**MCP:** the `search_memories` tool takes the same `mode` parameter — `search_memories(query="...", mode="max")`.
+
+<details>
+<summary><b>Migration from MiniLM</b> — click if you built your palace before the 2026-05 embedder cutover</summary>
+
+Palaces built before 2026-05 used `paraphrase-multilingual-MiniLM-L12-v2` (384-dim). The current default is `BAAI/bge-m3` (1024-dim). Castle fails loudly on the next search with a migration prompt rather than a cryptic LanceDB error.
 
 **Option 1 — Migrate to bge-m3 (recommended):**
 
@@ -168,147 +207,25 @@ castle reindex \
 
 **Option 2 — Keep using MiniLM (opt-out):**
 
-Set all three env vars (the third matches the pre-cutover identity
-abbreviation; without it, Castle reports an identity mismatch):
-
 ```bash
 export CASTLE_EMBEDDER_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
 export CASTLE_EMBEDDER_DIM=384
 export CASTLE_EMBEDDER_IDENTITY=paraphrase-ml-MiniLM-L12-v2
 ```
 
-Then continue using Castle normally.
-
-### Known model→dim pairs
+**Known model→dim pairs:**
 
 | `embedder_model` | `embedder_dim` |
 |---|---|
 | `BAAI/bge-m3` (default) | 1024 |
-| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (legacy default) | 384 |
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` (legacy) | 384 |
 | `BAAI/bge-large-en-v1.5` (English-only) | 1024 |
 
-### Changing embedder later
+Changing `embedder_model` / `embedder_dim` in `castle.yaml` without running `castle reindex` triggers a friendly `EmbedderIdentityMismatchError` with the exact reindex command to run — no silent corruption.
 
-If you change `embedder_model` / `embedder_dim` in `castle.yaml` (or via env
-vars) without running `castle reindex`, Castle detects the mismatch and
-prints a friendly error with the exact `castle reindex` command to run.
-There's no silent corruption. (Implementation: `EmbedderIdentityMismatchError`
-in `cognitive_castle/backends/lancedb_backend.py`.)
+**English-only reranker opt-in:** `BAAI/bge-reranker-v2-m3` (default) is multilingual. For English-only corpora, set `CASTLE_RERANKER_MODEL_GPU=mixedbread-ai/mxbai-rerank-large-v2` — outperforms on English MTEB but produces weaker results on non-English content.
 
-### Stage 3 alternative: mxbai reranker (English-only)
-
-Castle defaults to `BAAI/bge-reranker-v2-m3` for the Stage 3 cross-encoder
-rerank — strong on multilingual retrieval and well-suited to Castle's mixed-
-language defaults. For English-only corpora, `mixedbread-ai/mxbai-rerank-large-v2`
-outperforms bge-reranker-v2-m3 on English MTEB benchmarks but is **trained
-exclusively on English**; non-English queries against a palace reranked with
-mxbai produce noticeably weaker results.
-
-**Opt in (English-only corpora only):**
-
-```bash
-export CASTLE_RERANKER_MODEL_GPU=mixedbread-ai/mxbai-rerank-large-v2
-```
-
-Or set in `castle.yaml`:
-
-```yaml
-reranker_model_gpu: mixedbread-ai/mxbai-rerank-large-v2
-```
-
-**Caveat:** `bge-reranker-v2-m3` (the default) is multilingual; mxbai is not.
-If your palace contains any non-English content, keep the default. The default
-selection is conservative for cross-lingual safety, not for raw English
-benchmark numbers.
-
-### Stage 4: LLM-as-judge re-rank (`--llm-rerank`)
-
-Castle's default 3-stage pipeline (dense + FTS + KG → fusion → cross-encoder rerank) is already strong. For the last few percent on high-stakes queries — especially ones where subtle intent or multi-hop reasoning matters — you can opt into a **Stage 4 LLM-as-judge re-rank**.
-
-```bash
-castle search "what did we decide about authentication?" --llm-rerank
-```
-
-How it works:
-- Stage 3 produces a top-10 candidate list (configurable via `CASTLE_LLM_JUDGE_TOP_N`).
-- The configured LLM ranks those 10 by relevance, returns a preferred ordering.
-- Castle reorders and returns top-N.
-
-**Cost:** 1–2s extra latency per search.
-
-**LLM provider:** uses the LLM configured at `castle init` (see `castle init --help` for `--llm-provider` / `--llm-model` / etc.). Configure via env vars or `castle.yaml`:
-
-```yaml
-llm_provider: ollama       # or "anthropic" / "openai-compat"
-llm_model: llama3.1:8b      # any model your provider supports
-# llm_endpoint:             # only needed for openai-compat / custom Ollama
-# llm_api_key:              # only needed for anthropic / openai-compat
-```
-
-Or via env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`.
-
-**MCP:** Claude Code and other MCP clients can pass `llm_rerank: true` to the `search_memories` (or `castle_search`) tool.
-
-**Privacy:** If you've configured a BYOK external provider (Anthropic, cloud OpenAI-compat, etc.), candidate snippets DO leave your machine. Castle prints a privacy warning at `castle init` for external providers — per-search warnings would be noise. If you want strict local-only operation, stick with Ollama / LM Studio / vLLM on localhost.
-
-**Graceful fallback:** if the LLM is unreachable (Ollama not running, network timeout, malformed JSON), Castle prints a one-line stderr warning and returns Stage 3's ordering. Search ALWAYS returns results.
-
-### Experimental: SOAR symbolic re-ranking (`--soar-boost`)
-
-SOAR is a symbolic cognitive architecture from Carnegie Mellon (production rules + working memory + chunking-based learning). Castle uses it as an **optional, opt-in, post-pipeline boost-tag layer**: after Stage 3 (cross-encoder rerank) and optional Stage 4 (LLM-judge), SOAR productions can re-weight hits using hand-crafted rules.
-
-This is research-grade — default users should ignore. Real value lands in #4c when chunking is wired up so SOAR can learn rules from impasses over time.
-
-**Prerequisites:**
-1. Build Soar 9.6+ from source with SML Python bindings: https://github.com/SoarGroup/Soar
-2. Ensure `python -c "import Python_sml_ClientInterface"` succeeds in your environment
-3. Set `CASTLE_SOAR_ENABLED=1` (kill switch — must be explicitly enabled)
-
-**Usage:**
-```bash
-CASTLE_SOAR_ENABLED=1 castle search "your query" --soar-boost
-```
-
-The two initial production rules (in `cognitive_castle/rules/castle-boost.soar`):
-- `recency-boost`: drawer accessed within 7 days → `score × 1.25`
-- `same-project`: drawer's wing matches `CASTLE_PROJECT` env → `score × 1.15`
-
-These compound multiplicatively. Final boost is clamped to `[0.1, 10.0]`.
-
-**Audit trail:** every boosted hit gains 3 new fields so every score change has a name (the differentiating value over neural rerankers):
-
-```json
-{
-  "score": 1.4375,
-  "score_pre_soar": 1.0,
-  "soar_boost": 1.4375,
-  "soar_tags": ["recency-boost", "same-project"]
-}
-```
-
-**Kill switch:** if you set `CASTLE_SOAR_ENABLED=0` but pass `--soar-boost`, Castle exits with code 2 + a clear stderr message rather than silently degrading.
-
-**MCP:** Claude Code and other MCP clients can pass `soar_boost: true` to the `castle_search` tool. Same kill-switch rule applies.
-
-**Custom rules:** point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend or replace the production set.
-
-### Composable Stage 4 ↔ Stage 5 order (`--soar-first`)
-
-By default, when both `--llm-rerank` and `--soar-boost` are on, the pipeline
-runs Stage 4 (judge) first then Stage 5 (SOAR) — the LLM picks the best
-candidates and SOAR applies final boost adjustments to the chosen top-N.
-
-Use `--soar-first` to flip the order: SOAR runs first (re-ranking the full
-~20 cross-encoder candidates by boost-tag rules), then the judge picks the
-top-N from SOAR's preferred order. Useful when you want SOAR's hand-crafted
-rules to shape what the LLM considers.
-
-```bash
-castle search "what did we decide?" --llm-rerank --soar-boost --soar-first
-```
-
-`--soar-first` requires both `--llm-rerank` AND `--soar-boost` to be on; using
-it alone or with only one companion flag fails loudly with a clear message.
+</details>
 
 ---
 
@@ -589,7 +506,7 @@ Original benchmark methodology and the "wings/rooms/drawers" naming
 preserved with credit to the upstream authors.
 
 <!-- Link Definitions -->
-[version-shield]: https://img.shields.io/badge/version-3.3.3-4dc9f6?style=flat-square&labelColor=0a0e14
+[version-shield]: https://img.shields.io/badge/version-3.4.0-4dc9f6?style=flat-square&labelColor=0a0e14
 [release-link]: https://github.com/Testimonial/cognitive-castle/releases
 [python-shield]: https://img.shields.io/badge/python-3.9+-7dd8f8?style=flat-square&labelColor=0a0e14&logo=python&logoColor=7dd8f8
 [python-link]: https://www.python.org/
