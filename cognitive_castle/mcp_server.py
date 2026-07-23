@@ -11,6 +11,7 @@ Tools (read):
   castle_get_taxonomy    — full wing → room → count tree
   castle_search          — semantic search, optional wing/room filter
   castle_check_duplicate — check if content already exists before filing
+  castle_info_score      — nn_novelty score for arbitrary text (v3.4.0 research)
 
 Tools (write):
   castle_add_drawer      — file verbatim content into a wing/room
@@ -513,6 +514,29 @@ def tool_check_duplicate(content: str, threshold: float = 0.9):
 def tool_get_aaak_spec():
     """Return the AAAK dialect specification."""
     return {"aaak_spec": AAAK_SPEC}
+
+
+def tool_info_score(text: str, wing: str = None, top_k: int = 5):
+    """Score how novel `text` is against the palace via nn_novelty.
+
+    Practical use of the v3.4.0 research finding: on a 65k-drawer palace,
+    rho(nn_novelty, LLE_recon_residual) = 0.982 — so this cheap O(1)
+    score is a strong proxy for information content.
+
+    Returns novelty in [0, 2] plus a coarse band (`low` < 0.10 / `medium`
+    < 0.50 / `high` >= 0.50) calibrated against the empirical palace
+    distribution.
+    """
+    from .info_score import score_novelty
+
+    try:
+        result = score_novelty(text=text, top_k=top_k, wing=wing)
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception:
+        logger.exception("info_score failed")
+        return {"error": "info-score failed"}
+    return result.as_dict()
 
 
 def tool_traverse_graph(start_room: str, max_hops: int = 2):
@@ -1505,6 +1529,34 @@ TOOLS = {
             "required": ["content"],
         },
         "handler": tool_check_duplicate,
+    },
+    "castle_info_score": {
+        "description": (
+            "Score how novel a piece of text is against the palace using nn_novelty "
+            "(Estimator A from the v3.4.0 info-theory research). Returns novelty in "
+            "[0, 2] plus a low/medium/high band and the top-k closest drawers. "
+            "Cheap enough to call per-drawer; rho(nn_novelty, LLE_residual) = 0.982 "
+            "on the full palace so this is a strong information-content proxy."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string",
+                    "description": "Text to score (e.g. a candidate drawer before filing)",
+                },
+                "wing": {
+                    "type": "string",
+                    "description": "Optional wing filter — restrict search to same wing",
+                },
+                "top_k": {
+                    "type": "integer",
+                    "description": "How many neighbours to return (default 5)",
+                },
+            },
+            "required": ["text"],
+        },
+        "handler": tool_info_score,
     },
     "castle_add_drawer": {
         "description": "File verbatim content into the palace. Checks for duplicates first.",
