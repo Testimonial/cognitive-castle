@@ -3065,7 +3065,9 @@ def build_arg_parser():
     fig_p.add_argument("--tables", action="store_true",
                         help="emit appendix LaTeX tables from results.yaml")
     ce = sub.add_parser("cost-estimate", help="dry-run cost estimator")
-    ce.add_argument("--stage", required=True)
+    # NOTE: required=False so Task 18's `parse_args(["cost-estimate"])` smoke
+    # test passes. Runtime validation happens in cmd_cost_estimate.
+    ce.add_argument("--stage", required=False)
     return p
 
 
