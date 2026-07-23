@@ -394,7 +394,7 @@ Reproducibility manifest:
 ## Acknowledgements
 
 **Upstream** — [**MemPalace**](https://github.com/MemPalace/mempalace) by
-**@milla-jovovich** — foundational design (see the [Inspired by MemPalace](#-inspired-by-mempalace)
+**(https://github.com/milla-jovovich)** — foundational design (see the [Inspired by MemPalace](#-inspired-by-mempalace)
 box at the top for the full attribution).
 
 **Castle's integration and distribution layer:**
