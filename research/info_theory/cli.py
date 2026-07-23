@@ -92,6 +92,11 @@ def cmd_snapshot():
 
 
 def cmd_pilot():
+    data_file = CACHE_DIR_DEFAULT / "longmemeval_data.json"
+    if not data_file.exists():
+        print(f"[pilot] Missing LongMemEval data at {data_file}")
+        print("[pilot] Download from https://github.com/xiaowu0162/LongMemEval and place there")
+        return
     print("[pilot] Running 5% LME sample to tighten corpus-size estimate...")
     # Implementation: load 5% of LME, run through miner, count drawers
     import json
@@ -100,7 +105,7 @@ def cmd_pilot():
     from benchmarks.longmemeval_bench import load_questions
     from pipeline.load_longmemeval import load_longmemeval
 
-    all_qs = load_questions()
+    all_qs = load_questions(data_file)
     sample = all_qs[: len(all_qs) // 20]
     # Save sample to tmp + run load
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:

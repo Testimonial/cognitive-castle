@@ -38,3 +38,13 @@ def test_status_reads_cache_state(tmp_path):
     from cli import cmd_status
 
     cmd_status(cache_dir=tmp_path)
+
+
+def test_cmd_pilot_gracefully_handles_missing_data(tmp_path, capsys, monkeypatch):
+    """cmd_pilot must print + return (not raise) when LME data is absent."""
+    import cli
+
+    monkeypatch.setattr(cli, "CACHE_DIR_DEFAULT", tmp_path)
+    cli.cmd_pilot()  # should not raise
+    captured = capsys.readouterr()
+    assert "Missing" in captured.out
