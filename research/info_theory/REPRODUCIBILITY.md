@@ -57,3 +57,17 @@ Before first commit of `results.yaml`:
 - Same-machine same-seed runs: ±1e-6 on fitted parameters
 - Cross-machine runs: ±1e-3 on fitted parameters
 - H3 R@5 deltas: ±0.5 percentage points absolute
+
+## Pre-paper-release manual gate
+
+Before submitting the paper to arXiv, complete this checklist:
+
+- [ ] Tier 4 full reproducibility check on both corpora (Machine A)
+- [ ] Tier 4 full reproducibility check on Machine B (fresh checkout)
+- [ ] All numbers in `paper/main.tex` and `paper/appendix.tex` cross-reference `paper/results.yaml`
+- [ ] `pdflatex main.tex` produces a clean PDF (no missing-ref warnings)
+- [ ] `reasoning_spotcheck` excerpts in appendix have been user-reviewed (privacy)
+- [ ] arXiv categories chosen (default: cs.IR + cs.AI)
+- [ ] Author + affiliation correct
+- [ ] BibTeX entries cite MemPalace + understanding repos with correct URLs
+- [ ] Co-authorship policy decided per venue (Claude as acknowledgment or byline)
