@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
+
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 _FENCE = re.compile(r"^```(?:json)?\n?|\n?```$", re.MULTILINE)
 
@@ -54,3 +58,64 @@ def llm_surprise_one(priors: list, target: dict, provider) -> dict:
         "llm_surprise_completion_tokens": getattr(resp, "completion_tokens", None),
         "llm_surprise_cost_usd": (resp.raw or {}).get("total_cost_usd"),
     }
+
+
+class CostCapExceeded(Exception):
+    """Raised when cumulative cost would exceed --max-cost."""
+
+
+def process_subsample(
+    targets: list,
+    priors_lookup: dict,
+    provider,
+    partials_dir: Path,
+    max_cost: float = 200.0,
+    merge_every: int = 50,
+) -> None:
+    """Resumable C-stage processing.
+
+    - One Parquet per completed drawer in partials_dir/{drawer_id}.parquet
+    - Skip targets whose partial already exists
+    - Track cumulative total_cost_usd; raise CostCapExceeded before exceeding max_cost
+    - Print last (drawer_id, score, reasoning) every merge_every calls
+    """
+    partials_dir = Path(partials_dir)
+    partials_dir.mkdir(parents=True, exist_ok=True)
+    done_ids = {f.stem for f in partials_dir.glob("*.parquet")}
+    cumulative = 0.0
+
+    for i, target in enumerate(targets):
+        if target["drawer_id"] in done_ids:
+            continue
+        priors = priors_lookup[target["drawer_id"]]
+        result = llm_surprise_one(priors, target, provider)
+        cost = result.get("llm_surprise_cost_usd") or 0.0
+        if cumulative + cost > max_cost:
+            raise CostCapExceeded(
+                f"would exceed max_cost={max_cost} (cumulative={cumulative + cost:.4f})"
+            )
+        cumulative += cost
+        pq.write_table(
+            pa.table({k: [v] for k, v in result.items()}),
+            partials_dir / f"{target['drawer_id']}.parquet",
+        )
+        if (i + 1) % merge_every == 0:
+            print(
+                f"[{i + 1}/{len(targets)}] {target['drawer_id']} "
+                f"score={10 - result['llm_surprise']} cumulative=${cumulative:.2f}"
+            )
+            print(f"  reasoning: {result['llm_surprise_reasoning_spotcheck'][:120]}")
+
+
+def merge_partials(partials_dir: Path, output: Path) -> None:
+    """Atomic merge: write to .tmp then rename."""
+    partials_dir = Path(partials_dir)
+    output = Path(output)
+    files = sorted(partials_dir.glob("*.parquet"))
+    if not files:
+        return
+    tables = [pq.read_table(f) for f in files]
+    merged = pa.concat_tables(tables, promote_options="default")
+    tmp = output.with_suffix(".tmp")
+    pq.write_table(merged, tmp)
+    tmp.rename(output)

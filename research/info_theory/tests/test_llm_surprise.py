@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 
 from pipeline.llm_surprise import (
@@ -105,3 +107,120 @@ def test_llm_surprise_one_tolerates_none_raw():
     out = llm_surprise_one(priors, target, provider=fake_provider)
     assert out["llm_surprise"] == 0.0  # 10 - 10
     assert out["llm_surprise_cost_usd"] is None
+
+
+# --- Task 11: resumable batch + cost cap ---
+
+
+def _fake_provider_with_cost(cost_per_call=0.05):
+    p = MagicMock()
+
+    def classify(system, user, json_mode=True):
+        r = MagicMock()
+        r.text = '{"score": 5, "reasoning": ""}'
+        r.raw = {"total_cost_usd": cost_per_call}
+        r.input_tokens = 1000
+        r.completion_tokens = 50
+        return r
+
+    p.classify.side_effect = classify
+    return p
+
+
+def test_process_subsample_writes_partials(tmp_path):
+    from pipeline.llm_surprise import process_subsample
+
+    targets = [{"drawer_id": f"d{i}", "text": "t"} for i in range(3)]
+    priors_lookup = {f"d{i}": [{"text": "p"}] for i in range(3)}
+    partials_dir = tmp_path / "partials"
+    process_subsample(
+        targets,
+        priors_lookup,
+        provider=_fake_provider_with_cost(),
+        partials_dir=partials_dir,
+        max_cost=1.0,
+    )
+    files = list(partials_dir.glob("*.parquet"))
+    assert len(files) == 3
+
+
+def test_process_subsample_skips_done_drawers(tmp_path):
+    from pipeline.llm_surprise import process_subsample
+
+    partials_dir = tmp_path / "partials"
+    partials_dir.mkdir()
+    # Pre-create partial for d0 so it's skipped
+    pq.write_table(
+        pa.table({"drawer_id": ["d0"], "llm_surprise": [3.0]}),
+        partials_dir / "d0.parquet",
+    )
+    provider = _fake_provider_with_cost()
+    targets = [{"drawer_id": f"d{i}", "text": "t"} for i in range(3)]
+    priors_lookup = {f"d{i}": [{"text": "p"}] for i in range(3)}
+    process_subsample(
+        targets,
+        priors_lookup,
+        provider=provider,
+        partials_dir=partials_dir,
+        max_cost=1.0,
+    )
+    # Only d1, d2 should be called
+    assert provider.classify.call_count == 2
+
+
+def test_process_subsample_aborts_on_cost_cap(tmp_path):
+    from pipeline.llm_surprise import CostCapExceeded, process_subsample
+
+    partials_dir = tmp_path / "partials"
+    targets = [{"drawer_id": f"d{i}", "text": "t"} for i in range(10)]
+    priors_lookup = {f"d{i}": [{"text": "p"}] for i in range(10)}
+    # Each call costs $0.05; cap at $0.12 → aborts after 2 calls
+    provider = _fake_provider_with_cost(cost_per_call=0.05)
+    with pytest.raises(CostCapExceeded):
+        process_subsample(
+            targets,
+            priors_lookup,
+            provider=provider,
+            partials_dir=partials_dir,
+            max_cost=0.12,
+        )
+    # Verify at least one partial was written before the abort
+    assert len(list(partials_dir.glob("*.parquet"))) >= 1
+
+
+def test_merge_partials_roundtrip(tmp_path):
+    # Extra coverage: verify merge_partials concatenates all partials in
+    # sorted-drawer-id order, atomically (no lingering .tmp), and handles
+    # the empty-dir case as a no-op. Merge is the natural companion to
+    # process_subsample and would otherwise be untested.
+    from pipeline.llm_surprise import merge_partials
+
+    partials_dir = tmp_path / "partials"
+    partials_dir.mkdir()
+    # Write out-of-order to confirm merge sorts by filename
+    for did, score in [("d2", 2.0), ("d0", 0.0), ("d1", 1.0)]:
+        pq.write_table(
+            pa.table({"drawer_id": [did], "llm_surprise": [score]}),
+            partials_dir / f"{did}.parquet",
+        )
+    output = tmp_path / "merged.parquet"
+    merge_partials(partials_dir, output)
+    assert output.exists()
+    # No leftover .tmp file after atomic rename
+    assert not output.with_suffix(".tmp").exists()
+    table = pq.read_table(output)
+    assert table.column("drawer_id").to_pylist() == ["d0", "d1", "d2"]
+    assert table.column("llm_surprise").to_pylist() == [0.0, 1.0, 2.0]
+
+
+def test_merge_partials_empty_dir_is_noop(tmp_path):
+    # Extra coverage: merge_partials on an empty dir must not create the
+    # output file (guard against a regression that would emit an empty
+    # Parquet with no schema).
+    from pipeline.llm_surprise import merge_partials
+
+    partials_dir = tmp_path / "partials"
+    partials_dir.mkdir()
+    output = tmp_path / "merged.parquet"
+    merge_partials(partials_dir, output)
+    assert not output.exists()
