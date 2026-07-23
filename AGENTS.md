@@ -1,4 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
+
+_This file mirrors [`CLAUDE.md`](CLAUDE.md) for non-Claude AI agents (Codex, Gemini CLI, generic MCP clients) that look for an `AGENTS.md` convention. Keep the two in sync when either changes._
 
 ## The Mission
 
