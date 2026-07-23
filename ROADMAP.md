@@ -16,7 +16,7 @@ Full detail: [CHANGELOG.md](CHANGELOG.md#340--2026-07-23).
 
 ## Next up (unversioned; ordered by likelihood)
 
-- **PyPI publication** — `pip install cognitive-castle` currently 404s. Publishing v3.4.0 to PyPI is the single biggest adoption barrier to lift. No blockers, just needs a `pypa/gh-action-pypi-publish` step in CI.
+- **PyPI publication** — `pip install cognitive-castle` currently 404s. The `Publish to PyPI` GitHub Actions workflow is now committed (see [docs/RELEASING.md](docs/RELEASING.md)); it will run and succeed once Trusted Publishing is configured at pypi.org (one-time human step: add the trusted-publisher pointing at `Testimonial/cognitive-castle` + `publish.yml` + `pypi` environment, then re-tag or rerun the workflow).
 - **Estimator C (`llm_surprise`) full-palace numbers** — 925-drawer stratified subsample running via `claude-cli`. Landing this closes the paper's headline `A↔C` and `B↔C` correlation claims and unblocks a v3.5.0 release with the completed research artifact.
 - **H3 downstream R@5 evaluation** — validates the paper's applied claim: do info-scores predict retrieval utility? Runs on LongMemEval; deferred to future work per the current preprint's Limitations section.
 - **Cross-user validation** — the v3.4.0 research is n=1 (one palace). Recruiting a second, structurally-different palace for reproducibility is the highest-value single validation step.
