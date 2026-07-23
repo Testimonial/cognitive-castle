@@ -3776,7 +3776,9 @@ def test_e2e_smoke_pipeline(mini_corpus, monkeypatch, tmp_path):
     nn_out = nn(table, group_by="wing")
     assert "nn_novelty" in nn_out.column_names
     nn_values = [v for v in nn_out.column("nn_novelty").to_pylist() if v is not None]
-    assert all(0 <= v <= 1.0001 for v in nn_values)
+    # nn_novelty = 1 - max_cosine(target, priors); cosine ∈ [-1, 1] so
+    # nn_novelty ∈ [0, 2] — bound is NOT [0,1] for un-normalized vectors.
+    assert all(0 <= v <= 2.0001 for v in nn_values)
 
     rr_out = rr(table, k_target=20, k_floor=5, lam=1e-3, group_by="wing")
     assert "recon_residual" in rr_out.column_names
