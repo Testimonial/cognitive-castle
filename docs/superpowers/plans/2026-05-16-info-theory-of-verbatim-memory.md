@@ -1969,11 +1969,16 @@ def allocate_subsample(
     alloc = {k: max(floor, round(n_total * v / total_size))
              for k, v in strata_sizes.items()}
 
-    # Normalize to n_total via random rounding tiebreaks
-    diff = n_total - sum(alloc.values())
-    if diff != 0:
+    # Normalize to n_total via random rounding tiebreaks.
+    # Loop until diff resolves or no progress can be made: each pass reshuffles
+    # keys and applies ±1 adjustments, skipping strata that would drop below floor.
+    while True:
+        diff = n_total - sum(alloc.values())
+        if diff == 0:
+            break
         keys = list(alloc.keys())
         rng.shuffle(keys)
+        progress = False
         for k in keys:
             if diff == 0:
                 break
@@ -1982,9 +1987,14 @@ def allocate_subsample(
             if new_v >= floor:
                 alloc[k] = new_v
                 diff -= step
+                progress = True
+        if not progress:
+            break
 
     return alloc
 ```
+
+**Bug fix (folded from Task 12 implementation):** the plan's original single-pass loop only visits each key once, but tests like `test_floor_raises_small_strata` (2 strata, diff = -15) require **multiple** ±1 adjustments on the same key (e.g., 15 decrements on `big`). Changed to a `while True` loop with a `progress` guard that terminates when no adjustment succeeds — prevents infinite loops when all strata are at floor.
 
 - [ ] **Step 4: Run tests, verify pass**
 
