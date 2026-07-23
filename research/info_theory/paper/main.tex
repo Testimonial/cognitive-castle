@@ -1,0 +1,48 @@
+% paper/main.tex
+\documentclass{article}
+\usepackage{amsmath, amssymb, graphicx, hyperref, booktabs}
+
+\title{Measuring Information Content in Verbatim AI Memory:
+  Methodology, Source-Type Heterogeneity, and a Downstream Utility Test}
+\author{Ladislav Bihari}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+% TODO once results.yaml is populated
+\end{abstract}
+
+\section{Introduction}
+% Frames as methodology paper; cites MemPalace + Castle as data
+% infrastructure; motivates source-type analysis as a novel axis.
+
+\section{Related Work}
+% mem0, Zep, Letta, MemPalace, MemGPT, LongMemEval, info theory
+% (Shannon, MDL), locally linear embedding.
+
+\section{Methods}
+% Estimators A/B/C, corpora + stratification, H1/H2/H3 procedures,
+% statistical correction.
+
+\section{Results}
+% H1 source-type violin plot (headline); H2 per-cell fits; A/B/C
+% correlations; H3 downstream R@5 deltas.
+
+\section{Discussion}
+% (a) Heterogeneity implications; (b) Limits of protocol-as-behavior-
+% driver (the ~10-deliberate-MCP-filings observation); (c) verbatim-
+% vs-lossy info-theoretically; (d) downstream-validation
+% interpretation; (e) source-aware smart-mining implication for
+% Phase 2.
+
+\section{Limitations}
+% n=1 user palace; bge-m3 dependency; LME stratification asymmetry;
+% LLM-rating-not-log-prob; within-file correlation.
+
+\section{Conclusion}
+% Phase 2 pointer.
+
+\input{appendix}
+
+\end{document}
