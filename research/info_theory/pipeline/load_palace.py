@@ -27,6 +27,12 @@ def load_palace(snapshot_dir: Path) -> pa.Table:
     db = lancedb.connect(str(snapshot_dir))
     table = db.open_table("castle_drawers").to_arrow()
 
+    # Rename raw LanceDB ``id`` column to ``drawer_id`` for cross-loader parity
+    # (load_longmemeval also exposes ``drawer_id``).
+    if "id" in table.column_names:
+        new_names = ["drawer_id" if n == "id" else n for n in table.column_names]
+        table = table.rename_columns(new_names)
+
     filed_at_col, added_by_col, kept_indices = [], [], []
     excluded = 0
     for i, raw in enumerate(table.column("metadata_json").to_pylist()):
@@ -39,9 +45,7 @@ def load_palace(snapshot_dir: Path) -> pa.Table:
         kept_indices.append(i)
 
     if excluded:
-        logger.warning(
-            f"Excluded {excluded} drawers missing filed_at (of {table.num_rows})"
-        )
+        logger.warning(f"Excluded {excluded} drawers missing filed_at (of {table.num_rows})")
 
     kept = table.take(pa.array(kept_indices))
     kept = kept.append_column("filed_at", pa.array(filed_at_col))

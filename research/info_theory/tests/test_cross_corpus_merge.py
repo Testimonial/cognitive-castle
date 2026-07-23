@@ -6,13 +6,9 @@ produce schemas that can be aligned to a common column set and concatenated
 via ``pa.concat_tables(promote_options="default")`` without silent
 type-coercion errors.
 
-Adaptations to the plan:
-- ``load_palace()`` currently returns the raw LanceDB column ``id`` rather
-  than ``drawer_id``. The test renames it here so the merged table exposes
-  the drawer identifier under a single, consistent name.
-- Palace lacks LME-specific columns (``session_id``, ``question_id``,
-  ``question_type``); those are appended as null string columns before
-  projection.
+Palace lacks LME-specific columns (``session_id``, ``question_id``,
+``question_type``); those are appended as null string columns before
+projection.
 """
 
 from pathlib import Path
@@ -40,12 +36,6 @@ def test_merge_handles_nullable_castle_fields():
         "question_id",
         "question_type",
     ]
-
-    # Palace uses LanceDB's ``id`` column; rename to ``drawer_id`` for parity.
-    if "drawer_id" not in palace.column_names and "id" in palace.column_names:
-        palace = palace.rename_columns(
-            ["drawer_id" if n == "id" else n for n in palace.column_names]
-        )
 
     # Pad palace with LME-specific columns (null-valued) so both sides share a schema.
     for c in ("session_id", "question_id", "question_type"):

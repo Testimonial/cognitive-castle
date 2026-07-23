@@ -29,7 +29,7 @@ def test_load_palace_includes_chunk_index():
 
 
 def test_parse_metadata_json_handles_missing_fields():
-    assert parse_metadata_json('{}') == {}
+    assert parse_metadata_json("{}") == {}
     assert parse_metadata_json(None) == {}
     assert parse_metadata_json('{"filed_at":"x"}') == {"filed_at": "x"}
 
@@ -38,23 +38,53 @@ def test_load_palace_excludes_drawers_with_missing_filed_at(tmp_path):
     """Schema verification step: drawers missing filed_at are excluded
     and logged. Use a fixture with one bad row."""
     import lancedb
+
     db = lancedb.connect(str(tmp_path))
     rows = [
-        {"id": "good_1", "text": "x", "vector": [0.1]*1024,
-         "metadata_json": '{"filed_at":"2026-01-01","added_by":"miner"}',
-         "wing": "w", "room": "r", "source_file": "/tmp/a",
-         "chunk_index": 0, "decay_score": 1.0},
-        {"id": "bad",    "text": "y", "vector": [0.1]*1024,
-         "metadata_json": '{}',
-         "wing": "w", "room": "r", "source_file": "/tmp/a",
-         "chunk_index": 1, "decay_score": 1.0},
-        {"id": "good_2", "text": "z", "vector": [0.1]*1024,
-         "metadata_json": '{"filed_at":"2026-01-02","added_by":"miner"}',
-         "wing": "w", "room": "r", "source_file": "/tmp/b",
-         "chunk_index": 0, "decay_score": 1.0},
+        {
+            "id": "good_1",
+            "text": "x",
+            "vector": [0.1] * 1024,
+            "metadata_json": '{"filed_at":"2026-01-01","added_by":"miner"}',
+            "wing": "w",
+            "room": "r",
+            "source_file": "/tmp/a",
+            "chunk_index": 0,
+            "decay_score": 1.0,
+        },
+        {
+            "id": "bad",
+            "text": "y",
+            "vector": [0.1] * 1024,
+            "metadata_json": "{}",
+            "wing": "w",
+            "room": "r",
+            "source_file": "/tmp/a",
+            "chunk_index": 1,
+            "decay_score": 1.0,
+        },
+        {
+            "id": "good_2",
+            "text": "z",
+            "vector": [0.1] * 1024,
+            "metadata_json": '{"filed_at":"2026-01-02","added_by":"miner"}',
+            "wing": "w",
+            "room": "r",
+            "source_file": "/tmp/b",
+            "chunk_index": 0,
+            "decay_score": 1.0,
+        },
     ]
     db.create_table("castle_drawers", data=rows, exist_ok=True)
     table = load_palace(tmp_path)
-    ids = table.column("id").to_pylist()
+    ids = table.column("drawer_id").to_pylist()
     assert "bad" not in ids
     assert "good_1" in ids and "good_2" in ids
+
+
+def test_load_palace_renames_id_to_drawer_id():
+    """load_palace exposes ``drawer_id`` (LanceDB's raw ``id`` column is
+    renamed) so downstream loaders see a consistent identifier name."""
+    table = load_palace(FIXTURE)
+    assert "drawer_id" in table.column_names
+    assert "id" not in table.column_names

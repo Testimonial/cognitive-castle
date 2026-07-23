@@ -76,7 +76,7 @@ def cmd_snapshot():
     rows = [
         {"drawer_id": d, "filed_at": f, "chunk_index": c}
         for d, f, c in zip(
-            table.column("id").to_pylist(),
+            table.column("drawer_id").to_pylist(),
             table.column("filed_at").to_pylist(),
             table.column("chunk_index").to_pylist(),
         )
