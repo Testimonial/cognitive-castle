@@ -2343,7 +2343,8 @@ def test_pearson_known_correlation():
     x = rng.normal(0, 1, n)
     y = 0.7 * x + 0.3 * rng.normal(0, 1, n)
     rho, _, _ = pearson_with_ci(x, y, n_resamples=100, seed=42)
-    assert 0.5 < rho < 0.9
+    # Theoretical rho = 0.7/sqrt(0.7² + 0.3²) ≈ 0.919; observed ≈ 0.915.
+    assert 0.5 < rho < 0.95
 ```
 
 - [ ] **Step 2: Run tests, verify fail**
