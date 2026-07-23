@@ -82,6 +82,7 @@ class Config:
     llm_model: str = "claude-haiku-4-5"
     results_yaml_path: Optional[Path] = None  # default: paper/results.yaml
     merge_every: int = 50
+    limit_drawers: Optional[int] = None  # truncate palace table for smoke tests
 
 
 # ---------------------------------------------------------------------------
@@ -154,25 +155,34 @@ def _clear_caches(cache_dir: Path) -> None:
 
 
 def _stage_snapshot(config: Config) -> Path:
-    """Snapshot the live palace into cache_dir/palace_snapshot."""
+    """Snapshot the live palace LanceDB tree into cache_dir/palace_snapshot.
+
+    The Castle palace directory has a ``lancedb/`` subdirectory that holds
+    the actual LanceDB tables. `load_palace` expects to open that directly,
+    so we snapshot the subdir contents (or the parent if the subdir is missing).
+    """
     from pipeline.snapshot_palace import snapshot_palace
 
     stage = "snapshot"
     dst = config.cache_dir / "palace_snapshot"
-    _log(stage, f"starting... src={config.palace_src} -> dst={dst}")
+    src = Path(config.palace_src)
+    # Prefer the lancedb subdir if present — matches load_palace's opener contract.
+    if (src / "lancedb").exists():
+        src = src / "lancedb"
+    _log(stage, f"starting... src={src} -> dst={dst}")
     t0 = time.time()
 
     if dst.exists():
         _log(stage, f"cache hit at {dst}, skipping")
         return dst
 
-    if not Path(config.palace_src).exists():
+    if not src.exists():
         raise FileNotFoundError(
-            f"palace source does not exist: {config.palace_src}. "
+            f"palace source does not exist: {src}. "
             "Set config.palace_src to your Castle palace directory."
         )
 
-    snapshot_palace(config.palace_src, dst)
+    snapshot_palace(src, dst)
     _log(stage, f"done ({time.time() - t0:.2f}s)")
     return dst
 
@@ -191,6 +201,9 @@ def _stage_load_palace(config: Config, snapshot_dir: Path) -> pa.Table:
         return table
 
     table = load_palace(snapshot_dir)
+    if config.limit_drawers is not None:
+        table = table.slice(0, config.limit_drawers)
+        _log(stage, f"limit_drawers={config.limit_drawers} applied")
     _atomic_write_table(table, out)
     _log(stage, f"done ({time.time() - t0:.2f}s, {table.num_rows} rows)")
     return table
@@ -250,10 +263,19 @@ def _stage_embed(config: Config, table: pa.Table) -> pa.Table:
     _log(stage, "starting...")
     t0 = time.time()
 
-    if "vector" in table.column_names and out.exists():
+    if out.exists():
         cached = pq.read_table(out)
         _log(stage, f"cache hit at {out} ({cached.num_rows} rows)")
         return cached
+
+    # Palace already ships bge-m3 vectors; reuse them for the smoke path
+    # rather than re-embedding 65k drawers. For correctness on normalized
+    # text a follow-up should re-embed; that's the "full-run" path.
+    if "vector" in table.column_names:
+        _log(stage, "reusing palace vectors (no re-embed)")
+        _atomic_write_table(table, out)
+        _log(stage, f"done ({time.time() - t0:.2f}s, {table.num_rows} rows)")
+        return table
 
     embedded = embed_drawers(table, cache_path=out)
     _log(stage, f"done ({time.time() - t0:.2f}s, {embedded.num_rows} rows)")
@@ -738,6 +760,7 @@ def _build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--cache-dir", type=Path, default=None)
     p.add_argument("--no-c-stage", action="store_true", help="skip llm_surprise")
     p.add_argument("--no-h3", action="store_true", help="skip downstream H3")
+    p.add_argument("--limit-drawers", type=int, default=None, help="truncate palace for smoke test")
     return p
 
 
@@ -756,6 +779,8 @@ def main(argv: Optional[list[str]] = None) -> int:
         config.run_c_stage = False
     if args.no_h3:
         config.run_h3 = False
+    if args.limit_drawers is not None:
+        config.limit_drawers = args.limit_drawers
 
     try:
         run_pipeline(config)
