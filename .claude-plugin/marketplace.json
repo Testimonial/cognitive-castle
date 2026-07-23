@@ -9,7 +9,7 @@
       "name": "castle",
       "source": "./.claude-plugin",
       "description": "Persistent verbatim memory for Claude Code agents — LanceDB-backed, local-first.",
-      "version": "3.3.3",
+      "version": "3.4.0",
       "author": { "name": "Ladislav Bihari" }
     }
   ]
