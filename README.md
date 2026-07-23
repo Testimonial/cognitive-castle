@@ -106,6 +106,27 @@ Your AI forgets between sessions. Cognitive Castle stores every conversation and
 
 ---
 
+## 💡 Inspired by MemPalace
+
+Cognitive Castle is a fork and continuation of
+[**MemPalace**](https://github.com/MemPalace/mempalace) by
+**Milla Jovovich**. Every foundational idea — verbatim-only storage, the
+AAAK compressed dialect, the wings/rooms/drawers/halls/tunnels palace
+architecture, the temporal knowledge graph, the local-first / zero-external-
+API principle, and the `PALACE_PROTOCOL` behavioural contract — originates
+upstream.
+
+Castle is the integration and distribution layer on top of that design:
+LanceDB backend, 3-stage retrieval pipeline, SOAR symbolic re-ranking,
+Claude Code plugin, MCP `initialize.instructions` injection, `claude-cli`
+provider, and a deterministic text-quality re-rank powered by the vendored
+[`understanding`](https://github.com/Testimonial/understanding) package.
+
+Full attribution and per-component credit in
+[Acknowledgements](#acknowledgements).
+
+---
+
 ## Quickstart
 
 ```bash
@@ -497,43 +518,72 @@ MIT — see [LICENSE](LICENSE).
 
 ---
 
+## Research & Mathematics
+
+Castle ships with a research subproject at
+[`research/info_theory/`](research/info_theory/) — a first-of-its-kind
+information-theoretic study of verbatim personal memory.
+
+**Paper:** *Measuring Information Content in Verbatim AI Memory:
+Methodology, Source-Type Heterogeneity, and a Downstream Utility Test*
+(preprint in progress —
+[`research/info_theory/paper/`](research/info_theory/paper/); arXiv
+link will appear here on release).
+
+Three drop-in estimators of drawer information content:
+
+1. **A — `nn_novelty`** — $A(d) = 1 - \max_{d' \in \mathrm{priors}(d)}
+   \cos(v_d, v_{d'})$. $O(|\mathrm{priors}|)$ per drawer.
+2. **B — `recon_residual`** — Roweis–Saul LLE with Tikhonov
+   regularisation: solve $\mathbf{w} = G_{\mathrm{reg}}^{-1} \mathbf{1}
+   / (\mathbf{1}^\top G_{\mathrm{reg}}^{-1} \mathbf{1})$ where
+   $G_{\mathrm{reg}} = G + \lambda\,\mathrm{tr}(G)\,I$, then
+   $B(d) = \|v_d - \mathbf{w}^\top P\|_2$.
+3. **C — `llm_surprise`** — LLM-as-judge rates predictability of a
+   drawer given 20 same-wing priors on a 1–10 scale; surprise is
+   $C(d) = 10 - \mathrm{score}$.
+
+Analysis stack: weighted power-law + exponential fits (AIC-selected),
+source-aware block bootstrap for CIs, Kruskal–Wallis with $\varepsilon^2$
+for cross-wing heterogeneity, Benjamini–Hochberg FDR at $q = 0.05$.
+
+**First full-palace headline** (65,779 drawers, 7 wings):
+$\rho(A, B) = 0.9820$ (95% CI $[0.9817, 0.9823]$, $n = 65{,}746$) — the
+$O(1)$ nearest-neighbour score captures $\sim 96\%$ of the variance of
+the $O(K^3)$ LLE residual. Exponential decay wins over power-law in all
+6 fittable strata ($\Delta \mathrm{AIC} \in [32, 178]$); source-type
+heterogeneity is real but modest ($H = 5360$, $p \approx 0$,
+$\varepsilon^2 = 0.081$).
+
+Reproducibility manifest:
+[`research/info_theory/REPRODUCIBILITY.md`](research/info_theory/REPRODUCIBILITY.md).
+
+---
+
 ## Acknowledgements
 
-Cognitive Castle is a fork and continuation of
-[**MemPalace**](https://github.com/MemPalace/mempalace) by Milla
-Jovovich. The foundational design — verbatim-only storage, the AAAK
-compressed dialect, the wings / rooms / drawers / halls / tunnels
-palace architecture, the temporal knowledge graph, the
-local-first / zero-external-API principle, and the `PALACE_PROTOCOL`
-behavioral contract — all originate upstream.
+**Upstream** — [**MemPalace**](https://github.com/MemPalace/mempalace) by
+**Milla Jovovich** — foundational design (see the [Inspired by MemPalace](#-inspired-by-mempalace)
+box at the top for the full attribution).
 
-Castle's contribution is an integration and distribution layer on top
-of that design:
+**Castle's integration and distribution layer:**
 
-- **LanceDB backend** replacing upstream Chroma
-- **3-stage retrieval pipeline** — dense + Tantivy FTS +
-  knowledge-graph traversal, fused via weighted RRF + recency, then
-  cross-encoder reranked
-- **SOAR symbolic re-ranking productions** (Stage 5) — recency-boost,
-  same-project, entity-match, type-match
-- **Claude Code session hooks** for background Stop / PreCompact mining
-- **MCP `initialize.instructions` injection** that bakes
-  `PALACE_PROTOCOL` + AAAK spec + live palace state into the client's
-  system prompt at session start (PR #48)
-- **`claude-cli` LLM provider** — reuses the parent Claude Code's auth
-  for Stage 4 judge instead of a separate Messages API key (PR #49)
-- **Stage 6 deterministic text-quality re-rank** — applies 31 standards-based
-  metrics (IEEE 830, ISO 29148, readability formulas, cognitive load theory)
-  as a quality axis on top of relevance ranking. Two-tier threshold:
-  medium ×1.15, high ×1.25.
-
-Stage 6 is powered by the vendored
-[**`understanding`**](https://github.com/Testimonial/understanding)
-package (v3.7.0, MIT, Ladislav Bihari) — copied in-tree as
-`cognitive_castle/understanding/` to avoid a Castle → echelon →
-MemPalace dependency chain. Castle's contribution is the integration
-pattern (using deterministic quality metrics as a retrieval re-rank
-stage), not the metrics themselves.
+- LanceDB backend replacing upstream Chroma
+- 3-stage retrieval pipeline — dense + Tantivy FTS + knowledge-graph
+  traversal, fused via weighted RRF + recency, then cross-encoder reranked
+- SOAR symbolic re-ranking productions (Stage 5)
+- Claude Code session hooks for background Stop / PreCompact mining
+- MCP `initialize.instructions` injection that bakes `PALACE_PROTOCOL` +
+  AAAK spec + live palace state into the client's system prompt at
+  session start (PR #48)
+- `claude-cli` LLM provider — reuses parent Claude Code's auth for
+  Stage 4 judge instead of a separate Messages API key (PR #49)
+- Stage 6 deterministic text-quality re-rank powered by the vendored
+  [`understanding`](https://github.com/Testimonial/understanding) package
+  (v3.7.0, MIT, Ladislav Bihari) — 31 standards-based metrics (IEEE 830,
+  ISO 29148, readability, cognitive load) as a quality axis on top of
+  relevance ranking. Copied in-tree as `cognitive_castle/understanding/`
+  to avoid a Castle → echelon → MemPalace dependency chain.
 
 Original benchmark methodology and the "wings/rooms/drawers" naming
 preserved with credit to the upstream authors.
