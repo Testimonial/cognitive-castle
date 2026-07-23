@@ -2933,6 +2933,17 @@ def _load_or_create_split(split_file: str, data: list, dev_size: int = 50, seed:
     return split
 
 
+def load_questions(data_file):
+    """Load LongMemEval questions from a JSON file.
+
+    Module-level entry point so other tools (e.g. research pipelines) can
+    import the same loader the benchmark CLI uses. Returns the raw list of
+    question dicts in the file, with no filtering or transformation.
+    """
+    with open(data_file) as f:
+        return json.load(f)
+
+
 def run_benchmark(
     data_file,
     granularity="session",
@@ -2957,8 +2968,7 @@ def run_benchmark(
     split_subset: "dev" (50 questions for tuning) or "held_out" (450 for final evaluation).
                   None = run all questions.
     """
-    with open(data_file) as f:
-        data = json.load(f)
+    data = load_questions(data_file)
 
     # Apply train/test split filter before limit/skip
     if split_file and split_subset:

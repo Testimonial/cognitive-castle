@@ -1,0 +1,10 @@
+# paper/.gitignore
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.pdf
+appendix/*.tex
+figures/*.pdf

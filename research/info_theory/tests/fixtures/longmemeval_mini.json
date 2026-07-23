@@ -1,0 +1,28 @@
+[
+  {
+    "question_id": "q1",
+    "question_type": "single-session-user",
+    "sessions": [
+      {"session_id": "q1_s0", "timestamp": "2026-01-01T00:00:00Z",
+       "turns": [
+         {"text": "hello there, this is the first turn of the first session and it contains enough content to clear the chunker minimum"},
+         {"text": "and this is the second turn of that same first session, still long enough to survive the chunker minimum threshold"}
+       ]},
+      {"session_id": "q1_s1", "timestamp": "2026-01-02T00:00:00Z",
+       "turns": [
+         {"text": "follow up question for the second session of question one, padded so it sails past the chunker minimum size of fifty characters"}
+       ]}
+    ]
+  },
+  {
+    "question_id": "q2",
+    "question_type": "multi-session",
+    "sessions": [
+      {"session_id": "q2_s0", "timestamp": "2026-01-03T00:00:00Z",
+       "turns": [
+         {"text": "different topic in question two session zero, written long enough to clear the fifty-character chunker floor"},
+         {"text": "another turn for the same q2 session, also intentionally verbose so the miner produces a chunk rather than dropping it"}
+       ]}
+    ]
+  }
+]

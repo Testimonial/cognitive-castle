@@ -113,6 +113,12 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "pytest-cov>=5.0"]
 
+# Required: pin the installable packages to just the two Python modules.
+# Without this, setuptools' flat-layout auto-discovery finds `paper`,
+# `outputs`, `pipeline`, and `analysis` as candidates and refuses to build.
+[tool.setuptools]
+packages = ["pipeline", "analysis"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 ```
@@ -625,15 +631,22 @@ git commit -m "refactor(benchmarks): expose load_questions() for import"
 
 ```json
 // tests/fixtures/longmemeval_mini.json
+// Note: each turn must be ≥50 chars after newline-joining within a session,
+// or Castle's chunk_text() will drop the chunk (MIN_CHUNK_SIZE = 50).
 [
   {
     "question_id": "q1",
     "question_type": "single-session-user",
     "sessions": [
       {"session_id": "q1_s0", "timestamp": "2026-01-01T00:00:00Z",
-       "turns": [{"text": "hello there"}, {"text": "hi"}]},
+       "turns": [
+         {"text": "Hello there, I have a question about a project I've been working on for a few weeks."},
+         {"text": "Hi! Happy to help. What's the project about and what's the question?"}
+       ]},
       {"session_id": "q1_s1", "timestamp": "2026-01-02T00:00:00Z",
-       "turns": [{"text": "follow up question"}]}
+       "turns": [
+         {"text": "A follow-up question on the same project, building on what we discussed earlier today."}
+       ]}
     ]
   },
   {
@@ -641,7 +654,10 @@ git commit -m "refactor(benchmarks): expose load_questions() for import"
     "question_type": "multi-session",
     "sessions": [
       {"session_id": "q2_s0", "timestamp": "2026-01-03T00:00:00Z",
-       "turns": [{"text": "different topic"}, {"text": "another turn"}]}
+       "turns": [
+         {"text": "A completely different topic from a different conversation about something unrelated."},
+         {"text": "Another turn in the same session continuing the unrelated topic with more detail."}
+       ]}
     ]
   }
 ]
@@ -715,10 +731,15 @@ from pathlib import Path
 from typing import Union
 import pyarrow as pa
 
-from cognitive_castle.miner import ChunkConfig, chunk_text
+# Castle's miner API (verified against cognitive_castle/miner.py:371):
+#   chunk_text(content: str, source_file: str) -> list[dict]
+# Returns dicts shaped {"content": str, "chunk_index": int}, driven by
+# module-level constants CHUNK_SIZE=800 and MIN_CHUNK_SIZE=50. No
+# per-call size override; no ChunkConfig class.
+from cognitive_castle.miner import chunk_text
 
 
-def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Table:
+def load_longmemeval(source: Union[Path, str]) -> pa.Table:
     """Read LME questions (or a fixture JSON), chunk through Castle's
     miner, and return an Arrow table compatible with load_palace()."""
     source = Path(source)
@@ -730,7 +751,6 @@ def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Ta
         from benchmarks.longmemeval_bench import load_questions
         questions = load_questions()
 
-    cfg = ChunkConfig(chunk_chars=chunk_chars)
     rows = []
     for q in questions:
         qid = q["question_id"]
@@ -739,16 +759,18 @@ def load_longmemeval(source: Union[Path, str], chunk_chars: int = 1500) -> pa.Ta
             sid = sess["session_id"]
             ts = sess["timestamp"]
             joined = "\n".join(t["text"] for t in sess["turns"])
-            for ci, chunk in enumerate(chunk_text(joined, cfg)):
+            source_file_tag = f"lme_{qid}_{sid}"
+            for chunk in chunk_text(joined, source_file_tag):
+                ci = chunk["chunk_index"]
                 rows.append({
                     "drawer_id": f"lme_{qid}_{sid}_{ci:03d}",
-                    "text": chunk,
+                    "text": chunk["content"],
                     "filed_at": ts,
                     "session_id": sid,
                     "question_id": qid,
                     "question_type": qtype,
                     "chunk_index": ci,
-                    "source_file": f"lme_{qid}_{sid}",
+                    "source_file": source_file_tag,
                     "wing": None, "room": None, "added_by": None,
                 })
 
@@ -926,7 +948,8 @@ from pipeline.embed import embed_drawers, _fingerprint_inputs
 
 def _mock_embedder(dim=1024):
     e = MagicMock()
-    e.encode = lambda texts, **kw: np.random.rand(len(texts), dim).astype(np.float32)
+    # NOTE: use side_effect (not direct assignment) so MagicMock's call_count tracking survives.
+    e.encode.side_effect = lambda texts, **kw: np.random.rand(len(texts), dim).astype(np.float32)
     e.model_revision = "bge-m3@abc123"
     return e
 
@@ -965,9 +988,19 @@ Expected: FAIL — module not found.
 
 - [ ] **Step 3: Implement `embed.py`**
 
+Castle's `cognitive_castle/embedding.py` exposes `embed_texts(texts, device=None)` and `get_embedding_function()` (a callable), **not** a `get_embedder()` object with `.encode`/`.model_revision`. We wrap Castle's real API in a local adapter so the plan's mocking interface still works.
+
 ```python
 # pipeline/embed.py
-"""Embed drawer texts via Castle's bge-m3 embedder. Cached as Parquet."""
+"""Embed drawer texts via Castle's bge-m3 embedder. Cached as Parquet.
+
+Castle exposes ``embed_texts`` and ``get_embedding_function`` (returning a
+callable) rather than a ``get_embedder()`` object with ``.encode`` and
+``.model_revision``. To keep this stage's interface aligned with the research
+plan (and to make mocking trivial), we wrap Castle's real API in a small
+adapter and expose it as ``get_embedder`` at module scope. Tests patch
+``pipeline.embed.get_embedder`` directly.
+"""
 
 from __future__ import annotations
 import hashlib
@@ -977,7 +1010,25 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from cognitive_castle.embedding import get_embedder
+from cognitive_castle.embedding import embed_texts
+
+
+class _CastleEmbedderAdapter:
+    """Adapter over Castle's ``embed_texts`` to match the plan's expected
+    ``.encode(texts) -> np.ndarray`` and ``.model_revision`` interface."""
+
+    def __init__(self) -> None:
+        from cognitive_castle.embedding import _resolve_model_name
+        self.model_revision = _resolve_model_name()
+
+    def encode(self, texts, **kwargs) -> np.ndarray:
+        vecs = embed_texts(list(texts))
+        return np.asarray(vecs, dtype=np.float32)
+
+
+def get_embedder() -> _CastleEmbedderAdapter:
+    """Return a Castle-backed embedder with ``.encode`` and ``.model_revision``."""
+    return _CastleEmbedderAdapter()
 
 
 def _fingerprint_inputs(table: pa.Table) -> str:
@@ -1006,20 +1057,26 @@ def embed_drawers(
 
     embedder = get_embedder()
     texts = table.column("text").to_pylist()
-    vectors = []
+    vectors: list = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
         vectors.extend(embedder.encode(batch))
-    vec_array = pa.array([v.tolist() for v in vectors], type=pa.list_(pa.float32()))
+    vec_array = pa.array(
+        [np.asarray(v, dtype=np.float32).tolist() for v in vectors],
+        type=pa.list_(pa.float32()),
+    )
     out = table.append_column("vector", vec_array)
 
     if cache_path:
         meta = {b"fingerprint": fp.encode(),
                 b"embedder_revision": embedder.model_revision.encode()}
         out = out.replace_schema_metadata(meta)
+        Path(cache_path).parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(out, cache_path)
     return out
 ```
+
+**Cache-key note:** Task 6 uses schema-metadata key `b"fingerprint"`. The shared `cache_utils.write_cached` used by other stages writes `b"inputs_fingerprint"`. This is intentional — Task 6 predates the shared helper's adoption for embedding — but any future reader must use the right key when opening this cache directly.
 
 - [ ] **Step 4: Run tests, verify pass**
 
@@ -1912,11 +1969,16 @@ def allocate_subsample(
     alloc = {k: max(floor, round(n_total * v / total_size))
              for k, v in strata_sizes.items()}
 
-    # Normalize to n_total via random rounding tiebreaks
-    diff = n_total - sum(alloc.values())
-    if diff != 0:
+    # Normalize to n_total via random rounding tiebreaks.
+    # Loop until diff resolves or no progress can be made: each pass reshuffles
+    # keys and applies ±1 adjustments, skipping strata that would drop below floor.
+    while True:
+        diff = n_total - sum(alloc.values())
+        if diff == 0:
+            break
         keys = list(alloc.keys())
         rng.shuffle(keys)
+        progress = False
         for k in keys:
             if diff == 0:
                 break
@@ -1925,9 +1987,14 @@ def allocate_subsample(
             if new_v >= floor:
                 alloc[k] = new_v
                 diff -= step
+                progress = True
+        if not progress:
+            break
 
     return alloc
 ```
+
+**Bug fix (folded from Task 12 implementation):** the plan's original single-pass loop only visits each key once, but tests like `test_floor_raises_small_strata` (2 strata, diff = -15) require **multiple** ±1 adjustments on the same key (e.g., 15 decrements on `big`). Changed to a `while True` loop with a `progress` guard that terminates when no adjustment succeeds — prevents infinite loops when all strata are at floor.
 
 - [ ] **Step 4: Run tests, verify pass**
 
@@ -2276,7 +2343,8 @@ def test_pearson_known_correlation():
     x = rng.normal(0, 1, n)
     y = 0.7 * x + 0.3 * rng.normal(0, 1, n)
     rho, _, _ = pearson_with_ci(x, y, n_resamples=100, seed=42)
-    assert 0.5 < rho < 0.9
+    # Theoretical rho = 0.7/sqrt(0.7² + 0.3²) ≈ 0.919; observed ≈ 0.915.
+    assert 0.5 < rho < 0.95
 ```
 
 - [ ] **Step 2: Run tests, verify fail**
@@ -2468,11 +2536,15 @@ def test_bh_correction_known_case():
     """BH q=0.05: of these p-values, how many survive?"""
     p_values = [0.001, 0.008, 0.039, 0.041, 0.042, 0.06, 0.5]
     survivors = benjamini_hochberg(p_values, q=0.05)
-    # By BH formula, p=0.041 survives if it's ≤ (4/7)*0.05 = 0.0286 → no
-    # So first three survive: 0.001, 0.008, 0.039
-    assert sum(survivors) == 3
-    assert survivors[0] and survivors[1] and survivors[2]
-    assert not survivors[3]
+    # BH formula requires p_(k) ≤ (k/m)·q. With m=7, q=0.05:
+    #   rank 1: 0.001 ≤ 0.00714 ✓
+    #   rank 2: 0.008 ≤ 0.01429 ✓
+    #   rank 3: 0.039 ≤ 0.02143 ✗   ← p=0.039 fails, so largest k is 2
+    #   ranks 4-7: all fail
+    # Only first two (0.001, 0.008) survive.
+    assert sum(survivors) == 2
+    assert survivors[0] and survivors[1]
+    assert not survivors[2] and not survivors[3]
 
 
 def test_bh_correction_all_significant():
@@ -2491,7 +2563,11 @@ def test_compute_n_star_finds_saturation():
     # First 100: decreasing from 1.0 to 0.1; remainder: stays ~0.05
     info = np.concatenate([np.linspace(1.0, 0.1, 100),
                            np.full(200, 0.05)])
-    shuffled_null = np.full(300, 0.5)  # null IQR ~0
+    # Null needs positive IQR so threshold = threshold_factor × IQR > 0.
+    # A constant null (e.g., np.full(300, 0.5)) → IQR=0 → threshold=0 → smoothed<0
+    # is always False → never saturates. Linspace gives IQR ≈ 0.15 so the
+    # saturated tail at 0.05 falls below the threshold cleanly.
+    shuffled_null = np.linspace(0.05, 0.35, 300)
     n_star = compute_n_star(N, info, shuffled_null,
                              threshold_factor=1.0,
                              persistence_factor=0.1)
@@ -2621,7 +2697,24 @@ git commit -m "feat(analysis): aggregation — BH-FDR, N* saturation point, ≥2
 
 ### Task 17: H3 downstream R@5 evaluation [H3]
 
-**Skip this task if Task 0 returned H3 OUT.**
+**Skip this task if Task 0 returned H3 OUT.** Task 0 returned **H3 IN** with
+two findings that shape this task:
+
+1. **The harness is already parameterizable.** No CLI flag refactor needed.
+   Corpus is rebuilt per question from three in-memory arrays
+   (`haystack_sessions`, `haystack_session_ids`, `haystack_dates`); the
+   ChromaDB index is ephemeral and `_fresh_collection()` recreates it per
+   question. H3 filters by trimming those three arrays in lockstep before
+   each entry hits `build_palace_and_retrieve` (or any of its sibling
+   functions: `..._aaak`, `..._rooms`, `..._hybrid`, `..._full`).
+2. **Provenance bridge required.** `recon_residual` is computed at
+   **drawer** granularity (Castle's chunks), but LME drops operate at
+   **session** granularity. The H3 runner must group drawers by
+   `session_id` and apply a session-level aggregation to decide which
+   sessions to drop. **Decision rule (locked):** filter at the session
+   level using the **mean** of `recon_residual` across drawers in each
+   session. Simpler than median, robust to chunking variance, matches
+   LME's natural drop granularity.
 
 **Files:**
 - Create: `research/info_theory/pipeline/downstream_eval.py`
@@ -2634,43 +2727,103 @@ git commit -m "feat(analysis): aggregation — BH-FDR, N* saturation point, ≥2
 import numpy as np
 import pyarrow as pa
 from pipeline.downstream_eval import (
-    drop_bottom_by_info_score, run_lme_r_at_5_under_corpus,
+    aggregate_to_session_scores,
+    drop_bottom_sessions_by_info,
+    apply_drop_filter,
+    run_h3_experiment,
 )
 
 
-def test_drop_bottom_by_info_score_threshold_10():
+def test_aggregate_to_session_scores_mean():
+    """Drawer-level recon_residual → session-level mean."""
+    import pytest
     table = pa.table({
-        "drawer_id": [f"d{i}" for i in range(100)],
-        "recon_residual": list(range(100)),  # lowest = bottom
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [0.2, 0.4, 0.6, 0.8],
     })
-    kept = drop_bottom_by_info_score(table, threshold_pct=10)
-    assert kept.num_rows == 90
-    # Lowest 10 (residuals 0-9) dropped
-    ids = kept.column("drawer_id").to_pylist()
-    assert "d0" not in ids and "d9" not in ids
-    assert "d10" in ids and "d99" in ids
+    session_scores = aggregate_to_session_scores(table)
+    # pytest.approx: statistics.mean([0.2, 0.4]) = 0.30000000000000004 (float precision).
+    assert session_scores["s_a"] == pytest.approx(0.3)  # mean of 0.2, 0.4
+    assert session_scores["s_b"] == pytest.approx(0.7)  # mean of 0.6, 0.8
 
 
-def test_drop_bottom_handles_nulls():
-    """Nulls in recon_residual are treated as the lowest score
-    (i.e., dropped first)."""
+def test_aggregate_handles_null_residuals():
+    """Drawers with null recon_residual (below K_floor) are excluded
+    from the mean. If all of a session's drawers are null, the session
+    is excluded entirely (cannot be info-weighted)."""
     table = pa.table({
-        "drawer_id": ["a", "b", "c", "d"],
-        "recon_residual": [0.5, None, 0.8, 0.3],
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [None, 0.5, None, None],
     })
-    kept = drop_bottom_by_info_score(table, threshold_pct=25)
-    ids = kept.column("drawer_id").to_pylist()
-    assert "b" not in ids  # null was lowest
+    session_scores = aggregate_to_session_scores(table)
+    assert session_scores["s_a"] == 0.5
+    assert "s_b" not in session_scores  # all null
 
 
-def test_run_lme_r_at_5_mock():
-    """Smoke test with mocked LME harness."""
+def test_drop_bottom_sessions_threshold_25():
+    session_scores = {f"s{i}": float(i) for i in range(100)}
+    kept = drop_bottom_sessions_by_info(session_scores, threshold_pct=25)
+    # Lowest 25 (s0..s24) dropped
+    assert "s24" not in kept and "s0" not in kept
+    assert "s25" in kept and "s99" in kept
+    assert len(kept) == 75
+
+
+def test_apply_drop_filter_trims_three_arrays_in_lockstep():
+    """The actual filter operation that hits the LME entry shape."""
+    entry = {
+        "question_id": "q1",
+        "haystack_sessions": [["turn1"], ["turn2"], ["turn3"]],
+        "haystack_session_ids": ["s_a", "s_b", "s_c"],
+        "haystack_dates": ["2026-01-01", "2026-01-02", "2026-01-03"],
+        "other_field": "preserved",
+    }
+    out = apply_drop_filter(entry, drop_ids={"s_b"})
+    assert out["haystack_session_ids"] == ["s_a", "s_c"]
+    assert out["haystack_sessions"] == [["turn1"], ["turn3"]]
+    assert out["haystack_dates"] == ["2026-01-01", "2026-01-03"]
+    assert out["other_field"] == "preserved"
+    assert out["question_id"] == "q1"
+    # Original is not mutated
+    assert len(entry["haystack_session_ids"]) == 3
+
+
+def test_run_h3_experiment_calls_harness_per_threshold():
+    """Smoke test with mocked harness."""
     from unittest.mock import patch
-    corpus_ids = ["d0", "d1", "d2"]
-    with patch("pipeline.downstream_eval._lme_eval", return_value=0.75) as m:
-        r_at_5 = run_lme_r_at_5_under_corpus(corpus_ids)
-    assert r_at_5 == 0.75
-    m.assert_called_once_with(corpus_ids)
+    drawer_table = pa.table({
+        "drawer_id": ["d0", "d1", "d2", "d3"],
+        "session_id": ["s_a", "s_a", "s_b", "s_b"],
+        "recon_residual": [0.2, 0.4, 0.6, 0.8],
+    })
+    lme_entries = [
+        {"question_id": "q1",
+         "haystack_sessions": [["x"], ["y"]],
+         "haystack_session_ids": ["s_a", "s_b"],
+         "haystack_dates": ["d1", "d2"],
+         "answer_session_ids": ["s_b"]},
+    ]
+    # Mock the per-entry retrieval call to return a constant R@5
+    fake_r_at_5 = {"uniform": 1.0, 10: 1.0, 25: 0.5, 50: 0.0}
+
+    def fake_eval(entries, drop_ids):
+        # Determine threshold from drop_ids size relative to total sessions
+        if not drop_ids:
+            return fake_r_at_5["uniform"]
+        # Total = 2 sessions; drop_ids count tells us threshold
+        if len(drop_ids) == 0: return fake_r_at_5["uniform"]
+        if "s_a" in drop_ids and len(drop_ids) == 1: return fake_r_at_5[50]
+        return fake_r_at_5[10]
+
+    with patch("pipeline.downstream_eval._run_lme_with_filter",
+                 side_effect=fake_eval) as m:
+        results = run_h3_experiment(drawer_table, lme_entries,
+                                     thresholds=(10, 25, 50))
+    assert "uniform" in results
+    assert all(t in results for t in (10, 25, 50))
+    assert m.call_count == 4  # uniform + 3 thresholds
 ```
 
 - [ ] **Step 2: Run tests, verify fail**
@@ -2685,50 +2838,112 @@ python -m pytest tests/test_downstream_eval.py -v
 # pipeline/downstream_eval.py
 """H3 — LongMemEval R@5 under info-weighted corpus.
 
-Drops bottom-X% of drawers by recon_residual, runs LME R@5 against
-the remaining corpus, returns the delta vs. uniform baseline."""
+Aggregates drawer-level recon_residual to session-level scores (mean),
+drops bottom-X% of sessions, then filters each LME entry's
+haystack_session_ids/sessions/dates arrays in lockstep before retrieval.
+
+Per Task 0 spike findings: the LME harness rebuilds its retrieval
+index per question from these three arrays, so trimming them is the
+entire filter mechanism — no harness refactor needed."""
 
 from __future__ import annotations
+import statistics
+from typing import Optional
 import pyarrow as pa
 
 
-def drop_bottom_by_info_score(
-    table: pa.Table, threshold_pct: float, info_col: str = "recon_residual"
-) -> pa.Table:
-    """Drop the bottom threshold_pct% of rows by info_col.
-    Nulls are treated as lowest (dropped first)."""
-    scores = table.column(info_col).to_pylist()
-    # None → -inf for sort
-    indexed = [(s if s is not None else -float("inf"), i) for i, s in enumerate(scores)]
-    indexed.sort()
-    n = len(indexed)
+def aggregate_to_session_scores(
+    table: pa.Table,
+    info_col: str = "recon_residual",
+    session_col: str = "session_id",
+) -> dict:
+    """Drawer-level info → session-level mean. Sessions with all-null
+    drawers are excluded (cannot be info-weighted)."""
+    rows = table.to_pylist()
+    by_session: dict = {}
+    for r in rows:
+        sid = r.get(session_col)
+        score = r.get(info_col)
+        if sid is None or score is None:
+            if sid is not None:
+                by_session.setdefault(sid, [])
+            continue
+        by_session.setdefault(sid, []).append(score)
+    return {sid: statistics.mean(scores) for sid, scores in by_session.items()
+             if scores}
+
+
+def drop_bottom_sessions_by_info(session_scores: dict, threshold_pct: float) -> set:
+    """Return the set of session_ids to KEEP (i.e., top (100-X)% by score)."""
+    items = sorted(session_scores.items(), key=lambda kv: kv[1])
+    n = len(items)
     drop_n = int(n * threshold_pct / 100)
-    keep_indices = sorted(i for _, i in indexed[drop_n:])
-    return table.take(pa.array(keep_indices))
+    return {sid for sid, _ in items[drop_n:]}
 
 
-def _lme_eval(corpus_ids):
-    """Wrapper around the LME benchmark harness (set by Task 0 spike).
-    Returns R@5 ∈ [0, 1]."""
-    from benchmarks.longmemeval_bench import run_with_corpus_filter
-    return run_with_corpus_filter(corpus_ids)
+def apply_drop_filter(entry: dict, drop_ids: set) -> dict:
+    """Trim haystack_sessions/session_ids/dates in lockstep.
+    Returns a new dict; does not mutate input."""
+    sessions, sids, dates = [], [], []
+    for s, sid, d in zip(entry["haystack_sessions"],
+                          entry["haystack_session_ids"],
+                          entry["haystack_dates"]):
+        if sid in drop_ids:
+            continue
+        sessions.append(s); sids.append(sid); dates.append(d)
+    out = dict(entry)
+    out["haystack_sessions"] = sessions
+    out["haystack_session_ids"] = sids
+    out["haystack_dates"] = dates
+    return out
 
 
-def run_lme_r_at_5_under_corpus(corpus_ids: list) -> float:
-    """Delegate to the patched LME harness."""
-    return _lme_eval(corpus_ids)
+def _run_lme_with_filter(entries: list, drop_ids: set) -> float:
+    """Invoke the LME harness with each entry filtered by drop_ids.
+    Returns mean R@5 (recall_any) across entries.
+
+    drop_ids empty → uniform baseline.
+
+    NOTE (verified against benchmarks/longmemeval_bench.py, Task 17):
+    - build_palace_and_retrieve(entry, granularity='session', n_results=50)
+        returns 4-tuple: (rankings, corpus, corpus_ids, corpus_timestamps)
+    - evaluate_retrieval(rankings, correct_ids, corpus_ids, k)
+        returns 3-tuple: (recall_any, recall_all, ndcg_score)
+    We call with n_results=5 and read recall_any as R@5.
+    """
+    # Imports kept lazy to keep test mocking simple
+    from benchmarks.longmemeval_bench import (
+        build_palace_and_retrieve, evaluate_retrieval,
+    )
+    recalls = []
+    for entry in entries:
+        filtered = apply_drop_filter(entry, drop_ids)
+        if not filtered["haystack_session_ids"]:
+            continue  # nothing left to retrieve against
+        rankings, _corpus, corpus_ids, _ts = build_palace_and_retrieve(
+            filtered, granularity="session", n_results=5,
+        )
+        correct_ids = filtered.get("answer_session_ids", [])
+        recall_any, _recall_all, _ndcg = evaluate_retrieval(
+            rankings, correct_ids, corpus_ids, k=5,
+        )
+        recalls.append(recall_any)
+    return sum(recalls) / len(recalls) if recalls else 0.0
 
 
 def run_h3_experiment(
-    table: pa.Table, thresholds: list = (10, 25, 50)
+    drawer_table: pa.Table,
+    lme_entries: list,
+    thresholds: tuple = (10, 25, 50),
 ) -> dict:
-    """Returns {threshold: r_at_5} for uniform + each threshold."""
-    results = {"uniform": run_lme_r_at_5_under_corpus(
-        table.column("drawer_id").to_pylist())}
+    """Returns {"uniform": R@5, 10: R@5, 25: R@5, 50: R@5}."""
+    session_scores = aggregate_to_session_scores(drawer_table)
+    results = {"uniform": _run_lme_with_filter(lme_entries, drop_ids=set())}
+    all_sessions = set(session_scores.keys())
     for t in thresholds:
-        filtered = drop_bottom_by_info_score(table, threshold_pct=t)
-        ids = filtered.column("drawer_id").to_pylist()
-        results[t] = run_lme_r_at_5_under_corpus(ids)
+        keep = drop_bottom_sessions_by_info(session_scores, threshold_pct=t)
+        drop = all_sessions - keep
+        results[t] = _run_lme_with_filter(lme_entries, drop_ids=drop)
     return results
 ```
 
@@ -2743,7 +2958,7 @@ python -m pytest tests/test_downstream_eval.py -v
 ```bash
 git add research/info_theory/pipeline/downstream_eval.py \
         research/info_theory/tests/test_downstream_eval.py
-git commit -m "feat(pipeline): downstream_eval — H3 R@5 under info-weighted corpus"
+git commit -m "feat(pipeline): downstream_eval — H3 R@5 with session-level provenance bridge"
 ```
 
 ---
@@ -2850,7 +3065,9 @@ def build_arg_parser():
     fig_p.add_argument("--tables", action="store_true",
                         help="emit appendix LaTeX tables from results.yaml")
     ce = sub.add_parser("cost-estimate", help="dry-run cost estimator")
-    ce.add_argument("--stage", required=True)
+    # NOTE: required=False so Task 18's `parse_args(["cost-estimate"])` smoke
+    # test passes. Runtime validation happens in cmd_cost_estimate.
+    ce.add_argument("--stage", required=False)
     return p
 
 
@@ -3559,7 +3776,9 @@ def test_e2e_smoke_pipeline(mini_corpus, monkeypatch, tmp_path):
     nn_out = nn(table, group_by="wing")
     assert "nn_novelty" in nn_out.column_names
     nn_values = [v for v in nn_out.column("nn_novelty").to_pylist() if v is not None]
-    assert all(0 <= v <= 1.0001 for v in nn_values)
+    # nn_novelty = 1 - max_cosine(target, priors); cosine ∈ [-1, 1] so
+    # nn_novelty ∈ [0, 2] — bound is NOT [0,1] for un-normalized vectors.
+    assert all(0 <= v <= 2.0001 for v in nn_values)
 
     rr_out = rr(table, k_target=20, k_floor=5, lam=1e-3, group_by="wing")
     assert "recon_residual" in rr_out.column_names

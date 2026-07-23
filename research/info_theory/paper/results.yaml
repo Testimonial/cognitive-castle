@@ -1,0 +1,74 @@
+tables:
+  correlations:
+    A vs B:
+      rho: 0.9819936618194364
+      ci_lo: 0.981666975446671
+      ci_hi: 0.9823325439641443
+      n: 65746
+  heterogeneity:
+    wing:
+      H: 5360.446340175758
+      p_value: 0.0
+      epsilon_squared: 0.08140920665595935
+      n_per_group:
+        projects: 14000
+        wing_castle: 68
+        wing_lbihari: 30
+        sessions: 2788
+        _home_lbihari_cognitive_castle: 48848
+        wing_echelon: 43
+        wing_tricoder: 2
+      median_per_group:
+        projects: 0.07428952880463047
+        wing_castle: 0.13127258669413322
+        wing_lbihari: 0.10962006029936922
+        sessions: 0.31746973292667363
+        _home_lbihari_cognitive_castle: 0.059248320206861105
+        wing_echelon: 0.10710432259006353
+        wing_tricoder: 0.6147644476229015
+  decay_fits:
+    wing::_home_lbihari_cognitive_castle:
+      alpha: 0.07335620150691924
+      a: 0.1661096574402531
+      aic_powerlaw: -254554.5707525114
+      aic_exponential: -254615.71701897218
+      winner: exponential
+      n: 48848
+    wing::projects:
+      alpha: 0.04595893756424824
+      a: 0.14052045761658197
+      aic_powerlaw: -70549.75911511184
+      aic_exponential: -70603.61133124318
+      winner: exponential
+      n: 14000
+    wing::sessions:
+      alpha: 0.12321593299808278
+      a: 0.6719600336258037
+      aic_powerlaw: -11926.522762657323
+      aic_exponential: -12104.312518311523
+      winner: exponential
+      n: 2788
+    wing::wing_castle:
+      alpha: 0.41787817895167395
+      a: 0.5541928024168472
+      aic_powerlaw: -265.8138385269611
+      aic_exponential: -298.23961334512035
+      winner: exponential
+      n: 68
+    wing::wing_echelon:
+      alpha: 0.8684513208426139
+      a: 0.7907842544033034
+      aic_powerlaw: -176.0448511309928
+      aic_exponential: -198.6167660263468
+      winner: exponential
+      n: 43
+    wing::wing_lbihari:
+      alpha: 0.8389559996587348
+      a: 0.8025747855107168
+      aic_powerlaw: -119.63953621095973
+      aic_exponential: -138.797556920495
+      winner: exponential
+      n: 30
+headline_numbers:
+  n_drawers_total: 65779
+  n_strata: 7
