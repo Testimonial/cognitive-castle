@@ -7,7 +7,7 @@ from typing import Optional
 import numpy as np
 import pyarrow as pa
 
-from .neighbors import find_neighbors
+from .neighbors import compute_all_neighbors
 
 
 def lle_weights(target: np.ndarray, priors: np.ndarray, lam: float = 1e-3) -> np.ndarray:
@@ -48,12 +48,16 @@ def compute_for_table(
 ) -> pa.Table:
     """Add 'recon_residual' column. Null for first K_floor-1 drawers per stratum."""
     residuals = []
+    all_neighbors = compute_all_neighbors(
+        table, k=k_target, prior_filter="filed_at", group_by=group_by
+    )
+    vectors = table.column("vector").to_pylist()
     for i in range(table.num_rows):
-        neighbors = find_neighbors(table, i, k=k_target, prior_filter="filed_at", group_by=group_by)
+        neighbors = all_neighbors[i]
         if len(neighbors) < k_floor:
             residuals.append(None)
             continue
-        target_vec = np.array(table.slice(i, 1).to_pylist()[0]["vector"])
-        prior_vecs = [np.array(table.slice(j, 1).to_pylist()[0]["vector"]) for j in neighbors]
+        target_vec = np.array(vectors[i])
+        prior_vecs = [np.array(vectors[j]) for j in neighbors]
         residuals.append(compute_recon_residual(target_vec, prior_vecs, k=len(neighbors), lam=lam))
     return table.append_column("recon_residual", pa.array(residuals, type=pa.float64()))
