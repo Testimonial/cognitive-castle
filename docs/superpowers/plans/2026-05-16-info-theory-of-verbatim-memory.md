@@ -2736,14 +2736,16 @@ from pipeline.downstream_eval import (
 
 def test_aggregate_to_session_scores_mean():
     """Drawer-level recon_residual → session-level mean."""
+    import pytest
     table = pa.table({
         "drawer_id": ["d0", "d1", "d2", "d3"],
         "session_id": ["s_a", "s_a", "s_b", "s_b"],
         "recon_residual": [0.2, 0.4, 0.6, 0.8],
     })
     session_scores = aggregate_to_session_scores(table)
-    assert session_scores["s_a"] == 0.3  # mean of 0.2, 0.4
-    assert session_scores["s_b"] == 0.7  # mean of 0.6, 0.8
+    # pytest.approx: statistics.mean([0.2, 0.4]) = 0.30000000000000004 (float precision).
+    assert session_scores["s_a"] == pytest.approx(0.3)  # mean of 0.2, 0.4
+    assert session_scores["s_b"] == pytest.approx(0.7)  # mean of 0.6, 0.8
 
 
 def test_aggregate_handles_null_residuals():
@@ -2898,9 +2900,16 @@ def apply_drop_filter(entry: dict, drop_ids: set) -> dict:
 
 def _run_lme_with_filter(entries: list, drop_ids: set) -> float:
     """Invoke the LME harness with each entry filtered by drop_ids.
-    Returns mean R@5 across entries.
+    Returns mean R@5 (recall_any) across entries.
 
     drop_ids empty → uniform baseline.
+
+    NOTE (verified against benchmarks/longmemeval_bench.py, Task 17):
+    - build_palace_and_retrieve(entry, granularity='session', n_results=50)
+        returns 4-tuple: (rankings, corpus, corpus_ids, corpus_timestamps)
+    - evaluate_retrieval(rankings, correct_ids, corpus_ids, k)
+        returns 3-tuple: (recall_any, recall_all, ndcg_score)
+    We call with n_results=5 and read recall_any as R@5.
     """
     # Imports kept lazy to keep test mocking simple
     from benchmarks.longmemeval_bench import (
@@ -2911,10 +2920,14 @@ def _run_lme_with_filter(entries: list, drop_ids: set) -> float:
         filtered = apply_drop_filter(entry, drop_ids)
         if not filtered["haystack_session_ids"]:
             continue  # nothing left to retrieve against
-        rankings, corpus_ids = build_palace_and_retrieve(filtered, k=5)
+        rankings, _corpus, corpus_ids, _ts = build_palace_and_retrieve(
+            filtered, granularity="session", n_results=5,
+        )
         correct_ids = filtered.get("answer_session_ids", [])
-        r5 = evaluate_retrieval(rankings, correct_ids, corpus_ids, k=5)
-        recalls.append(r5)
+        recall_any, _recall_all, _ndcg = evaluate_retrieval(
+            rankings, correct_ids, corpus_ids, k=5,
+        )
+        recalls.append(recall_any)
     return sum(recalls) / len(recalls) if recalls else 0.0
 
 
