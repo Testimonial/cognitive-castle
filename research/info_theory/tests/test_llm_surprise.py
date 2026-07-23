@@ -224,3 +224,39 @@ def test_merge_partials_empty_dir_is_noop(tmp_path):
     output = tmp_path / "merged.parquet"
     merge_partials(partials_dir, output)
     assert not output.exists()
+
+
+def test_process_subsample_skips_per_drawer_errors(tmp_path):
+    # Robustness: one failed llm_surprise_one call must not abort the batch.
+    # The failed drawer is logged + skipped; remaining drawers still process.
+    from pipeline.llm_surprise import process_subsample
+
+    partials_dir = tmp_path / "partials"
+    targets = [{"drawer_id": f"d{i}", "text": "t"} for i in range(5)]
+    priors_lookup = {f"d{i}": [{"text": "p"}] for i in range(5)}
+
+    call_count = [0]
+
+    def classify(system, user, json_mode=True):
+        call_count[0] += 1
+        r = MagicMock()
+        if call_count[0] == 2:  # 2nd call raises
+            raise RuntimeError("simulated timeout")
+        r.text = '{"score": 5, "reasoning": ""}'
+        r.raw = {"total_cost_usd": 0.01}
+        r.input_tokens = 100
+        r.completion_tokens = 50
+        return r
+
+    provider = MagicMock()
+    provider.classify.side_effect = classify
+
+    # Should not raise despite the error at call #2.
+    process_subsample(
+        targets, priors_lookup, provider=provider, partials_dir=partials_dir, max_cost=1.0
+    )
+
+    # 5 targets - 1 error = 4 successful partials
+    assert len(list(partials_dir.glob("*.parquet"))) == 4
+    # And provider.classify was invoked for all 5 (each drawer got a call attempt)
+    assert provider.classify.call_count == 5
