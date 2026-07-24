@@ -1,6 +1,6 @@
 {
   "name": "castle",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "Cognitive Castle — persistent verbatim memory for Codex agents. LanceDB-backed local search, MCP tools, auto-save hooks. Local-first, no API keys required.",
   "author": { "name": "Ladislav Bihari" },
   "license": "MIT",
