@@ -411,15 +411,21 @@ def _stage_llm_surprise(
 
     from pipeline.llm_surprise import CostCapExceeded, merge_partials, process_subsample
 
+    # Memory-saver: C-stage only needs {drawer_id, text, wing, filed_at}.
+    # `table` has all 65k drawers with 1024-dim vectors + metadata_json blobs.
+    # `to_pylist()` on the full table balloons to ~2 GB of Python-float
+    # objects for the vector column alone. Project the 4 needed columns first.
+    lean_cols = [c for c in ("drawer_id", "text", "wing", "filed_at") if c in table.column_names]
+    rows = table.select(lean_cols).to_pylist()
+
     chosen_ids = set(subsample["drawer_ids"])
-    rows = table.to_pylist()
     targets = [r for r in rows if r["drawer_id"] in chosen_ids]
 
-    # Very simple priors lookup: 20 most-recent drawers before target,
-    # from the same wing when available. Downstream code depends only
-    # on the structure {drawer_id: [{"text": ..., "drawer_id": ...}, ...]}.
+    # Priors lookup: 20 most-recent drawers before target, from the same wing
+    # when available. Downstream code depends only on the structure
+    # {drawer_id: [{"text": ..., "drawer_id": ...}, ...]}.
     priors_lookup: dict[str, list[dict]] = {}
-    for i, target in enumerate(targets):
+    for target in targets:
         wing = target.get("wing")
         prior_pool = [
             r
@@ -429,6 +435,15 @@ def _stage_llm_surprise(
         ]
         prior_pool.sort(key=lambda r: r.get("filed_at", ""))
         priors_lookup[target["drawer_id"]] = prior_pool[-20:]
+
+    # Free the 65k-row baseline dict list before entering the LLM loop.
+    # Everything past this point uses only `targets` (925 dicts) and
+    # `priors_lookup` (18.5k refs — but they alias into the priors kept
+    # in memory, GC won't reclaim yet). Still, dropping the 63k targets
+    # we don't touch saves memory.
+    import gc as _gc
+    del rows
+    _gc.collect()
 
     try:
         process_subsample(
@@ -718,7 +733,17 @@ def run_pipeline(config: Config) -> dict:
     table_b = _stage_recon_residual(config, palace_table)
 
     subsample = _stage_stratify(config, palace_table)
+
+    # Before spending ~15s/call × 925 calls in C-stage, free the palace
+    # tables we no longer need. table_a and table_b carry only the
+    # {drawer_id, novelty, ...} columns — they don't drag vectors along.
+    # `_stage_llm_surprise` will project just the text columns it needs
+    # from `palace_table`, but we still want to drop table_a/table_b's
+    # duplicate palace metadata to keep the resident set small.
+    import gc as _gc
     table_c = _stage_llm_surprise(config, palace_table, subsample)
+    del palace_table
+    _gc.collect()
 
     analysis = _stage_analysis(config, table_a, table_b, table_c)
     h3 = _stage_h3(config, table_b, lme_table)

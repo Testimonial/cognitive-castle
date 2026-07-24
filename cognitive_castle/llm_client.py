@@ -432,10 +432,28 @@ class ClaudeCliProvider(LLMProvider):
             return False, f"'{self.DEFAULT_BIN}' CLI not found on PATH"
         return True, "ok"
 
+    # Empty-MCP config: passed via --mcp-config so `claude -p` skips spawning
+    # user-configured MCP servers on every call. Each unwanted MCP server
+    # (context7, playwright, etc.) is a Node process worth ~130 MB and gets
+    # started + killed per Claude CLI invocation — 4 of them = ~520 MB
+    # per-call transient memory this provider does not need. Written once
+    # at import time; the file is empty JSON so `--strict-mcp-config` uses
+    # zero MCP servers.
+    _EMPTY_MCP_CONFIG_PATH = "/tmp/castle-claude-cli-empty-mcp.json"
+
+    @classmethod
+    def _ensure_empty_mcp_config(cls) -> str:
+        path = cls._EMPTY_MCP_CONFIG_PATH
+        if not os.path.exists(path):
+            with open(path, "w") as f:
+                f.write('{"mcpServers": {}}')
+        return path
+
     def classify(self, system: str, user: str, json_mode: bool = True) -> LLMResponse:
         sys_prompt = system
         if json_mode:
             sys_prompt += "\n\nRespond with valid JSON only, no prose, no markdown fences."
+        mcp_config = self._ensure_empty_mcp_config()
         cmd = [
             self.DEFAULT_BIN,
             "-p",
@@ -445,6 +463,9 @@ class ClaudeCliProvider(LLMProvider):
             self.model,
             "--disable-slash-commands",
             "--no-session-persistence",
+            "--strict-mcp-config",
+            "--mcp-config",
+            mcp_config,
             "--append-system-prompt",
             sys_prompt,
             user,
