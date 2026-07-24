@@ -2,8 +2,20 @@
 
 
 def _setup_homes(tmp_path, monkeypatch, new_exists: bool, old_exists: bool):
-    """Point HOME at tmp_path; optionally create new and/or legacy dirs."""
+    """Point ~ at tmp_path; optionally create new and/or legacy dirs.
+
+    Sets both the POSIX and Windows env vars — ``Path.home()`` reads
+    ``USERPROFILE`` on Windows and ``HOME`` on POSIX, so we need both
+    for the test to work on all CI platforms.
+    """
+    import os as _os
+
     monkeypatch.setenv("HOME", str(tmp_path))
+    # Windows equivalents (Path.home() reads USERPROFILE first on Windows)
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    drive, path = _os.path.splitdrive(str(tmp_path))
+    monkeypatch.setenv("HOMEDRIVE", drive or "C:")
+    monkeypatch.setenv("HOMEPATH", path or str(tmp_path))
     new = tmp_path / ".castle" / "hook_state"
     old = tmp_path / ".mempalace" / "hook_state"
     if new_exists:

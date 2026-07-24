@@ -374,9 +374,12 @@ def test_llm_timeout_env_override(monkeypatch):
 
 def test_soar_rules_path_default_points_at_package():
     cfg = _make_config_with_file_config({})
-    # Default should be <package>/rules/castle-boost.soar
-    assert cfg.soar_rules_path.endswith("rules/castle-boost.soar")
-    assert "cognitive_castle" in cfg.soar_rules_path
+    # Default should be <package>/rules/castle-boost.soar.
+    # Normalize separators for platform-agnostic comparison — Windows uses
+    # '\' but the assertion should hold everywhere.
+    normalized = cfg.soar_rules_path.replace("\\", "/")
+    assert normalized.endswith("rules/castle-boost.soar")
+    assert "cognitive_castle" in normalized
 
 
 def test_soar_rules_path_env_override(monkeypatch, tmp_path):
