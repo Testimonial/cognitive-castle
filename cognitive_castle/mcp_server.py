@@ -12,6 +12,7 @@ Tools (read):
   castle_search          — semantic search, optional wing/room filter
   castle_check_duplicate — check if content already exists before filing
   castle_info_score      — nn_novelty score for arbitrary text (v3.4.0 research)
+  castle_prune_suggest   — flag low-info drawers as pruning candidates (read-only)
 
 Tools (write):
   castle_add_drawer      — file verbatim content into a wing/room
@@ -536,6 +537,29 @@ def tool_info_score(text: str, wing: str = None, top_k: int = 5):
     except Exception:
         logger.exception("info_score failed")
         return {"error": "info-score failed"}
+    return result.as_dict()
+
+
+def tool_prune_suggest(sample: int = 200, threshold: float = 0.10, wing: str = None, seed: int = 42):
+    """Flag low-information drawers as pruning candidates. Read-only.
+
+    Samples `sample` drawers, computes nn_novelty against each drawer's
+    nearest same-wing prior, and returns those below `threshold` sorted
+    by novelty ascending (most duplicate-y first).
+
+    Never touches the palace. AI agents can use this to surface
+    near-duplicate content for human review — the design principle is
+    "verbatim always", so nothing is auto-pruned.
+
+    Threshold 0.10 = "low" band from the v3.4.0 research paper.
+    """
+    from .prune_suggest import suggest_candidates
+
+    try:
+        result = suggest_candidates(sample=sample, threshold=threshold, wing=wing, seed=seed)
+    except Exception:
+        logger.exception("prune_suggest failed")
+        return {"error": "prune-suggest failed"}
     return result.as_dict()
 
 
@@ -1557,6 +1581,42 @@ TOOLS = {
             "required": ["text"],
         },
         "handler": tool_info_score,
+    },
+    "castle_prune_suggest": {
+        "description": (
+            "Flag low-information drawers as pruning candidates via nn_novelty. "
+            "READ-ONLY — never touches the palace. Samples N drawers, scores each, "
+            "returns those below the novelty threshold sorted most-duplicate-y first. "
+            "Use to surface near-duplicate content (session metadata, encoded API "
+            "blobs, tool_use records) for human review — respects Castle's "
+            "verbatim-always principle by never auto-pruning."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "sample": {
+                    "type": "integer",
+                    "description": "How many drawers to sample (default 200)",
+                },
+                "threshold": {
+                    "type": "number",
+                    "description": (
+                        "Novelty below this = pruning candidate "
+                        "(default 0.10 = 'low' band from the v3.4.0 research)"
+                    ),
+                },
+                "wing": {
+                    "type": "string",
+                    "description": "Optional wing filter — restrict sample to one wing",
+                },
+                "seed": {
+                    "type": "integer",
+                    "description": "RNG seed for reproducible sampling (default 42)",
+                },
+            },
+            "required": [],
+        },
+        "handler": tool_prune_suggest,
     },
     "castle_add_drawer": {
         "description": "File verbatim content into the palace. Checks for duplicates first.",

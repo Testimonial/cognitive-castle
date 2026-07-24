@@ -1182,3 +1182,56 @@ def test_tool_info_score_delegates_to_score_novelty(monkeypatch):
     assert called == {"text": "hello", "top_k": 3, "wing": "projects"}
     assert out["novelty"] == 0.4
     assert out["band"] == "medium"
+
+
+def test_tool_prune_suggest_registered():
+    """The `castle_prune_suggest` MCP tool is in the TOOLS registry."""
+    from cognitive_castle.mcp_server import TOOLS
+
+    assert "castle_prune_suggest" in TOOLS
+    spec = TOOLS["castle_prune_suggest"]
+    assert callable(spec["handler"])
+    schema = spec["input_schema"]
+    # All params optional — schema.required is empty
+    assert schema["required"] == []
+    for param in ("sample", "threshold", "wing", "seed"):
+        assert param in schema["properties"], f"missing param {param}"
+
+
+def test_tool_prune_suggest_delegates_to_suggest_candidates(monkeypatch):
+    """Happy path: forwards args + returns PruneSuggestion.as_dict()."""
+    from cognitive_castle import mcp_server
+
+    class FakeResult:
+        def as_dict(self):
+            return {"sampled": 50, "threshold": 0.10, "num_candidates": 3, "candidates": []}
+
+    called = {}
+
+    def fake_suggest(sample=200, threshold=0.10, wing=None, seed=42, palace_path=None):
+        called["sample"] = sample
+        called["threshold"] = threshold
+        called["wing"] = wing
+        called["seed"] = seed
+        return FakeResult()
+
+    monkeypatch.setattr("cognitive_castle.prune_suggest.suggest_candidates", fake_suggest)
+    out = mcp_server.tool_prune_suggest(sample=50, threshold=0.15, wing="projects", seed=7)
+
+    assert called == {"sample": 50, "threshold": 0.15, "wing": "projects", "seed": 7}
+    assert out["sampled"] == 50
+    assert out["threshold"] == 0.10
+    assert out["num_candidates"] == 3
+
+
+def test_tool_prune_suggest_wraps_exception_as_error(monkeypatch):
+    """Any exception in suggest_candidates surfaces as an `error` key."""
+    from cognitive_castle import mcp_server
+
+    def boom(*a, **kw):
+        raise RuntimeError("simulated palace-open failure")
+
+    monkeypatch.setattr("cognitive_castle.prune_suggest.suggest_candidates", boom)
+    out = mcp_server.tool_prune_suggest()
+    assert "error" in out
+    assert "prune-suggest failed" in out["error"]
