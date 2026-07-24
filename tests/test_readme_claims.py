@@ -22,8 +22,6 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 MEMPALACE_PKG = REPO_ROOT / "cognitive_castle"
 README_PATH = REPO_ROOT / "README.md"
-MCP_TOOLS_DOC_PATH = REPO_ROOT / "website" / "reference" / "mcp-tools.md"
-MODULES_DOC_PATH = REPO_ROOT / "website" / "reference" / "modules.md"
 
 
 def _read(path: Path) -> str:
@@ -83,53 +81,12 @@ class TestToolCount:
 # ---------------------------------------------------------------------------
 
 
-class TestReadmeToolsExistInCode:
-    """Every tool name documented in the MCP tools reference must be a key in TOOLS."""
-
-    def test_every_readme_tool_exists_in_tools_dict(self):
-        """Claim: the MCP tools reference (website/reference/mcp-tools.md)
-        lists tools like castle_get_aaak_spec. Each one must actually be
-        registered in the TOOLS dict in mempalace/mcp_server.py.
-
-        Pre-#875 this parsed the tool table that lived in README.md; that
-        table has moved to the website docs and README now links out.
-        """
-        code_tools = set(_tools_dict_keys())
-        doc_tools = _doc_tool_names()
-        assert len(doc_tools) > 0, (
-            f"Could not parse any tools from {MCP_TOOLS_DOC_PATH.relative_to(REPO_ROOT)} "
-            f"— expected `### \\`castle_xxx\\`` headings."
-        )
-
-        missing = [t for t in doc_tools if t not in code_tools]
-        assert missing == [], (
-            f"Docs list tools that don't exist in TOOLS dict: {missing}. "
-            f"Either add them to mcp_server.py or remove them from "
-            f"{MCP_TOOLS_DOC_PATH.relative_to(REPO_ROOT)}."
-        )
-
-
-# ---------------------------------------------------------------------------
-# 3. No tool in TOOLS dict is missing from README's tool table
-# ---------------------------------------------------------------------------
-
-
-class TestNoUnlistedTools:
-    """Every tool in the TOOLS dict should be documented in the MCP tools reference."""
-
-    def test_no_undocumented_tools(self):
-        """Claim: the MCP tools reference
-        (website/reference/mcp-tools.md) is complete. Any tool in TOOLS
-        but not documented there is undocumented on the public surface."""
-        code_tools = set(_tools_dict_keys())
-        doc_tools = set(_doc_tool_names())
-
-        undocumented = sorted(code_tools - doc_tools)
-        assert undocumented == [], (
-            f"Tools in TOOLS dict but missing from docs: {undocumented}. "
-            f"Add sections for these to "
-            f"{MCP_TOOLS_DOC_PATH.relative_to(REPO_ROOT)}."
-        )
+# NOTE: TestReadmeToolsExistInCode / TestNoUnlistedTools have been deleted.
+# They validated bidirectional consistency between the TOOLS dict in
+# `mcp_server.py` and `website/reference/mcp-tools.md`. The website was
+# removed in PR #64 ("GitHub-only presence"); the MCP tool list now lives
+# only in `mcp_server.py` and is exposed at runtime via the `tools/list`
+# MCP call — self-verifying with no external doc to drift against.
 
 
 # ---------------------------------------------------------------------------
@@ -465,30 +422,45 @@ class TestDialectNotLossless:
 # ---------------------------------------------------------------------------
 
 
-class TestReadmeDialectNotLossless:
-    """The file-reference documentation must not say dialect.py is lossless.
+class TestDialectNotLossless:
+    """No user-facing doc surface may call `dialect.py` lossless.
 
-    Pre-#875 this lived in a README.md file table; it now lives in
-    website/reference/modules.md. The April 7 correction established that
-    AAAK is a lossy abbreviation system, not lossless compression, and
-    every docs surface that describes dialect.py must respect that.
+    AAAK is a *lossy* abbreviation system (the drawer contents are the
+    verbatim source of truth; AAAK is just an index-layer nickname). The
+    original April 2026 correction was pinned against a website file
+    that no longer exists (website removed in PR #64), so this test now
+    scans every markdown surface that still ships in the repo — README,
+    CHANGELOG, ROADMAP, CONTRIBUTING, AGENTS, CLAUDE, MISSION, SECURITY,
+    docs/**, .claude-plugin/**, cognitive_castle/instructions/** — for
+    any line mentioning `dialect.py` and asserts none of them call it
+    lossless.
     """
 
-    def test_readme_dialect_line_not_lossless(self):
-        doc = _read(MODULES_DOC_PATH)
-        # Any line mentioning dialect.py (narrative or table) must not call it lossless
-        dialect_lines = [line for line in doc.splitlines() if "dialect.py" in line]
-        assert len(dialect_lines) > 0, (
-            f"Could not find dialect.py in "
-            f"{MODULES_DOC_PATH.relative_to(REPO_ROOT)}. "
-            f"Expected at least one reference."
+    def test_no_doc_calls_dialect_lossless(self):
+        offenders = []
+        # Every markdown surface we still ship, minus historical archives
+        # (docs/superpowers/{plans,specs,notes} and docs/HISTORY.md keep
+        # their period-accurate wording).
+        for md in REPO_ROOT.rglob("*.md"):
+            rel = md.relative_to(REPO_ROOT).as_posix()
+            if (
+                rel.startswith("docs/superpowers/")
+                or rel.startswith("docs/HISTORY.md")
+                or rel == "CHANGELOG.md"  # historical narration of the original fix mentions "lossless"
+                or rel.startswith("test_env/")
+                or rel.startswith(".pytest_cache/")
+                or rel.startswith("research/info_theory/paper/")
+                or rel.startswith(".venv/")
+            ):
+                continue
+            text = _read(md)
+            for i, line in enumerate(text.splitlines(), 1):
+                if "dialect.py" in line and "lossless" in line.lower():
+                    offenders.append(f"{rel}:{i}: {line.strip()}")
+        assert not offenders, (
+            "Some doc still calls dialect.py lossless. AAAK is lossy — "
+            "reword or drop the lossless claim:\n" + "\n".join(offenders)
         )
-
-        for line in dialect_lines:
-            assert "lossless" not in line.lower(), (
-                f"Docs still call dialect.py lossless: {line.strip()!r}. "
-                f"After April 7 correction, this must say 'lossy' or remove the lossless claim."
-            )
 
 
 # ---------------------------------------------------------------------------

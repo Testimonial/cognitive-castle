@@ -13,7 +13,7 @@ The Python package that powers Cognitive Castle. All modules, all logic.
 | `convo_miner.py` | Conversation ingest — chunks by exchange pair (Q+A), detects rooms from content |
 | `searcher.py` | 3-stage retrieval pipeline (dense + FTS + KG-hop → RRF + recency → rerank) — filters by wing/room, returns verbatim + scores |
 | `layers.py` | 4-layer memory stack: L0 (identity), L1 (critical facts), L2 (room recall), L3 (deep search) |
-| `dialect.py` | AAAK compression — entity codes, emotion markers, 30x lossless ratio |
+| `dialect.py` | AAAK compression — entity codes, emotion markers, 30x lossy abbreviation (drawer contents are the verbatim source of truth; AAAK is index-layer only) |
 | `knowledge_graph.py` | Temporal entity-relationship graph — SQLite, time-filtered queries, fact invalidation |
 | `palace_graph.py` | Room-based navigation graph — BFS traversal, tunnel detection across wings |
 | `mcp_server.py` | MCP server — 29 tools, AAAK auto-teach, Palace Protocol, agent diary |
