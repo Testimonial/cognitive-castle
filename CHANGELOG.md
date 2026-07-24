@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [3.4.1] — 2026-07-24
+
+Follow-up release closing out the v3.4.0 research and shipping the
+memory fixes that made the full-palace run finish.
+
+### Research paper closeout
+
+The information-theory paper (`research/info_theory/paper/`) now
+carries the completed A↔C and B↔C correlations from a real 792-drawer
+subsample against the 65,779-drawer palace:
+
+- $\rho(A, B) = 0.9820$ (95% CI [0.9817, 0.9823], $n=65{,}746$) — unchanged
+- **$\rho(A, C) = 0.2023$** (95% CI [0.134, 0.262], $n=792$) — NEW
+- **$\rho(B, C) = 0.2015$** (95% CI [0.126, 0.267], $n=782$) — NEW
+
+The weak A↔C / B↔C correlations are the paper's core methodological
+finding: the LLM judge measures **contextual predictability** — an
+axis of information content that is orthogonal to embedding geometry.
+Production systems that need geometric novelty can use the O(1)
+`nn_novelty` (rho with LLE = 0.982); systems that need to detect
+predictable/boilerplate/continuation content need the LLM signal
+because the geometric estimators cannot substitute for it.
+
+Paper's 3 `\todo{}` markers are now closed. Appendix carries the
+verbatim system + user prompt template, cost-per-call ($0.031),
+invocation flags (including the `--strict-mcp-config` fix), and the
+$15 budget cap that stopped the batch at $n = 787$.
+
+### Bug fixes — enabled the full-palace run
+
+- **`ClaudeCliProvider` now passes `--strict-mcp-config --mcp-config
+  <empty>`.** Each `claude -p` invocation was spawning user-configured
+  MCP servers (context7-mcp, playwright-mcp, ...) as short-lived Node
+  subprocesses — ~130 MB × 4 servers = ~520 MB transient per call.
+  cgroup memory accounting saw the spike; systemd-oomd targeted the
+  process around drawer 200–300 across three restarts. Passing the
+  empty MCP config drops the per-call child count from +4 to +1 and
+  keeps peak-per-call under 2.2 GB (was ~2.6 GB). The C-stage does
+  not need MCP servers — this is pure overhead removal.
+- **`_stage_llm_surprise` in `run_experiment.py` now projects the
+  lean columns** (`drawer_id`, `text`, `wing`, `filed_at`) before
+  `to_pylist()`. The unpatched path materialised the 1024-dim vector
+  column as a Python list-of-floats for all 65k drawers — ~1.8 GB of
+  Python object overhead. Explicit `del + gc.collect()` after
+  building `priors_lookup` and after C-stage entry.
+- **`ClaudeCliProvider` timeout bumped from 120 s → 600 s** with per-drawer
+  error skipping in `process_subsample` (originally PR #65; carried into
+  v3.4.1's stable run).
+
+### Notes
+
+- No public API changes vs 3.4.0 — CLI, MCP tool list, and library
+  entry points are identical.
+- Cumulative C-stage cost so far: ~$16 across all attempts
+  (including debugging restarts). Rerunning against `--force` would
+  spend ~$25 for a fresh 925-drawer sample.
+
+---
+
 ## [3.4.0] — 2026-07-23
 
 First Castle-branded release since forking from

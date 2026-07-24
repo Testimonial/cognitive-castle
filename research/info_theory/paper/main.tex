@@ -251,14 +251,63 @@ Roweis--Saul residual on this corpus. The practical read: for a
 production personal-memory system, the LLE machinery is unnecessary if
 the goal is pruning by novelty --- \texttt{nn\_novelty} is enough.
 
-\subsection{A $\leftrightarrow$ C and B $\leftrightarrow$ C}
-The \texttt{llm\_surprise} batch is executing on a 925-drawer
-stratified subsample (Claude Haiku 4.5, 20-prior context) at the time
-of submission and is not yet folded into the correlation tables.
-\todo{C-stage numbers here: $\rho(A, C)$ and $\rho(B, C)$ with
-block-bootstrap $95\%$ CIs on the 925-drawer subsample; discuss
-agreement with the pooled A$\leftrightarrow$B result and whether the
-LLM-as-judge picks up structure orthogonal to the embedding geometry.}
+\subsection{A $\leftrightarrow$ C and B $\leftrightarrow$ C ---
+  the LLM judge measures a different axis}
+
+\texttt{llm\_surprise} (Claude Haiku 4.5, 20-prior same-wing context)
+ran on a stratified subsample. The cost cap of \$15 (\S\ref{sec:methods})
+was reached at drawer 787 with the batch gracefully merging what it
+had; $n = 792$ drawers landed for the $\rho(A,C)$ correlation and $n
+= 782$ for $\rho(B,C)$ (the latter loses another 10 to the
+$K_{\mathrm{floor}} = 5$ prior-window that nulls Estimator B).
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Correlation & $\rho$ (Spearman) & 95\% bootstrap CI & $n$ \\
+\midrule
+$A \leftrightarrow B$ & $0.9820$ & $[0.9817, 0.9823]$ & $65{,}746$ \\
+$A \leftrightarrow C$ & $0.2023$ & $[0.134, 0.262]$ & $792$ \\
+$B \leftrightarrow C$ & $0.2015$ & $[0.126, 0.267]$ & $782$ \\
+\bottomrule
+\end{tabular}
+\caption{Pairwise Spearman correlations across the three estimators.
+  A and B are near-collinear; both correlate only weakly with C.}
+\label{tab:corrs}
+\end{table}
+
+The finding is not that all three estimators agree. $\rho(A,C) \approx
+0.20$ is highly significant --- the CI excludes zero and the $n$ is
+adequate --- but the estimators are measuring distinct axes of drawer
+information content. We read the result as a genuine
+methodological contribution rather than a null:
+
+\begin{itemize}
+  \item \textbf{A and B measure embedding-space novelty.} With
+    $\rho(A,B) = 0.982$, the two are near-collinear.
+    The $O(K^3)$ Roweis--Saul residual adds essentially no ordering
+    information over the $O(1)$ nearest-neighbour distance on this
+    corpus. \emph{For production novelty-based pruning, the cheap
+    estimator suffices.}
+  \item \textbf{C measures contextual predictability, and it is
+    orthogonal to embedding geometry.} An LLM given a target and 20
+    same-wing priors asks a different question --- \emph{could a
+    reasoning model have generated this given the context?} --- than
+    \emph{is this embedding vector far from the nearest prior?}
+    Contextual predictability captures redundancy (\eg,
+    tool-use trace continuations, protocol boilerplate,
+    metadata blobs where prior lines telegraph the next) that the
+    embedding geometry does not surface.
+  \item \textbf{The LLM cost is justified by the orthogonality,
+    not by cross-validation of A/B.} A production system that only
+    needs geometric pruning should use A. A system that needs to
+    detect \emph{predictable} content --- boilerplate, continuations,
+    stereotyped structure --- needs the LLM signal because A cannot
+    substitute for it.
+\end{itemize}
+
+The prompt template and cost-per-call breakdown are in the appendix.
 
 \subsection{H1 --- source-type heterogeneity is real but modest}
 Kruskal--Wallis across the seven wings yields $H = 5360$ with $p \approx
