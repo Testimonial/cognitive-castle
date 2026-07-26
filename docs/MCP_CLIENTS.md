@@ -51,18 +51,82 @@ claude mcp add castle -- castle-mcp
 
 ## Codex (OpenAI's coding CLI)
 
-Codex reads MCP servers from `~/.codex/config.toml`. Add:
+Codex reads MCP servers from `~/.codex/config.toml`. Simplest setup:
 
 ```toml
 [mcp_servers.castle]
 command = "castle-mcp"
 ```
 
-Restart Codex. `castle_*` tools appear in the tool palette.
+Restart Codex. The 32 `castle_*` tools appear in the tool palette.
 
-The repo also ships `.codex-plugin/plugin.json` with the same manifest
-shape as `.claude-plugin/plugin.json`; if Codex evolves a plugin
-marketplace with auto-registration, Castle is ready.
+### Sharing knowledge with Claude Code (recommended)
+
+Castle stores everything in one LanceDB palace at `~/.castle/palace/`.
+Both clients can point at the same palace and the reads/writes go to
+the same tables — anything Claude Code files is instantly visible in
+Codex, and vice-versa.
+
+To pin the palace explicitly (safer if you ever run more than one):
+
+```toml
+[mcp_servers.castle]
+command = "castle-mcp"
+args = ["--palace", "/home/YOU/.castle/palace"]
+```
+
+And the matching Claude Code registration:
+
+```bash
+claude mcp add castle -- castle-mcp --palace /home/YOU/.castle/palace
+```
+
+Both clients now write to the same LanceDB tables, so the palace is a
+single shared memory across your Codex + Claude Code sessions.
+
+### Verifying the two clients see the same data
+
+Quick round-trip smoke test:
+
+1. From Claude Code, ask its agent to file a distinctive drawer:
+   > *"Use castle_add_drawer to file wing=cross_check, room=test,
+   > content='canary 2026-07-26'"*
+2. From Codex, search for it:
+   > *"Use castle_search to find 'canary 2026-07-26'"*
+
+If Codex retrieves the exact string Claude Code saved, both are wired
+to the same palace.
+
+### Auto-mining is Claude-Code-only — capture Codex sessions manually
+
+Claude Code has plugin-level Stop / PreCompact hooks that mine your
+conversation into the palace as you talk (every ~15 turns). Codex has
+no equivalent hook interface yet, so Codex conversations aren't
+auto-filed. To catch up periodically:
+
+```bash
+castle mine ~/.codex/history --mode convos
+```
+
+Consider wiring this into a shell alias, cron, or an `after-session`
+Codex hook if a later Codex build adds one.
+
+### About `.codex-plugin/plugin.json`
+
+The repo ships `.codex-plugin/plugin.json` with the same manifest
+shape as `.claude-plugin/plugin.json` — if Codex ever grows a plugin
+marketplace with auto-registration + hook support like Claude Code,
+Castle is already packaged for it. Until then, the `config.toml`
+snippet above is the working install path.
+
+### Env vars propagate
+
+`CASTLE_EMBEDDER_MODEL`, `CASTLE_PROJECT`, `CASTLE_LLM_*` etc. that
+you set in your shell are inherited by the `castle-mcp` subprocess
+Codex launches. If you set them for one client, keep them in a
+shared shell profile (`~/.bashrc` / `~/.zshrc`) so Claude Code sees
+the same values — otherwise you can hit `EmbedderIdentityMismatchError`
+on the first search from the mismatched client.
 
 ## Cursor
 
