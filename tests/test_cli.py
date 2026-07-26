@@ -890,3 +890,30 @@ def test_search_default_mode_is_max():
     parser = cli.build_parser().parser
     args = parser.parse_args(["search", "q"])
     assert args.mode == "max"
+
+
+def test_mcp_list_tools_prints_castle_tools(capsys):
+    """`castle mcp --list-tools` prints one castle_* name per line + count."""
+    from cognitive_castle.cli import build_parser, cmd_mcp
+
+    args = build_parser().parser.parse_args(["mcp", "--list-tools"])
+    cmd_mcp(args)
+    out = capsys.readouterr().out
+    # A few well-known tool names must appear
+    for name in ("castle_search", "castle_add_drawer", "castle_info_score"):
+        assert name in out, f"expected {name} in output"
+    # Trailing "N tools total." line
+    assert "tools total." in out
+
+
+def test_mcp_no_flag_prints_setup_instructions(capsys):
+    """Default `castle mcp` (no --list-tools) prints setup instructions."""
+    from cognitive_castle.cli import build_parser, cmd_mcp
+
+    args = build_parser().parser.parse_args(["mcp"])
+    cmd_mcp(args)
+    out = capsys.readouterr().out
+    assert "castle-mcp" in out
+    assert "claude mcp add castle" in out
+    # Pointer to --list-tools
+    assert "--list-tools" in out

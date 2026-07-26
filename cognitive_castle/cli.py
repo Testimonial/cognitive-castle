@@ -853,7 +853,30 @@ def cmd_instructions(args):
 
 
 def cmd_mcp(args):
-    """Show how to wire Cognitive Castle into MCP-capable hosts."""
+    """Show how to wire Cognitive Castle into MCP-capable hosts.
+
+    With ``--list-tools`` (added in v3.4.x), prints only the sorted list
+    of tool names the MCP server exposes — useful for grep / scripting /
+    quick reference without reading the source of ``mcp_server.py``.
+    """
+    if getattr(args, "list_tools", False):
+        # Parse tool names out of TOOLS dict without importing the whole
+        # MCP stack (which loads sentence-transformers on import in some
+        # environments). Regex-scan the source file — cheap and stable.
+        import re as _re
+
+        src_path = Path(__file__).parent / "mcp_server.py"
+        try:
+            src = src_path.read_text(encoding="utf-8")
+        except OSError as e:
+            print(f"error: could not read {src_path}: {e}")
+            sys.exit(1)
+        names = sorted(set(_re.findall(r'"(castle_\w+)":\s*\{', src)))
+        for n in names:
+            print(n)
+        print(f"\n{len(names)} tools total.")
+        return
+
     base_server_cmd = "castle-mcp"
 
     if args.palace:
@@ -871,6 +894,9 @@ def cmd_mcp(args):
         print("\nOptional custom palace:")
         print(f"  claude mcp add castle -- {base_server_cmd} --palace /path/to/palace")
         print(f"  {base_server_cmd} --palace /path/to/palace")
+
+    print("\nList all tools this server exposes:")
+    print("  castle mcp --list-tools")
 
 
 def cmd_compress(args):
@@ -1298,9 +1324,14 @@ def build_parser() -> _ParserBundle:
     )
 
     # mcp
-    sub.add_parser(
+    p_mcp = sub.add_parser(
         "mcp",
         help="Show MCP setup command for connecting Cognitive Castle to your AI client",
+    )
+    p_mcp.add_argument(
+        "--list-tools",
+        action="store_true",
+        help="Print all castle_* tools exposed by the MCP server (no setup instructions)",
     )
 
     # status
