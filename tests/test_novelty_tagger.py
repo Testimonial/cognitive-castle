@@ -3,7 +3,9 @@
 import json
 from unittest.mock import MagicMock
 
-from cognitive_castle.novelty_tagger import compute_novelty
+import pyarrow as pa
+
+from cognitive_castle.novelty_tagger import backfill_novelty, compute_novelty
 
 
 def _row(id_, distance, filed_at, source_file="f.md"):
@@ -114,3 +116,78 @@ def test_wing_filter_reaches_backend():
     # SQL-escaped single quote
     assert kwargs.get("where") == "wing = 'pro''jects'"
     assert kwargs.get("n_results") == 10
+
+
+def _arrow_collection(rows_spec):
+    """Mock LanceCollection whose _table.to_arrow() yields rows_spec and
+    which records update() calls. rows_spec: list of dicts with id,
+    vector, metadata_json, wing."""
+    col = MagicMock()
+    col._table.to_arrow.return_value = pa.Table.from_pylist(rows_spec)
+    col.vector_search.return_value = []  # every drawer scores 1.0
+    return col
+
+
+def _spec_row(id_, has_novelty, wing="w", filed_at="2026-01-01T00:00:00"):
+    meta = {"filed_at": filed_at, "source_file": "f.md"}
+    if has_novelty:
+        meta["novelty"] = 0.42
+    return {
+        "id": id_,
+        "vector": [0.1] * 4,
+        "wing": wing,
+        "metadata_json": json.dumps(meta),
+    }
+
+
+def test_backfill_only_missing_skips_tagged():
+    col = _arrow_collection(
+        [
+            _spec_row("a", has_novelty=True),
+            _spec_row("b", has_novelty=False),
+        ]
+    )
+    stats = backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    assert stats == {"tagged": 1, "skipped": 1, "failed": 0}
+    # Only "b" updated
+    (call,) = col.update.call_args_list
+    assert call.kwargs["ids"] == ["b"]
+    assert call.kwargs["metadatas"] == [{"novelty": 1.0}]
+
+
+def test_backfill_per_drawer_error_counts_failed():
+    col = _arrow_collection(
+        [
+            _spec_row("a", has_novelty=False),
+            _spec_row("b", has_novelty=False),
+        ]
+    )
+    # First vector_search raises, second returns fine.
+    col.vector_search.side_effect = [RuntimeError("boom"), []]
+    stats = backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    assert stats["failed"] == 1
+    assert stats["tagged"] == 1
+
+
+def test_backfill_does_not_pass_source_file_exclusion():
+    """Spec: backfill must NOT apply the mine-time same-source_file rule."""
+    col = _arrow_collection([_spec_row("a", has_novelty=False)])
+    with_neighbour = [
+        {
+            "id": "n",
+            "_distance": 0.05,
+            "metadata_json": json.dumps({"filed_at": "2025-01-01T00:00:00", "source_file": "f.md"}),
+        }
+    ]
+    col.vector_search.return_value = with_neighbour
+    backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    (call,) = col.update.call_args_list
+    # Neighbour shares source_file "f.md" with target — still counted.
+    assert abs(call.kwargs["metadatas"][0]["novelty"] - 0.05) < 1e-9
+
+
+def test_backfill_batches_updates():
+    col = _arrow_collection([_spec_row(f"d{i}", has_novelty=False) for i in range(5)])
+    backfill_novelty(col, batch_size=2, progress=lambda *_: None)
+    # 5 drawers, batch 2 → 3 update calls
+    assert col.update.call_count == 3

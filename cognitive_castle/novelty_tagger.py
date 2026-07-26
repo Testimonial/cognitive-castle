@@ -16,7 +16,10 @@ over-fetch.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 _OVERFETCH = 10  # top-N neighbours fetched before client-side filtering
 
@@ -76,3 +79,74 @@ def compute_novelty(
     if max_cos is None:
         return 1.0
     return 1.0 - max_cos
+
+
+def backfill_novelty(
+    collection,
+    batch_size: int = 500,
+    only_missing: bool = True,
+    progress=print,
+) -> dict:
+    """Tag drawers missing the ``novelty`` metadata key. Resumable.
+
+    Reads the whole table once (``_table.to_arrow()`` — same approach as
+    ``prune_suggest``; ~seconds for a 65k palace), computes prior-only
+    novelty per untagged drawer (NO source_file exclusion — targets are
+    settled drawers, not mid-replacement ones), and applies metadata
+    updates in batches via ``collection.update`` (read-merge-write, so
+    unrelated metadata fields survive).
+
+    Interrupt-safe: already-tagged drawers are skipped on the next run
+    (``only_missing`` targets key-absence).
+
+    Returns ``{"tagged": n, "skipped": n, "failed": n}``.
+    """
+    table = collection._table.to_arrow()
+    rows = table.to_pylist()
+
+    tagged = skipped = failed = 0
+    pending_ids: list = []
+    pending_metas: list = []
+
+    def _flush():
+        if pending_ids:
+            collection.update(ids=list(pending_ids), metadatas=list(pending_metas))
+            pending_ids.clear()
+            pending_metas.clear()
+
+    total = len(rows)
+    for i, row in enumerate(rows):
+        raw = row.get("metadata_json")
+        try:
+            meta = json.loads(raw) if raw else {}
+        except (TypeError, ValueError):
+            meta = {}
+        if only_missing and "novelty" in meta:
+            skipped += 1
+            continue
+        vector = row.get("vector")
+        filed_at = meta.get("filed_at")
+        if not vector or not filed_at:
+            skipped += 1
+            continue
+        try:
+            novelty = compute_novelty(
+                list(vector),
+                collection,
+                wing=row.get("wing"),
+                filed_at=str(filed_at),
+                self_id=row.get("id"),
+            )
+        except Exception as e:  # noqa: BLE001 — per-drawer degrade, never abort
+            failed += 1
+            logger.warning("backfill: %s failed: %s", row.get("id"), e)
+            continue
+        pending_ids.append(row.get("id"))
+        pending_metas.append({"novelty": novelty})
+        tagged += 1
+        if len(pending_ids) >= batch_size:
+            _flush()
+            progress(f"[backfill] {i + 1}/{total} scanned, {tagged} tagged")
+
+    _flush()
+    return {"tagged": tagged, "skipped": skipped, "failed": failed}
