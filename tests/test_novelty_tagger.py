@@ -94,6 +94,19 @@ def test_malformed_neighbour_metadata_skipped():
     assert abs(n - 0.5) < 1e-9  # bad row skipped, not fatal
 
 
+def test_non_dict_json_metadata_skipped():
+    """Valid JSON that isn't an object (null, number, list) must be
+    skipped, never fatal — the 'never fatal' contract is broad."""
+    rows = [
+        {"id": "n1", "_distance": 0.05, "metadata_json": "null"},
+        {"id": "n2", "_distance": 0.05, "metadata_json": "[1, 2]"},
+        _row("good", 0.5, "2025-01-01T00:00:00"),
+    ]
+    col = _col_with(rows)
+    n = compute_novelty([0.1] * 8, col, wing="w", filed_at="2026-01-01")
+    assert abs(n - 0.5) < 1e-9
+
+
 def test_wing_filter_reaches_backend():
     col = _col_with([])
     compute_novelty([0.1] * 8, col, wing="pro'jects", filed_at="2026-01-01")

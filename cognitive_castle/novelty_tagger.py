@@ -16,10 +16,7 @@ over-fetch.
 from __future__ import annotations
 
 import json
-import logging
 from typing import Optional
-
-logger = logging.getLogger(__name__)
 
 _OVERFETCH = 10  # top-N neighbours fetched before client-side filtering
 
@@ -65,6 +62,8 @@ def compute_novelty(
             meta = json.loads(raw) if raw else {}
         except (TypeError, ValueError):
             continue  # malformed neighbour — skip, never fatal
+        if not isinstance(meta, dict):
+            continue  # valid JSON that isn't an object — skip, never fatal
         n_filed = meta.get("filed_at")
         if not n_filed or str(n_filed) >= str(filed_at):
             continue  # prior-only
