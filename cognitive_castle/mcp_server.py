@@ -11,6 +11,7 @@ Tools (read):
   castle_get_taxonomy    — full wing → room → count tree
   castle_search          — semantic search, optional wing/room filter
   castle_check_duplicate — check if content already exists before filing
+  castle_wake_up         — L0 + L1 wake-up context (~600–900 tokens)
   castle_info_score      — nn_novelty score for arbitrary text (v3.4.0 research)
   castle_prune_suggest   — flag low-info drawers as pruning candidates (read-only)
 
@@ -538,6 +539,31 @@ def tool_info_score(text: str, wing: str = None, top_k: int = 5):
         logger.exception("info_score failed")
         return {"error": "info-score failed"}
     return result.as_dict()
+
+
+def tool_wake_up(wing: str = None):
+    """Return the L0 + L1 wake-up context (~600–900 tokens).
+
+    Practical use: at session start, an AI agent calls this once and
+    receives the palace's identity + essential story layers as a single
+    text block — a fast, cheap way to remind the model what it knows
+    about the user and their projects without a full search.
+
+    Optional `wing` filter scopes the wake-up to a single project.
+    """
+    from .layers import MemoryStack
+    from .config import CognitiveCastleConfig
+
+    try:
+        cfg = CognitiveCastleConfig()
+        stack = MemoryStack(palace_path=cfg.palace_path)
+        text = stack.wake_up(wing=wing)
+    except Exception:
+        logger.exception("wake_up failed")
+        return {"error": "wake-up failed"}
+
+    tokens = len(text) // 4  # rough estimate — same as the CLI
+    return {"text": text, "estimated_tokens": tokens, "wing": wing}
 
 
 def tool_prune_suggest(sample: int = 200, threshold: float = 0.10, wing: str = None, seed: int = 42):
@@ -1553,6 +1579,25 @@ TOOLS = {
             "required": ["content"],
         },
         "handler": tool_check_duplicate,
+    },
+    "castle_wake_up": {
+        "description": (
+            "Return the L0 + L1 wake-up context (~600–900 tokens): "
+            "the palace's identity + essential story layers as a single text "
+            "block. Cheap, no LLM calls. Use at session start to remind the "
+            "model what it already knows about the user and their projects."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "wing": {
+                    "type": "string",
+                    "description": "Optional wing (project) to scope the wake-up to",
+                },
+            },
+            "required": [],
+        },
+        "handler": tool_wake_up,
     },
     "castle_info_score": {
         "description": (

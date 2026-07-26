@@ -1235,3 +1235,49 @@ def test_tool_prune_suggest_wraps_exception_as_error(monkeypatch):
     out = mcp_server.tool_prune_suggest()
     assert "error" in out
     assert "prune-suggest failed" in out["error"]
+
+
+def test_tool_wake_up_registered():
+    """The `castle_wake_up` MCP tool is in TOOLS with a callable handler."""
+    from cognitive_castle.mcp_server import TOOLS
+
+    assert "castle_wake_up" in TOOLS
+    spec = TOOLS["castle_wake_up"]
+    assert callable(spec["handler"])
+    schema = spec["input_schema"]
+    assert schema["required"] == []
+    assert "wing" in schema["properties"]
+
+
+def test_tool_wake_up_returns_text_and_token_estimate(monkeypatch):
+    """Happy path: delegates to MemoryStack.wake_up + envelopes the result."""
+    from cognitive_castle import mcp_server
+
+    class FakeStack:
+        def __init__(self, palace_path=None):
+            pass
+
+        def wake_up(self, wing=None):
+            return "L0/L1 wake-up context text here"
+
+    monkeypatch.setattr("cognitive_castle.layers.MemoryStack", FakeStack)
+    out = mcp_server.tool_wake_up(wing="my_app")
+
+    assert out["text"] == "L0/L1 wake-up context text here"
+    assert out["wing"] == "my_app"
+    # 30 chars // 4 = 7 tokens estimated (integer division, ~4 chars/token)
+    assert out["estimated_tokens"] == 7
+
+
+def test_tool_wake_up_wraps_exception_as_error(monkeypatch):
+    """Any failure surfaces as an `error` key rather than raising."""
+    from cognitive_castle import mcp_server
+
+    class BadStack:
+        def __init__(self, palace_path=None):
+            raise RuntimeError("no palace")
+
+    monkeypatch.setattr("cognitive_castle.layers.MemoryStack", BadStack)
+    out = mcp_server.tool_wake_up()
+    assert "error" in out
+    assert "wake-up failed" in out["error"]
