@@ -1,5 +1,3 @@
-import os, hashlib, json
-from pathlib import Path
 import pytest
 from pipeline.snapshot_palace import snapshot_palace, compute_fingerprint
 
@@ -18,7 +16,8 @@ def test_snapshot_copies_files(tmp_path):
 def test_snapshot_refuses_to_overwrite(tmp_path):
     src = tmp_path / "live"
     dst = tmp_path / "snap"
-    src.mkdir(); dst.mkdir()
+    src.mkdir()
+    dst.mkdir()
     with pytest.raises(FileExistsError):
         snapshot_palace(src, dst)
 

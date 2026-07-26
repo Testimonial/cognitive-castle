@@ -420,7 +420,7 @@ Original benchmark methodology and the "wings/rooms/drawers" naming
 preserved with credit to the upstream authors.
 
 <!-- Link Definitions -->
-[version-shield]: https://img.shields.io/badge/version-3.4.0-4dc9f6?style=flat-square&labelColor=0a0e14
+[version-shield]: https://img.shields.io/badge/version-3.4.1-4dc9f6?style=flat-square&labelColor=0a0e14
 [release-link]: https://github.com/Testimonial/cognitive-castle/releases
 [python-shield]: https://img.shields.io/badge/python-3.9+-7dd8f8?style=flat-square&labelColor=0a0e14&logo=python&logoColor=7dd8f8
 [python-link]: https://www.python.org/

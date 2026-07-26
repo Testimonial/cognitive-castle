@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -436,10 +437,14 @@ class ClaudeCliProvider(LLMProvider):
     # user-configured MCP servers on every call. Each unwanted MCP server
     # (context7, playwright, etc.) is a Node process worth ~130 MB and gets
     # started + killed per Claude CLI invocation — 4 of them = ~520 MB
-    # per-call transient memory this provider does not need. Written once
-    # at import time; the file is empty JSON so `--strict-mcp-config` uses
-    # zero MCP servers.
-    _EMPTY_MCP_CONFIG_PATH = "/tmp/castle-claude-cli-empty-mcp.json"
+    # per-call transient memory this provider does not need. Written lazily
+    # on first call; the file is empty JSON so `--strict-mcp-config` uses
+    # zero MCP servers. `tempfile.gettempdir()` for cross-platform temp
+    # location (Windows has no `/tmp`; older /tmp hardcode broke all
+    # Windows CI runs of ClaudeCliProvider).
+    _EMPTY_MCP_CONFIG_PATH = os.path.join(
+        tempfile.gettempdir(), "castle-claude-cli-empty-mcp.json"
+    )
 
     @classmethod
     def _ensure_empty_mcp_config(cls) -> str:

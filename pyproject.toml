@@ -3,7 +3,7 @@ name = "cognitive-castle"
 version = "3.4.1"
 description = "Cognitive Castle — local-first persistent memory for AI agents. Verbatim, LanceDB-backed, 3-stage retrieval, no API key required."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = "MIT"
 keywords = [
     "ai", "memory", "llm", "rag", "mcp",
