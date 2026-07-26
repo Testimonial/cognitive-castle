@@ -959,3 +959,42 @@ class TestMineTimeNoveltyTagging:
 
         self._mine_one(tmp_dir, collection, monkeypatch, spy)
         assert seen["exclude_source_file"].endswith("doc.md")
+
+
+class TestStatusInfoHealth:
+    """Info-aware filing (2026-07-26 spec): status() shows a best-effort
+    per-wing info-health line built entirely from stored ``novelty``
+    metadata — no vector search, no scoring, no LLM calls."""
+
+    def test_status_prints_info_line_when_tagged(
+        self, seeded_collection, capsys, monkeypatch, tmp_dir
+    ):
+        import cognitive_castle.miner as miner_mod
+
+        # Tag the seeded drawers with novelty via metadata update.
+        got = seeded_collection.get(include=["metadatas"])
+        seeded_collection.update(
+            ids=list(got.ids),
+            metadatas=[{"novelty": 0.05} for _ in got.ids],
+        )
+        monkeypatch.setattr(
+            "cognitive_castle.miner.get_collection",
+            lambda *a, **k: seeded_collection,
+        )
+        miner_mod.status(palace_path=tmp_dir)
+        out = capsys.readouterr().out
+        assert "median novelty" in out
+        assert "coverage 100%" in out
+
+    def test_status_omits_info_line_when_untagged(
+        self, seeded_collection, capsys, monkeypatch, tmp_dir
+    ):
+        import cognitive_castle.miner as miner_mod
+
+        monkeypatch.setattr(
+            "cognitive_castle.miner.get_collection",
+            lambda *a, **k: seeded_collection,
+        )
+        miner_mod.status(palace_path=tmp_dir)
+        out = capsys.readouterr().out
+        assert "median novelty" not in out
