@@ -49,14 +49,23 @@ def _mock_cfg(rules_path=None):
 
 
 def test_apply_soar_boosts_no_op_when_sml_unavailable(monkeypatch, capsys):
-    """When _load_sml() returns None, return hits unchanged + stderr warning ONCE."""
+    """When _load_sml() returns None, hits are returned annotated with
+    neutral audit fields (soar_boost=1.0, soar_tags=[], score_pre_soar=score)
+    so downstream callers can always rely on the fields being present.
+    Also emit the stderr warning exactly once."""
     from cognitive_castle import soar_bridge
 
     monkeypatch.setattr(soar_bridge, "_load_sml", lambda: None)
     soar_bridge._WARNED.clear()
     hits = [{"id": "a", "score": 0.5}]
     result = soar_bridge.apply_soar_boosts(hits, _mock_cfg())
-    assert result == hits  # unchanged
+    # Score unchanged (no boost applied); audit fields present + neutral.
+    assert len(result) == 1
+    assert result[0]["id"] == "a"
+    assert result[0]["score"] == 0.5
+    assert result[0]["soar_boost"] == 1.0
+    assert result[0]["soar_tags"] == []
+    assert result[0]["score_pre_soar"] == 0.5
     err = capsys.readouterr().err
     assert "SML Python bindings not available" in err
 

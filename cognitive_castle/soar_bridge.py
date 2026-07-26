@@ -442,7 +442,11 @@ def apply_soar_boosts(hits: list[dict], cfg, query: str = "") -> list[dict]:
             "sml-unavailable",
             "SML Python bindings not available — install Soar 9.6+ with SML, or use --mode fast/standard to skip SOAR Stage 5",
         )
-        return hits
+        # Return hits with neutral audit fields so downstream callers can
+        # always rely on `soar_tags` / `soar_boost` / `score_pre_soar` being
+        # present, regardless of whether SOAR ran. Matches the agent-init
+        # failure branch below.
+        return _annotate_unboosted(hits)
 
     # Empty input → fast path
     if not hits:
