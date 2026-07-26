@@ -671,6 +671,50 @@ class CognitiveCastleConfig:
             return 1.5
 
     @property
+    def info_weight_enabled(self):
+        """Gate for info-weight retrieval demotion (2026-07-26 spec).
+
+        Default: ``False`` — flips ON only after the LongMemEval benchmark
+        gate. Env ``CASTLE_INFO_WEIGHT_ENABLED`` ("1"/"true" = on), then
+        config file, then default.
+        """
+        env_val = os.environ.get("CASTLE_INFO_WEIGHT_ENABLED")
+        if env_val is not None:
+            return env_val.strip().lower() in ("1", "true", "yes")
+        cfg_val = self._file_config.get("info_weight_enabled")
+        return bool(cfg_val) if cfg_val is not None else False
+
+    @property
+    def info_weight_threshold(self):
+        """Novelty below this is demoted. Default 0.10 (research "low" band)."""
+        env_val = os.environ.get("CASTLE_INFO_WEIGHT_THRESHOLD")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("info_weight_threshold")
+        try:
+            return float(cfg_val) if cfg_val is not None else 0.10
+        except (TypeError, ValueError):
+            return 0.10
+
+    @property
+    def info_weight_min_factor(self):
+        """Score-multiplier floor for fully-duplicate drawers. Default 0.5."""
+        env_val = os.environ.get("CASTLE_INFO_WEIGHT_MIN_FACTOR")
+        if env_val:
+            try:
+                return float(env_val)
+            except ValueError:
+                pass
+        cfg_val = self._file_config.get("info_weight_min_factor")
+        try:
+            return float(cfg_val) if cfg_val is not None else 0.5
+        except (TypeError, ValueError):
+            return 0.5
+
+    @property
     def entity_promote_threshold(self) -> float:
         """Confidence threshold above which auto-detected entities are added
         to the registry by the KG enricher.
