@@ -306,6 +306,7 @@ see [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) — one-line config per clien
 | `castle mcp` | Print the MCP setup command |
 | `castle info-score "text"` | Score how novel a snippet is (v3.4.0 research) |
 | `castle prune-suggest --sample N` | Flag low-info drawers for manual review (read-only) |
+| `castle share --with codex` | Emit MCP config snippet for Codex / Cursor / VS Code / Gemini CLI (add `--write` to inject) |
 | `castle repair --clean-locks` | Remove stale lock files (>24 h) |
 | `castle repair-status` | Read-only health check |
 
