@@ -90,7 +90,13 @@ Expected: FAIL — `AttributeError: ... has no attribute 'info_weight_enabled'`
         if env_val is not None:
             return env_val.strip().lower() in ("1", "true", "yes")
         cfg_val = self._file_config.get("info_weight_enabled")
-        return bool(cfg_val) if cfg_val is not None else False
+        if cfg_val is None:
+            return False
+        # String file-config values must parse, not truthy-coerce —
+        # bool("false") is True. Mirrors use_new_retrieval_pipeline.
+        if isinstance(cfg_val, str):
+            return cfg_val.strip().lower() in ("1", "true", "yes")
+        return bool(cfg_val)
 
     @property
     def info_weight_threshold(self):
