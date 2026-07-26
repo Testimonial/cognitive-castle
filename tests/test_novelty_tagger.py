@@ -1,0 +1,203 @@
+"""Unit tests for cognitive_castle.novelty_tagger (2026-07-26 spec)."""
+
+import json
+from unittest.mock import MagicMock
+
+import pyarrow as pa
+
+from cognitive_castle.novelty_tagger import backfill_novelty, compute_novelty, novelty_from_hits
+
+
+def _row(id_, distance, filed_at, source_file="f.md"):
+    return {
+        "id": id_,
+        "_distance": distance,
+        "metadata_json": json.dumps({"filed_at": filed_at, "source_file": source_file}),
+    }
+
+
+def _col_with(rows):
+    col = MagicMock()
+    col.vector_search.return_value = rows
+    return col
+
+
+def test_prior_only_twin_pair_asymmetry():
+    """Critical invariant: only earlier-filed neighbours count.
+
+    Later twin B (filed_at 2026-02) must NOT lower earlier drawer A's
+    novelty — otherwise both twins get demoted and content is buried.
+    """
+    col = _col_with([_row("b", 0.02, "2026-02-01T00:00:00")])
+    novelty_a = compute_novelty([0.1] * 8, col, wing="w", filed_at="2026-01-01T00:00:00")
+    assert novelty_a == 1.0  # B is later → ignored → no priors → 1.0
+
+    # Conversely, scoring B against prior A gives low novelty.
+    col2 = _col_with([_row("a", 0.02, "2026-01-01T00:00:00")])
+    novelty_b = compute_novelty([0.1] * 8, col2, wing="w", filed_at="2026-02-01T00:00:00")
+    assert abs(novelty_b - 0.02) < 1e-9  # 1 − (1 − 0.02)
+
+
+def test_self_id_excluded():
+    col = _col_with(
+        [
+            _row("me", 0.0, "2026-01-01T00:00:00"),
+            _row("other", 0.3, "2025-12-01T00:00:00"),
+        ]
+    )
+    n = compute_novelty(
+        [0.1] * 8,
+        col,
+        wing="w",
+        filed_at="2026-01-02T00:00:00",
+        self_id="me",
+    )
+    assert abs(n - 0.3) < 1e-9  # self dropped; other counts
+
+
+def test_same_source_file_excluded_when_requested():
+    """Mine-time rule: sibling chunks of the file being (re)filed are
+    excluded so multi-batch re-mines don't score against themselves."""
+    col = _col_with(
+        [
+            _row("sib", 0.01, "2025-12-01T00:00:00", source_file="same.md"),
+            _row("other", 0.4, "2025-12-01T00:00:00", source_file="diff.md"),
+        ]
+    )
+    n = compute_novelty(
+        [0.1] * 8,
+        col,
+        wing="w",
+        filed_at="2026-01-01T00:00:00",
+        exclude_source_file="same.md",
+    )
+    assert abs(n - 0.4) < 1e-9
+
+    # Backfill path (no exclusion): sibling counts.
+    n2 = compute_novelty(
+        [0.1] * 8,
+        col,
+        wing="w",
+        filed_at="2026-01-01T00:00:00",
+    )
+    assert abs(n2 - 0.01) < 1e-9
+
+
+def test_first_drawer_convention():
+    col = _col_with([])
+    assert compute_novelty([0.1] * 8, col, wing="w", filed_at="2026-01-01") == 1.0
+
+
+def test_malformed_neighbour_metadata_skipped():
+    bad = {"id": "x", "_distance": 0.05, "metadata_json": "{not json"}
+    good = _row("y", 0.5, "2025-01-01T00:00:00")
+    col = _col_with([bad, good])
+    n = compute_novelty([0.1] * 8, col, wing="w", filed_at="2026-01-01")
+    assert abs(n - 0.5) < 1e-9  # bad row skipped, not fatal
+
+
+def test_non_dict_json_metadata_skipped():
+    """Valid JSON that isn't an object (null, number, list) must be
+    skipped, never fatal — the 'never fatal' contract is broad."""
+    rows = [
+        {"id": "n1", "_distance": 0.05, "metadata_json": "null"},
+        {"id": "n2", "_distance": 0.05, "metadata_json": "[1, 2]"},
+        _row("good", 0.5, "2025-01-01T00:00:00"),
+    ]
+    col = _col_with(rows)
+    n = compute_novelty([0.1] * 8, col, wing="w", filed_at="2026-01-01")
+    assert abs(n - 0.5) < 1e-9
+
+
+def test_wing_filter_reaches_backend():
+    col = _col_with([])
+    compute_novelty([0.1] * 8, col, wing="pro'jects", filed_at="2026-01-01")
+    _, kwargs = col.vector_search.call_args
+    # SQL-escaped single quote
+    assert kwargs.get("where") == "wing = 'pro''jects'"
+    assert kwargs.get("n_results") == 10
+
+
+def test_novelty_from_hits_empty_returns_one():
+    assert novelty_from_hits([]) == 1.0
+
+
+def test_novelty_from_hits_drop_ids_honored():
+    hits = [{"id": "x", "_distance": 0.1}, {"id": "y", "_distance": 0.4}]
+    n = novelty_from_hits(hits, drop_ids={"x"})
+    assert abs(n - 0.4) < 1e-9
+
+
+def _arrow_collection(rows_spec):
+    """Mock LanceCollection whose _table.to_arrow() yields rows_spec and
+    which records update() calls. rows_spec: list of dicts with id,
+    vector, metadata_json, wing."""
+    col = MagicMock()
+    col._table.to_arrow.return_value = pa.Table.from_pylist(rows_spec)
+    col.vector_search.return_value = []  # every drawer scores 1.0
+    return col
+
+
+def _spec_row(id_, has_novelty, wing="w", filed_at="2026-01-01T00:00:00"):
+    meta = {"filed_at": filed_at, "source_file": "f.md"}
+    if has_novelty:
+        meta["novelty"] = 0.42
+    return {
+        "id": id_,
+        "vector": [0.1] * 4,
+        "wing": wing,
+        "metadata_json": json.dumps(meta),
+    }
+
+
+def test_backfill_only_missing_skips_tagged():
+    col = _arrow_collection(
+        [
+            _spec_row("a", has_novelty=True),
+            _spec_row("b", has_novelty=False),
+        ]
+    )
+    stats = backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    assert stats == {"tagged": 1, "skipped": 1, "failed": 0}
+    # Only "b" updated
+    (call,) = col.update.call_args_list
+    assert call.kwargs["ids"] == ["b"]
+    assert call.kwargs["metadatas"] == [{"novelty": 1.0}]
+
+
+def test_backfill_per_drawer_error_counts_failed():
+    col = _arrow_collection(
+        [
+            _spec_row("a", has_novelty=False),
+            _spec_row("b", has_novelty=False),
+        ]
+    )
+    # First vector_search raises, second returns fine.
+    col.vector_search.side_effect = [RuntimeError("boom"), []]
+    stats = backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    assert stats["failed"] == 1
+    assert stats["tagged"] == 1
+
+
+def test_backfill_does_not_pass_source_file_exclusion():
+    """Spec: backfill must NOT apply the mine-time same-source_file rule."""
+    col = _arrow_collection([_spec_row("a", has_novelty=False)])
+    with_neighbour = [
+        {
+            "id": "n",
+            "_distance": 0.05,
+            "metadata_json": json.dumps({"filed_at": "2025-01-01T00:00:00", "source_file": "f.md"}),
+        }
+    ]
+    col.vector_search.return_value = with_neighbour
+    backfill_novelty(col, batch_size=10, progress=lambda *_: None)
+    (call,) = col.update.call_args_list
+    # Neighbour shares source_file "f.md" with target — still counted.
+    assert abs(call.kwargs["metadatas"][0]["novelty"] - 0.05) < 1e-9
+
+
+def test_backfill_batches_updates():
+    col = _arrow_collection([_spec_row(f"d{i}", has_novelty=False) for i in range(5)])
+    backfill_novelty(col, batch_size=2, progress=lambda *_: None)
+    # 5 drawers, batch 2 → 3 update calls
+    assert col.update.call_count == 3

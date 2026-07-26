@@ -539,3 +539,50 @@ def test_removed_config_properties_are_absent(attr):
         f"cfg.{attr} should have been deleted in the search-mode "
         "consolidation; if you need a stage-on/off toggle, use mode="
     )
+
+
+# ── Info-weight config (info-aware retrieval demotion) ──────────────────────
+
+
+class TestInfoWeightConfig:
+    """Config knobs for info-aware retrieval demotion (2026-07-26 spec)."""
+
+    def test_defaults(self):
+        cfg = _make_config_with_file_config({})
+        assert cfg.info_weight_enabled is False
+        assert cfg.info_weight_threshold == 0.10
+        assert cfg.info_weight_min_factor == 0.5
+
+    def test_env_overrides(self, monkeypatch):
+        monkeypatch.setenv("CASTLE_INFO_WEIGHT_ENABLED", "1")
+        monkeypatch.setenv("CASTLE_INFO_WEIGHT_THRESHOLD", "0.2")
+        monkeypatch.setenv("CASTLE_INFO_WEIGHT_MIN_FACTOR", "0.7")
+        cfg = _make_config_with_file_config({})
+        assert cfg.info_weight_enabled is True
+        assert cfg.info_weight_threshold == 0.2
+        assert cfg.info_weight_min_factor == 0.7
+
+    def test_file_config(self):
+        cfg = _make_config_with_file_config(
+            {
+                "info_weight_enabled": True,
+                "info_weight_threshold": 0.15,
+                "info_weight_min_factor": 0.3,
+            }
+        )
+        assert cfg.info_weight_enabled is True
+        assert cfg.info_weight_threshold == 0.15
+        assert cfg.info_weight_min_factor == 0.3
+
+    def test_malformed_env_falls_back(self, monkeypatch):
+        monkeypatch.setenv("CASTLE_INFO_WEIGHT_THRESHOLD", "not-a-float")
+        cfg = _make_config_with_file_config({})
+        assert cfg.info_weight_threshold == 0.10
+
+    def test_file_config_string_false_is_false(self):
+        cfg = _make_config_with_file_config({"info_weight_enabled": "false"})
+        assert cfg.info_weight_enabled is False
+
+    def test_file_config_string_true_is_true(self):
+        cfg = _make_config_with_file_config({"info_weight_enabled": "true"})
+        assert cfg.info_weight_enabled is True

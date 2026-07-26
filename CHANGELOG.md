@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Info-aware filing (opt-in).** Every mined drawer now carries a
+  `novelty` metadata score (prior-only nn_novelty — research basis:
+  ρ(A,B)=0.982, v3.4.x papers). `castle search --info-weight` (or
+  `info_weight_enabled` config) demotes — never drops — near-duplicate
+  drawers in ranking. `castle repair --backfill-novelty` tags the
+  existing palace (resumable). `castle status` shows per-wing
+  information health. Default OFF pending the LongMemEval R@5 gate
+  (spec: docs/superpowers/specs/2026-07-26-info-aware-filing-design.md).
+
 ## [3.4.1] — 2026-07-24
 
 Follow-up release closing out the v3.4.0 research and shipping the

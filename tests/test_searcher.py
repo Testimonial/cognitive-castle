@@ -550,3 +550,45 @@ def test_search_memories_invalid_mode_raises(palace_path, seeded_collection):
         # Don't patch _new_pipeline_search — let the call reach
         # _apply_optional_stages, which validates mode.
         search_memories(query="q", palace_path=palace_path, mode="full")
+
+
+# ── Novelty extraction + info-weight gate (Task 6) ──────────────────────────
+
+
+class TestNoveltyExtraction:
+    def test_extract_novelty_from_metadata_json(self):
+        from cognitive_castle.searcher import _extract_novelty
+        import json as _json
+
+        row = {"metadata_json": _json.dumps({"novelty": 0.07})}
+        assert _extract_novelty(row) == 0.07
+
+    def test_extract_novelty_absent_or_malformed_is_none(self):
+        from cognitive_castle.searcher import _extract_novelty
+        import json as _json
+
+        assert _extract_novelty({"metadata_json": _json.dumps({})}) is None
+        assert _extract_novelty({"metadata_json": "{broken"}) is None
+        assert _extract_novelty({}) is None
+        # negative / non-numeric → None (never an amplifier)
+        assert _extract_novelty({"metadata_json": _json.dumps({"novelty": -0.5})}) is None
+        assert _extract_novelty({"metadata_json": _json.dumps({"novelty": "high"})}) is None
+
+    def test_extract_novelty_non_dict_json_is_none(self):
+        from cognitive_castle.searcher import _extract_novelty
+
+        assert _extract_novelty({"metadata_json": "5"}) is None
+        assert _extract_novelty({"metadata_json": "null"}) is None
+        assert _extract_novelty({"metadata_json": "[1, 2]"}) is None
+
+
+class TestInfoWeightGate:
+    def test_search_memories_accepts_info_weight_kwarg(self):
+        """Signature-level guard: the kwarg exists and defaults False."""
+        import inspect
+        from cognitive_castle.searcher import search_memories, search
+
+        for fn in (search_memories, search):
+            sig = inspect.signature(fn)
+            assert "info_weight" in sig.parameters
+            assert sig.parameters["info_weight"].default is False

@@ -596,6 +596,7 @@ def cmd_search(args):
             room=args.room,
             n_results=args.results,
             mode=args.mode,
+            info_weight=getattr(args, "info_weight", False),
         )
     except EmbedderIdentityMismatchError as e:
         # Friendly migration prompt — print cleanly without a traceback.
@@ -829,6 +830,23 @@ def cmd_repair(args):
         lock_dir = get_lock_dir()
         removed, kept = clean_stale_locks(lock_dir)
         print(f"Removed {removed} stale lock(s). Kept {kept} active lock(s).")
+        return
+
+    if getattr(args, "backfill_novelty", False):
+        from .novelty_tagger import backfill_novelty
+        from .palace import get_collection
+
+        palace_path = (
+            os.path.expanduser(args.palace)
+            if getattr(args, "palace", None)
+            else CognitiveCastleConfig().palace_path
+        )
+        col = get_collection(palace_path, collection_name="castle_drawers", create=False)
+        stats = backfill_novelty(col)
+        print(
+            f"Backfill complete — tagged: {stats['tagged']}, "
+            f"skipped: {stats['skipped']}, failed: {stats['failed']}"
+        )
         return
 
     print(
@@ -1288,6 +1306,12 @@ def build_parser() -> _ParserBundle:
             "Pick fast for hooks/low latency; max for best quality."
         ),
     )
+    p_search.add_argument(
+        "--info-weight",
+        dest="info_weight",
+        action="store_true",
+        help="Demote near-duplicate (low-novelty) drawers in ranking (opt-in; see docs)",
+    )
 
     # compress
     p_compress = sub.add_parser(
@@ -1366,6 +1390,12 @@ def build_parser() -> _ParserBundle:
         "--clean-locks",
         action="store_true",
         help="Remove stale lock files older than 24 h",
+    )
+    p_repair.add_argument(
+        "--backfill-novelty",
+        dest="backfill_novelty",
+        action="store_true",
+        help="Tag drawers missing the novelty metadata key (resumable, read-mostly)",
     )
 
     # repair-status — read-only palace capacity health check (#1222)

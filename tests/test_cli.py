@@ -917,3 +917,30 @@ def test_mcp_no_flag_prints_setup_instructions(capsys):
     assert "claude mcp add castle" in out
     # Pointer to --list-tools
     assert "--list-tools" in out
+
+
+def test_search_parser_accepts_info_weight():
+    from cognitive_castle.cli import build_parser
+
+    args = build_parser().parser.parse_args(["search", "q", "--info-weight"])
+    assert args.info_weight is True
+    args2 = build_parser().parser.parse_args(["search", "q"])
+    assert args2.info_weight is False
+
+
+def test_repair_backfill_novelty_invokes_backfill(monkeypatch, capsys):
+    from cognitive_castle.cli import build_parser, cmd_repair
+
+    called = {}
+
+    def fake_backfill(collection, batch_size=500, only_missing=True, progress=print):
+        called["ran"] = True
+        return {"tagged": 3, "skipped": 1, "failed": 0}
+
+    monkeypatch.setattr("cognitive_castle.novelty_tagger.backfill_novelty", fake_backfill)
+    monkeypatch.setattr("cognitive_castle.palace.get_collection", lambda *a, **k: object())
+    args = build_parser().parser.parse_args(["repair", "--backfill-novelty"])
+    cmd_repair(args)
+    out = capsys.readouterr().out
+    assert called.get("ran")
+    assert "tagged: 3" in out and "failed: 0" in out

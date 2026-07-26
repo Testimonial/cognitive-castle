@@ -43,13 +43,9 @@ def snippet_codex(palace: Optional[Path]) -> str:
     """TOML block for ``~/.codex/config.toml``."""
     argv = _server_argv(palace)
     if len(argv) == 1:
-        return "[mcp_servers.castle]\ncommand = \"castle-mcp\"\n"
+        return '[mcp_servers.castle]\ncommand = "castle-mcp"\n'
     args_toml = ", ".join(f'"{a}"' for a in argv[1:])
-    return (
-        "[mcp_servers.castle]\n"
-        'command = "castle-mcp"\n'
-        f"args = [{args_toml}]\n"
-    )
+    return f'[mcp_servers.castle]\ncommand = "castle-mcp"\nargs = [{args_toml}]\n'
 
 
 def snippet_json_mcp(palace: Optional[Path], indent: int = 2) -> str:
@@ -120,9 +116,7 @@ def default_config_path(client: str) -> Optional[Path]:
     return None
 
 
-def write_snippet(
-    client: str, snippet: str, path: Optional[Path] = None
-) -> Optional[Path]:
+def write_snippet(client: str, snippet: str, path: Optional[Path] = None) -> Optional[Path]:
     """Append (TOML) or merge (JSON) the snippet into the client's config file.
 
     Returns the path on a real write, ``None`` when the file already had a
@@ -135,9 +129,7 @@ def write_snippet(
     if path is None:
         path = default_config_path(client)
     if path is None:
-        raise ValueError(
-            f"no default config path for {client!r}; pass an explicit --path"
-        )
+        raise ValueError(f"no default config path for {client!r}; pass an explicit --path")
     path = Path(path).expanduser()
     path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -181,6 +173,4 @@ def write_snippet(
         path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
         return path
 
-    raise ValueError(
-        f"--write not supported for {client!r} — copy the snippet manually"
-    )
+    raise ValueError(f"--write not supported for {client!r} — copy the snippet manually")

@@ -178,6 +178,30 @@ R@5 with demotion ≥ baseline.
 | Baseline (info_weight_enabled=False) | _pending_ |
 | Demotion ON (threshold 0.10, min_factor 0.5) | _pending_ |
 
+**Implementation note (Task 10):** the bench's per-question corpora are
+built and queried through ChromaDB (`_fresh_collection()` /
+`collection.query(...)`), not the production `LanceCollection`, so
+`compute_novelty` (which calls `.vector_search`) cannot be called directly.
+`benchmarks/longmemeval_bench.py` instead builds ChromaDB hit dicts
+(`{"id", "_distance"}`) by re-querying each session's own document text
+against the same per-question collection, filters them to the prior set
+(sessions strictly earlier in `haystack_dates` order — the bench has no
+`filed_at`), and hands the filtered hits to
+`cognitive_castle.novelty_tagger.novelty_from_hits` for the `1 - max_cosine`
+math. Demotion itself goes through the new `apply_bench_info_weight`
+(imports `cognitive_castle.fusion.info_weight_factor`, never reimplements
+it). Wired only for the default `raw` mode — the only retrieval function
+touched is `build_palace_and_retrieve`; `--info-weight` combined with any
+other `--mode` prints a warning and is a no-op.
+
+**Gate commands** (manual — requires the LME dataset + hours of compute;
+not part of automated CI):
+
+```bash
+python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json               # baseline
+python benchmarks/longmemeval_bench.py /path/to/longmemeval_s_cleaned.json --info-weight # demotion ON
+```
+
 ## Config knobs (`config.py`, file + env, same pattern as recency)
 
 | Key | Default | Env |

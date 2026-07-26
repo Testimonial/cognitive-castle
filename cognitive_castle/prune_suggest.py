@@ -109,8 +109,11 @@ def suggest_candidates(
 
     col = get_collection(palace, collection_name="castle_drawers", create=False)
 
-    all_drawers = col.get_all_drawers(wing=wing) if hasattr(col, "get_all_drawers") \
+    all_drawers = (
+        col.get_all_drawers(wing=wing)
+        if hasattr(col, "get_all_drawers")
         else _fallback_get_all(col, wing)
+    )
 
     sampled = _sample_drawers(all_drawers, sample, seed)
 
