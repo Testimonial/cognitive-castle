@@ -852,6 +852,57 @@ def cmd_instructions(args):
     run_instructions(name=args.name)
 
 
+def cmd_share(args):
+    """Emit copy-paste-ready MCP config snippets for other AI clients.
+
+    Without a target: list what's supported.
+    With ``--with <client>``: print the snippet; add ``--write`` to inject
+    it into the client's default config file (safe — refuses to overwrite
+    an existing castle registration).
+    """
+    from .share import (
+        SUPPORTED_CLIENTS,
+        default_config_path,
+        generate,
+        write_snippet,
+    )
+
+    if not args.with_client:
+        print("Supported clients:")
+        for c in sorted(SUPPORTED_CLIENTS):
+            default = default_config_path(c)
+            target = f" → {default}" if default else " (manual copy-paste)"
+            print(f"  {c:<12s}{target}")
+        print("\nUsage:")
+        print("  castle share --with codex")
+        print("  castle share --with codex --palace ~/.castle/palace")
+        print("  castle share --with codex --write     # inject into ~/.codex/config.toml")
+        return
+
+    palace_path = Path(args.palace).expanduser() if args.palace else None
+    snippet = generate(args.with_client, palace_path)
+
+    if args.write:
+        try:
+            written = write_snippet(
+                args.with_client,
+                snippet,
+                path=Path(args.path).expanduser() if args.path else None,
+            )
+        except ValueError as e:
+            print(f"share: {e}", file=sys.stderr)
+            sys.exit(2)
+        if written is None:
+            # write_snippet already emitted a no-op stderr message.
+            return
+        print(f"[share] wrote castle registration to {written}")
+        print(f"[share] restart {args.with_client} for the tools to appear")
+        return
+
+    print(f"# Paste this into {args.with_client}'s MCP config:")
+    print(snippet, end="")
+
+
 def cmd_mcp(args):
     """Show how to wire Cognitive Castle into MCP-capable hosts.
 
@@ -1323,6 +1374,35 @@ def build_parser() -> _ParserBundle:
         help="Compare stored vs indexed element counts (read-only palace health check)",
     )
 
+    # share — emit copy-paste MCP config for other AI clients
+    from .share import SUPPORTED_CLIENTS as _SHARE_CLIENTS
+
+    p_share = sub.add_parser(
+        "share",
+        help="Emit MCP config snippets so Castle's palace can be shared across AI clients",
+    )
+    p_share.add_argument(
+        "--with",
+        dest="with_client",
+        choices=sorted(_SHARE_CLIENTS),
+        help="Target AI client (e.g. codex, cursor, vscode, gemini-cli, claude, generic)",
+    )
+    p_share.add_argument(
+        "--palace",
+        default=None,
+        help="Palace directory to pin the client at (default: unpinned, resolves from config)",
+    )
+    p_share.add_argument(
+        "--write",
+        action="store_true",
+        help="Also write the snippet to the client's default config file (safe: refuses to overwrite an existing castle block)",
+    )
+    p_share.add_argument(
+        "--path",
+        default=None,
+        help="Override the config-file path used with --write",
+    )
+
     # mcp
     p_mcp = sub.add_parser(
         "mcp",
@@ -1446,6 +1526,7 @@ def main():
         "status": cmd_status,
         "info-score": cmd_info_score,
         "prune-suggest": cmd_prune_suggest,
+        "share": cmd_share,
     }
     dispatch[args.command](args)
 
