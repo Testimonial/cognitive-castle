@@ -329,6 +329,8 @@ def compute_novelty(
             meta = json.loads(raw) if raw else {}
         except (TypeError, ValueError):
             continue  # malformed neighbour — skip, never fatal
+        if not isinstance(meta, dict):
+            continue  # valid JSON but not an object ("null", "[1,2]") — same rule
         n_filed = meta.get("filed_at")
         if not n_filed or str(n_filed) >= str(filed_at):
             continue  # prior-only
