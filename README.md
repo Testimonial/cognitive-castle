@@ -313,7 +313,7 @@ see [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) — one-line config per clien
 
 Full help: `castle --help`, `castle <command> --help`.
 
-Reproducible benchmark numbers (LongMemEval, LoCoMo, ConvoMem, MemBench) and full architecture / palace-structure detail live in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) and the `cognitive_castle/` module docstrings.
+Reproducible benchmark numbers (LongMemEval, LoCoMo, ConvoMem, MemBench) and full architecture / palace-structure detail live in [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) and the `cognitive_castle/` module docstrings. Note: Castle's headline figures are **retrieval recall** (was the right session in the top-K?), not end-to-end QA accuracy — the two are not comparable across systems, and `BENCHMARKS.md` is explicit about which competitors publish which.
 
 ---
 
