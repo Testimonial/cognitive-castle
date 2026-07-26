@@ -212,6 +212,7 @@ def search(
     room: str = None,
     n_results: int = 5,
     mode: str = "max",
+    info_weight: bool = False,
 ):
     """CLI entry point.
 
@@ -240,6 +241,7 @@ def search(
             room=room,
             n_results=n_results,
             mode=mode,
+            info_weight=info_weight,
         )
     except EmbedderIdentityMismatchError:
         # Surface the friendly migration prompt — don't wrap as SearchError.
@@ -261,6 +263,7 @@ def search_memories(
     candidate_strategy: str = "vector",
     is_hook_call: bool = False,
     mode: str = "max",
+    info_weight: bool = False,
 ) -> dict:
     """Programmatic search — returns a dict instead of printing.
 
@@ -288,6 +291,9 @@ def search_memories(
             standard — Stage 3 + Stage 6 (quality rerank)
             boosted  — Stage 3 + Stage 5 (SOAR) + Stage 6
             max      — Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6 (default)
+        info_weight: When True, demotes low-novelty candidates during fusion
+            (Stage 2). Also enabled unconditionally when
+            cfg.info_weight_enabled is True. Defaults to False for both.
     """
     from .config import CognitiveCastleConfig as _cfg_cls
 
@@ -301,6 +307,7 @@ def search_memories(
         cfg,
         is_hook_call=is_hook_call,
         mode=mode,
+        info_weight=info_weight,
     )
 
     # ``_new_pipeline_search`` returns a list. Wrap it in the legacy dict
@@ -355,6 +362,24 @@ def _extract_ts(row) -> float:
         except (TypeError, ValueError):
             return 0.0
     return 0.0
+
+
+def _extract_novelty(row) -> float | None:
+    """Novelty from a row's metadata_json. None when absent/malformed —
+    untagged drawers are never punished by info-weight demotion."""
+    if not isinstance(row, dict):
+        return None
+    raw = row.get("metadata_json")
+    if not raw:
+        return None
+    try:
+        import json as _json
+
+        value = _json.loads(raw).get("novelty")
+        value = float(value)
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def _get_filed_at(r) -> str:
@@ -526,6 +551,7 @@ def _new_pipeline_search(
     cfg,
     is_hook_call: bool = False,
     mode: str = "max",
+    info_weight: bool = False,
 ) -> list:
     """3-stage retrieval pipeline: parallel recall → fusion → cross-encoder rerank.
 
@@ -559,7 +585,7 @@ def _new_pipeline_search(
 
     from .palace import get_collection as _get_collection
     from .embedding import embed_texts
-    from .fusion import CandidateRef, weighted_rrf, apply_recency
+    from .fusion import CandidateRef, weighted_rrf, apply_recency, apply_info_weight
     from .reranker import rerank
 
     # Resolve the LanceCollection from the default palace backend.
@@ -620,6 +646,7 @@ def _new_pipeline_search(
             CandidateRef(
                 drawer_id=_extract_id(r),
                 timestamp_unix=_extract_ts(r),
+                novelty=_extract_novelty(r),
             )
             for r in rows
             if _extract_id(r)
@@ -643,6 +670,12 @@ def _new_pipeline_search(
         tau_days=cfg.recency_tau_days,
         max_boost=cfg.recency_max_boost,
     )
+    if info_weight or cfg.info_weight_enabled:
+        fused = apply_info_weight(
+            fused,
+            threshold=cfg.info_weight_threshold,
+            min_factor=cfg.info_weight_min_factor,
+        )
 
     # ── Stage 3: cross-encoder rerank ──────────────────────────────────────
     k_cap = cfg.reranker_k_hook if is_hook_call else cfg.reranker_k_interactive
