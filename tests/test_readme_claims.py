@@ -40,15 +40,10 @@ def _tools_dict_keys() -> list:
     return re.findall(r'"(castle_\w+)":\s*\{', src)
 
 
-def _doc_tool_names() -> list:
-    """Return the list of tool names documented in the MCP tools reference.
-
-    The MCP tool table lived in README.md prior to the #875 rewrite; it now
-    lives in website/reference/mcp-tools.md (linked from README). Each tool
-    is introduced by a level-3 heading `### \\`castle_xxx\\``.
-    """
-    doc = _read(MCP_TOOLS_DOC_PATH)
-    return re.findall(r"^###\s+`(castle_\w+)`", doc, re.MULTILINE)
+# NOTE: `_doc_tool_names()` used to parse the MCP tool table out of
+# `website/reference/mcp-tools.md`, but that file was deleted in PR #64
+# (website removed). The helper's only callers were also deleted in
+# PR #74. Kept only the tools-dict-keys parser above.
 
 
 # ---------------------------------------------------------------------------
@@ -422,7 +417,7 @@ class TestDialectNotLossless:
 # ---------------------------------------------------------------------------
 
 
-class TestDialectNotLossless:
+class TestDialectNotLosslessInDocs:
     """No user-facing doc surface may call `dialect.py` lossless.
 
     AAAK is a *lossy* abbreviation system (the drawer contents are the

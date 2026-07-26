@@ -1,6 +1,6 @@
 from unittest.mock import patch
 
-from cli import build_arg_parser, dispatch  # noqa: F401
+from cli import build_arg_parser
 
 
 def test_arg_parser_recognizes_subcommands():

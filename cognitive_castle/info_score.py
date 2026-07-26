@@ -120,7 +120,6 @@ def score_novelty(
     for hit in hits:
         distance = float(hit.get("_distance", 1.0))
         cosine = 1.0 - distance
-        meta = hit.get("metadata_json") or {}
         neighbours.append(
             Neighbour(
                 drawer_id=hit.get("id") or hit.get("drawer_id", "?"),

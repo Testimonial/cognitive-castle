@@ -1,4 +1,3 @@
-from pathlib import Path
 import pyarrow as pa
 from pipeline.cache_utils import fingerprint_inputs, read_cached, write_cached
 
