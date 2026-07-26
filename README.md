@@ -299,7 +299,7 @@ see [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) — one-line config per clien
 | `castle mine <dir>` | Mine project files (default mode) |
 | `castle mine <dir> --mode convos` | Mine conversation exports (Claude Code, Claude.ai, ChatGPT, Slack) |
 | `castle sweep <transcript-dir>` | Per-message catch-up miner (idempotent, resume-safe) |
-| `castle search "query"` | Semantic search; filter with `--wing`, `--room` |
+| `castle search "query"` | Semantic search; filter with `--wing`, `--room`; add --info-weight to demote near-duplicates (opt-in) |
 | `castle wake-up` | L0 + L1 wake-up context (~600–900 tokens) |
 | `castle status` | Drawer counts per wing/room |
 | `castle reindex --palace <path> --sources <dirs>` | Rebuild the palace from source (e.g., after embedder upgrade) |
@@ -308,6 +308,7 @@ see [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) — one-line config per clien
 | `castle prune-suggest --sample N` | Flag low-info drawers for manual review (read-only) |
 | `castle share --with codex` | Emit MCP config snippet for Codex / Cursor / VS Code / Gemini CLI (add `--write` to inject) |
 | `castle repair --clean-locks` | Remove stale lock files (>24 h) |
+| `castle repair --backfill-novelty` | Tag existing drawers with novelty scores (one-time, resumable) |
 | `castle repair-status` | Read-only health check |
 
 Full help: `castle --help`, `castle <command> --help`.
