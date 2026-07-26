@@ -88,6 +88,22 @@ def session_id_from_corpus_id(corpus_id):
     return corpus_id
 
 
+def apply_bench_info_weight(ranked, threshold: float, min_factor: float):
+    """Demote low-novelty sessions in a (session_id, score, novelty) list.
+
+    2026-07-26 spec, Benchmark gate (Component 5). Mirrors
+    ``cognitive_castle.fusion.info_weight_factor`` — imported, not
+    reimplemented — so bench numbers measure the production formula.
+    """
+    from cognitive_castle.fusion import info_weight_factor
+
+    weighted = [
+        (sid, score * info_weight_factor(nov, threshold, min_factor), nov)
+        for sid, score, nov in ranked
+    ]
+    return sorted(weighted, key=lambda t: (-t[1], t[0]))
+
+
 # =============================================================================
 # SHARED EPHEMERAL CLIENT
 # EphemeralClient instances share state in this ChromaDB version — use one
@@ -160,7 +176,61 @@ def _fresh_collection(name="mempal_drawers"):
 # =============================================================================
 
 
-def build_palace_and_retrieve(entry, granularity="session", n_results=50):
+_BENCH_NOVELTY_OVERFETCH = 10  # mirrors novelty_tagger._OVERFETCH
+
+
+def _bench_corpus_novelties(collection, corpus, corpus_ids, corpus_timestamps):
+    """Per-corpus-item novelty for the ``--info-weight`` bench hook (2026-07-26
+    spec, Benchmark gate, Component 5 item 1).
+
+    The bench has no ``filed_at`` metadata (unlike the production palace), so
+    prior-only ordering is defined by ``haystack_dates`` position instead:
+    a corpus item's priors are the items with a strictly earlier date (ties
+    broken by corpus index, matching insertion order). Reuses the ChromaDB
+    collection already built for this question — no extra embedding pass —
+    by re-querying with each document's own text and filtering hits down to
+    the prior set client-side, then handing them to
+    ``cognitive_castle.novelty_tagger.novelty_from_hits`` (Task 9) for the
+    ``1 - max_cosine`` math. Never reimplements that math.
+
+    First-item convention (no priors) → novelty 1.0, same as production.
+    """
+    from cognitive_castle.novelty_tagger import novelty_from_hits
+
+    n = len(corpus)
+    all_ids = [f"doc_{i}" for i in range(n)]
+    novelties = [1.0] * n
+
+    for idx in range(n):
+        ts = corpus_timestamps[idx]
+        prior_idxs = {
+            j
+            for j in range(n)
+            if j != idx and (corpus_timestamps[j] < ts or (corpus_timestamps[j] == ts and j < idx))
+        }
+        if not prior_idxs:
+            continue  # first-item convention: novelty stays 1.0
+
+        keep_ids = {all_ids[j] for j in prior_idxs}
+        drop_ids = set(all_ids) - keep_ids  # excludes self + non-prior items
+
+        results = collection.query(
+            query_texts=[corpus[idx]],
+            n_results=min(_BENCH_NOVELTY_OVERFETCH, n),
+            include=["distances"],
+        )
+        hits = [
+            {"id": rid, "_distance": dist}
+            for rid, dist in zip(results["ids"][0], results["distances"][0])
+        ]
+        novelties[idx] = novelty_from_hits(hits, drop_ids=drop_ids)
+
+    return novelties
+
+
+def build_palace_and_retrieve(
+    entry, granularity="session", n_results=50, info_weight: bool = False
+):
     """
     Build a fresh MemPal palace from haystack sessions, then retrieve.
 
@@ -168,12 +238,19 @@ def build_palace_and_retrieve(entry, granularity="session", n_results=50):
         entry: One LongMemEval question entry
         granularity: "session" (one doc per session) or "turn" (one doc per user turn)
         n_results: How many results to return
+        info_weight: when True, also computes per-corpus-item novelty (see
+            ``_bench_corpus_novelties``) and returns it as a 5th element.
+            Default False preserves the original 4-tuple return exactly —
+            ``research/info_theory/pipeline/downstream_eval.py`` depends on
+            that exact arity and does not pass this flag.
 
     Returns:
         rankings: numpy-style list of indices into corpus (descending relevance)
         corpus: list of document strings
         corpus_ids: list of document IDs
         corpus_timestamps: list of timestamps
+        corpus_novelties: (only when info_weight=True) list of novelty floats
+            aligned with corpus, for the --info-weight demotion hook
     """
     # Build corpus from haystack
     corpus = []
@@ -204,6 +281,8 @@ def build_palace_and_retrieve(entry, granularity="session", n_results=50):
                     turn_num += 1
 
     if not corpus:
+        if info_weight:
+            return [], corpus, corpus_ids, corpus_timestamps, []
         return [], corpus, corpus_ids, corpus_timestamps
 
     collection = _fresh_collection()
@@ -237,6 +316,12 @@ def build_palace_and_retrieve(entry, granularity="session", n_results=50):
     for i in range(len(corpus)):
         if i not in seen:
             ranked_indices.append(i)
+
+    if info_weight:
+        corpus_novelties = _bench_corpus_novelties(
+            collection, corpus, corpus_ids, corpus_timestamps
+        )
+        return ranked_indices, corpus, corpus_ids, corpus_timestamps, corpus_novelties
 
     return ranked_indices, corpus, corpus_ids, corpus_timestamps
 
@@ -2961,13 +3046,26 @@ def run_benchmark(
     split_subset=None,
     llm_backend="anthropic",
     llm_base_url="",
+    info_weight=False,
+    info_weight_threshold=0.10,
+    info_weight_min_factor=0.5,
 ):
     """Run the full benchmark.
 
     split_file: path to a JSON split file. If provided, filters questions by subset.
     split_subset: "dev" (50 questions for tuning) or "held_out" (450 for final evaluation).
                   None = run all questions.
+    info_weight: --info-weight gate for the R@5 benchmark demotion hook
+                 (2026-07-26 spec, Benchmark gate). Only wired for the
+                 default "raw" mode — build_palace_and_retrieve is the only
+                 retrieval function that computes per-corpus novelty; other
+                 --mode values silently ignore this flag (warned once below).
     """
+    if info_weight and mode != "raw":
+        print(
+            f"  WARNING: --info-weight has no effect with --mode {mode} "
+            "(only wired for the default 'raw' mode)."
+        )
     data = load_questions(data_file)
 
     # Apply train/test split filter before limit/skip
@@ -3088,6 +3186,10 @@ def run_benchmark(
         question = entry["question"]
         answer_sids = set(entry["answer_session_ids"])
 
+        # corpus_novelties stays None for every branch except the --info-weight
+        # raw-mode path below (see WARNING above for other --mode values).
+        corpus_novelties = None
+
         # Run retrieval with selected mode
         if mode == "aaak":
             rankings, corpus, corpus_ids, corpus_timestamps = build_palace_and_retrieve_aaak(
@@ -3132,6 +3234,10 @@ def run_benchmark(
             rankings, corpus, corpus_ids, corpus_timestamps = build_palace_and_retrieve_full(
                 entry, granularity=granularity
             )
+        elif info_weight:
+            rankings, corpus, corpus_ids, corpus_timestamps, corpus_novelties = (
+                build_palace_and_retrieve(entry, granularity=granularity, info_weight=True)
+            )
         else:
             rankings, corpus, corpus_ids, corpus_timestamps = build_palace_and_retrieve(
                 entry, granularity=granularity
@@ -3140,6 +3246,23 @@ def run_benchmark(
         if not rankings:
             print(f"  [{i + 1:4}/{len(data)}] {qid[:30]:30} SKIP (empty corpus)")
             continue
+
+        # --info-weight: demote low-novelty near-duplicate corpus items before
+        # R@5 eval (2026-07-26 spec, Benchmark gate). Synthetic descending
+        # score from rank position — build_palace_and_retrieve returns
+        # relevance-ordered indices, not raw distances — fed through
+        # apply_bench_info_weight (imports the production info_weight_factor),
+        # then mapped back to a re-ordered rankings list.
+        if info_weight and corpus_novelties is not None:
+            scored = [
+                (corpus_ids[idx], float(len(rankings) - rank), corpus_novelties[idx])
+                for rank, idx in enumerate(rankings)
+            ]
+            demoted = apply_bench_info_weight(
+                scored, threshold=info_weight_threshold, min_factor=info_weight_min_factor
+            )
+            corpus_id_to_idx = {cid: idx for idx, cid in enumerate(corpus_ids)}
+            rankings = [corpus_id_to_idx[cid] for cid, _, _ in demoted]
 
         # Optional LLM re-ranking pass (larger pool for v3/palace to catch rank-11-12 misses)
         if llm_rerank_enabled:
@@ -3359,6 +3482,18 @@ if __name__ == "__main__":
         "Uses cache as-is; uncached sessions fall back to palace-only retrieval.",
     )
     parser.add_argument(
+        "--info-weight",
+        action="store_true",
+        default=False,
+        help="Enable the info-aware-filing demotion hook for the LongMemEval "
+        "R@5 gate (2026-07-26 spec, Component 5). Novelty-tags each "
+        "question's per-session corpus (prior-only by --info-weight's "
+        "haystack_dates position) and demotes low-novelty near-duplicate "
+        "sessions via the production cognitive_castle.fusion.info_weight_factor "
+        "formula before R@5 evaluation. Only wired for the default 'raw' mode. "
+        "Manual gate — run baseline and --info-weight, compare R@5.",
+    )
+    parser.add_argument(
         "--embed-model",
         choices=["default", "bge-base", "bge-large", "nomic", "mxbai"],
         default="default",
@@ -3449,4 +3584,5 @@ if __name__ == "__main__":
         split_subset=split_subset,
         llm_backend=args.llm_backend,
         llm_base_url=args.llm_base_url,
+        info_weight=args.info_weight,
     )
