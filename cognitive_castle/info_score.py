@@ -100,6 +100,7 @@ def score_novelty(
         raise ValueError("info-score requires non-empty text")
 
     from .embedding import embed_texts
+    from .novelty_tagger import novelty_from_hits
     from .palace import get_collection
 
     cfg = CognitiveCastleConfig()
@@ -129,8 +130,5 @@ def score_novelty(
                 room=hit.get("room"),
             )
         )
-    max_cos = max(n.cosine for n in neighbours)
-    novelty = 1.0 - max_cos
-    return InfoScoreResult(
-        novelty=novelty, band=_band_from_novelty(novelty), neighbours=neighbours
-    )
+    novelty = novelty_from_hits(hits)
+    return InfoScoreResult(novelty=novelty, band=_band_from_novelty(novelty), neighbours=neighbours)

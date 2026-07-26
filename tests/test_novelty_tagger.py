@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pyarrow as pa
 
-from cognitive_castle.novelty_tagger import backfill_novelty, compute_novelty
+from cognitive_castle.novelty_tagger import backfill_novelty, compute_novelty, novelty_from_hits
 
 
 def _row(id_, distance, filed_at, source_file="f.md"):
@@ -116,6 +116,16 @@ def test_wing_filter_reaches_backend():
     # SQL-escaped single quote
     assert kwargs.get("where") == "wing = 'pro''jects'"
     assert kwargs.get("n_results") == 10
+
+
+def test_novelty_from_hits_empty_returns_one():
+    assert novelty_from_hits([]) == 1.0
+
+
+def test_novelty_from_hits_drop_ids_honored():
+    hits = [{"id": "x", "_distance": 0.1}, {"id": "y", "_distance": 0.4}]
+    n = novelty_from_hits(hits, drop_ids={"x"})
+    assert abs(n - 0.4) < 1e-9
 
 
 def _arrow_collection(rows_spec):

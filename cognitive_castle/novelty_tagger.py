@@ -24,6 +24,20 @@ logger = logging.getLogger(__name__)
 _OVERFETCH = 10  # top-N neighbours fetched before client-side filtering
 
 
+def novelty_from_hits(hits: list[dict], drop_ids: set[str] | None = None) -> float:
+    """``1 − max_cosine`` over already-filtered hit rows (dicts with
+    ``_distance``). 1.0 when nothing remains. Shared core for
+    compute_novelty and info_score."""
+    max_cos = None
+    for row in hits:
+        if drop_ids and row.get("id") in drop_ids:
+            continue
+        cos = 1.0 - float(row.get("_distance", 1.0))
+        if max_cos is None or cos > max_cos:
+            max_cos = cos
+    return 1.0 if max_cos is None else 1.0 - max_cos
+
+
 def compute_novelty(
     vector: list[float],
     collection,
@@ -56,7 +70,7 @@ def compute_novelty(
 
     rows = collection.vector_search(list(vector), n_results=_OVERFETCH, where=where)
 
-    max_cos = None
+    filtered = []
     for row in rows:
         if self_id is not None and row.get("id") == self_id:
             continue
@@ -72,13 +86,9 @@ def compute_novelty(
             continue  # prior-only
         if exclude_source_file is not None and meta.get("source_file") == exclude_source_file:
             continue
-        cos = 1.0 - float(row.get("_distance", 1.0))
-        if max_cos is None or cos > max_cos:
-            max_cos = cos
+        filtered.append(row)
 
-    if max_cos is None:
-        return 1.0
-    return 1.0 - max_cos
+    return novelty_from_hits(filtered)
 
 
 def backfill_novelty(
