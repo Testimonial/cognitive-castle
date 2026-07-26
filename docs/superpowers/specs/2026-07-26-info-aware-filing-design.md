@@ -57,6 +57,23 @@ Client-side filtering is required because `filed_at` lives inside
 `metadata_json`, not a hoisted LanceDB column, so it is not
 where-clause-filterable.
 
+**Re-mine rule (mine-time only):** when computing novelty during mining,
+additionally exclude neighbours with the **same `source_file`** as the
+target. A re-mined file's chunks would otherwise score against their own
+old sibling chunks — content this very upsert batch is about to replace —
+and get spuriously low novelty that backfill cannot heal (key already
+present). Cross-file duplicates still count; that is the signal we want.
+Backfill does not apply this exclusion (its targets are settled drawers,
+not mid-replacement ones).
+
+**Known limitation (accepted):** `filed_at` is naive local-time ISO
+(`datetime.now().isoformat()`, no timezone). Prior-only ordering uses
+lexicographic string comparison — the same convention as the research
+pipeline. DST rollbacks or mixed-machine palaces can mis-order drawers
+filed within the ambiguous window; the impact is bounded (a wrong
+prior/posterior call on near-simultaneous filings) and not worth a
+timestamp migration in this design.
+
 ## Components
 
 ### 1. `cognitive_castle/novelty_tagger.py` (new, ~100 lines)
@@ -86,11 +103,19 @@ where-clause-filterable.
 
 ### 3. Retrieval demotion (`fusion.py`, `searcher.py`)
 
-- `CandidateRef` gains `novelty: float | None = None`.
+- **Novelty threads through three fusion types** (all in `fusion.py`):
+  1. `CandidateRef` gains `novelty: float | None = None` (set by `_to_refs`).
+  2. `weighted_rrf`'s merge carries it onto the fused result — when the
+     same drawer arrives from multiple recall lists, any ref's value wins
+     (they are all extracted from the same row metadata, so identical).
+  3. `ScoredCandidate` gains the same field, and `apply_recency`'s
+     reconstruction copies it through — otherwise the field dies before
+     `apply_info_weight` ever sees it.
 - New pure function in `fusion.py`:
 
   ```python
   def apply_info_weight(scored, threshold: float, min_factor: float): ...
+  # factor = 1.0                                  if threshold <= 0 (feature inert; no div-by-zero)
   # factor = 1.0                                  if novelty is None
   # factor = 1.0                                  if novelty >= threshold
   # factor = min_factor + (1 - min_factor) * (novelty / threshold)  otherwise
@@ -104,15 +129,21 @@ where-clause-filterable.
   no-op on bad data, never an amplifier.
 - Gate: `cfg.info_weight_enabled` (default **False**) OR the per-query
   `castle search --info-weight` CLI flag.
-- **Plan-time verification required:** all three recall paths (dense, FTS,
-  KG-hop via `get_by_ids`) must return rows carrying `metadata_json`.
-  Believed true; verify before writing `_to_refs` extraction.
+- **Plan-time verification required:**
+  1. All three recall paths (dense, FTS, KG-hop via `get_by_ids`) must
+     return rows carrying `metadata_json`. Believed true (FTS docstring
+     hedges with "at minimum id and text"); verify before writing
+     `_to_refs` extraction.
+  2. The backend's metadata `update()` must merge rather than clobber
+     other metadata fields (read-merge-write was observed in
+     `lancedb_backend.update`; confirm before backfill uses it).
 
 ### 4. Surfacing (`cli.py`)
 
 - `castle status`: one line per wing, **read from stored metadata only**
-  (bounded deterministic sample — first 500 rows per wing in stable scan
-  order; zero vector searches):
+  (bounded cheap sample — first 500 rows returned per wing; scan order is
+  arbitrary, not contractual, and that is fine for a health indicator;
+  zero vector searches):
   `median novelty 0.07 · 61% below 0.10 · coverage 84%`
   Coverage = fraction of sampled drawers that have the key at all; without
   it a median over partial coverage would mislead.
@@ -120,11 +151,25 @@ where-clause-filterable.
   line per batch; Ctrl-C-safe.
 - `castle search --info-weight` forces demotion on for that query.
 
-### 5. Benchmark gate (manual step, documented deliverable)
+### 5. Benchmark gate (deliverable includes harness work)
 
-Run `benchmarks/longmemeval_bench.py` R@5: baseline vs `--info-weight`.
-Record both numbers in this spec (below) before any default flip. The
-default changes to ON only if R@5 with demotion ≥ baseline.
+**The bench harness does not run the production fusion pipeline.** The
+Task-0 spike (research) established that `longmemeval_bench.py` builds
+ephemeral per-question collections through its own retrieval functions —
+Stage-2 fusion (where `apply_info_weight` lives) is never exercised, and
+bench-built drawers carry no novelty metadata. Running the gate therefore
+requires two named pieces of work, part of this design's implementation
+plan (not an afterthought):
+
+1. Novelty-tag the bench's per-question corpora at build time (reuse
+   `compute_novelty`; the bench already embeds every session).
+2. Add an info-weight branch to the bench's retrieval path so demotion
+   actually applies to its candidate ranking, plus a CLI flag on the
+   bench script to toggle it.
+
+Then run R@5: baseline vs info-weight ON. Record both numbers in this
+spec (below) before any default flip. The default changes to ON only if
+R@5 with demotion ≥ baseline.
 
 **Results (to be filled after implementation):**
 
@@ -167,9 +212,11 @@ distribution. `min_factor` bounds worst-case demotion at 2× score reduction.
 ## Testing (~20 tests)
 
 - `tests/test_novelty_tagger.py` (new): prior-only twin-pair asymmetry (the
-  critical invariant — A early / B late → A high, B low), self-exclusion on
-  re-mine, first-drawer 1.0, malformed-metadata skip, backfill resumability
-  (key-absence idempotence), batched update correctness, stats dict shape.
+  critical invariant — A early / B late → A high, B low), self-exclusion,
+  same-`source_file` exclusion on re-mine (mine-time rule), first-drawer
+  1.0, malformed-metadata skip, backfill resumability (key-absence
+  idempotence), backfill does NOT apply the source_file exclusion,
+  batched update preserves unrelated metadata fields, stats dict shape.
 - `tests/test_fusion.py` (extend): `apply_info_weight` — None passthrough,
   ≥ threshold passthrough, floor at min_factor for novelty→0, linear ramp
   midpoint (novelty = threshold/2 → factor = (1+min_factor)/2), re-sort +
