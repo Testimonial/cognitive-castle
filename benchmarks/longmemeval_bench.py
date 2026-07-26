@@ -179,6 +179,16 @@ def _fresh_collection(name="mempal_drawers"):
 _BENCH_NOVELTY_OVERFETCH = 10  # mirrors novelty_tagger._OVERFETCH
 
 
+def _l2sq_to_cos_distance(dist):
+    """Convert ChromaDB's squared-L2 distance to cosine distance.
+
+    ChromaDB uses squared-L2 as the default metric. For unit-norm embeddings,
+    squared-L2 = 2 * (1 - cosine), so to convert to the cosine distance that
+    novelty_from_hits expects, we divide by 2.0.
+    """
+    return dist / 2.0
+
+
 def _bench_corpus_novelties(collection, corpus, corpus_ids, corpus_timestamps):
     """Per-corpus-item novelty for the ``--info-weight`` bench hook (2026-07-26
     spec, Benchmark gate, Component 5 item 1).
@@ -219,8 +229,11 @@ def _bench_corpus_novelties(collection, corpus, corpus_ids, corpus_timestamps):
             n_results=min(_BENCH_NOVELTY_OVERFETCH, n),
             include=["distances"],
         )
+        # ChromaDB default metric is squared-L2; for unit-norm embeddings
+        # squared_L2 = 2*(1 - cos), so /2 converts to the cosine distance
+        # novelty_from_hits expects (production LanceDB uses cosine directly).
         hits = [
-            {"id": rid, "_distance": dist}
+            {"id": rid, "_distance": _l2sq_to_cos_distance(dist)}
             for rid, dist in zip(results["ids"][0], results["distances"][0])
         ]
         novelties[idx] = novelty_from_hits(hits, drop_ids=drop_ids)
