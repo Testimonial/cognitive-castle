@@ -410,7 +410,7 @@ def test_process_file_uses_bounded_upsert_batches(tmp_path, monkeypatch):
         def delete(self, *args, **kwargs):
             pass
 
-        def upsert(self, documents, ids, metadatas):
+        def upsert(self, documents, ids, metadatas, embeddings=None):
             self.batch_sizes.append(len(documents))
 
     source = tmp_path / "src.py"
@@ -421,6 +421,11 @@ def test_process_file_uses_bounded_upsert_batches(tmp_path, monkeypatch):
     monkeypatch.setattr(miner, "chunk_text", lambda content, source_file: chunks)
     monkeypatch.setattr(miner, "detect_hall", lambda content: "code")
     monkeypatch.setattr(miner, "_extract_entities_for_metadata", lambda content: "")
+    monkeypatch.setattr(
+        "cognitive_castle.embedding.embed_texts",
+        lambda texts: [[0.1] * 4 for _ in texts],
+    )
+    monkeypatch.setattr(miner, "compute_novelty", lambda *a, **k: 0.5)
 
     drawers, room = miner.process_file(
         source,
@@ -887,3 +892,70 @@ def test_mine_continues_when_enrich_palace_raises(tmp_path, monkeypatch, capsys)
     captured = capsys.readouterr()
     output = captured.out + captured.err
     assert "KG enrichment FAILED" in output
+
+
+# ── Task 5: mine-time novelty tagging ───────────────────────────────────────
+#
+# Info-aware filing (2026-07-26 spec): every mine path tags novelty at filing
+# time. The miner switches to an embed-first batch flow so a single bge-m3
+# forward pass serves both novelty scoring and vector storage.
+#
+# process_file's real signature (not the brief's illustrative sketch) is:
+#   process_file(filepath, project_path, collection, wing, rooms, agent,
+#                dry_run, closets_col=None)
+# — mirrored from test_process_file_uses_bounded_upsert_batches above. These
+# tests use the real `tmp_dir`/`collection` fixtures (real LanceDB collection)
+# per the Task 5 brief's guidance, with embed_texts monkeypatched so no model
+# ever loads — compute_novelty is monkeypatched per-test too, so the fake
+# vectors' content never matters, only their dimensionality (must match the
+# collection's configured embedder_dim so the LanceDB upsert doesn't choke on
+# a fixed-size-list schema mismatch).
+
+
+class TestMineTimeNoveltyTagging:
+    """Info-aware filing (2026-07-26 spec): every mine path tags novelty."""
+
+    def _mine_one(self, tmp_dir, collection, monkeypatch, novelty_fn):
+        import cognitive_castle.miner as miner_mod
+
+        monkeypatch.setattr(miner_mod, "compute_novelty", novelty_fn)
+        monkeypatch.setattr(
+            "cognitive_castle.embedding.embed_texts",
+            lambda texts: [[0.1] * 1024 for _ in texts],
+        )
+        f = Path(tmp_dir) / "doc.md"
+        f.write_text("meaningful content " * 20)  # clears MIN_CHUNK_SIZE
+        miner_mod.process_file(
+            f,
+            tmp_dir,
+            collection,
+            "w",
+            [{"name": "general", "description": "General"}],
+            "test",
+            False,
+        )
+
+    def test_mine_writes_novelty_metadata(self, tmp_dir, collection, monkeypatch):
+        self._mine_one(tmp_dir, collection, monkeypatch, lambda *a, **k: 0.42)
+        got = collection.get(include=["metadatas"])
+        assert got.metadatas, "no drawers filed"
+        assert all(m.get("novelty") == 0.42 for m in got.metadatas)
+
+    def test_compute_failure_files_without_key(self, tmp_dir, collection, monkeypatch, capsys):
+        def boom(*a, **k):
+            raise RuntimeError("search down")
+
+        self._mine_one(tmp_dir, collection, monkeypatch, boom)
+        got = collection.get(include=["metadatas"])
+        assert got.metadatas, "mining must not fail because of novelty"
+        assert all("novelty" not in m for m in got.metadatas)
+
+    def test_novelty_call_excludes_own_source_file(self, tmp_dir, collection, monkeypatch):
+        seen = {}
+
+        def spy(vector, col, wing, filed_at, self_id=None, exclude_source_file=None):
+            seen["exclude_source_file"] = exclude_source_file
+            return 1.0
+
+        self._mine_one(tmp_dir, collection, monkeypatch, spy)
+        assert seen["exclude_source_file"].endswith("doc.md")

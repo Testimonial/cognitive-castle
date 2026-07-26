@@ -17,6 +17,7 @@ from datetime import datetime
 from collections import defaultdict
 from typing import Optional
 
+from .novelty_tagger import compute_novelty
 from .palace import (
     NORMALIZE_VERSION,
     SKIP_DIRS,
@@ -77,6 +78,23 @@ MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB — skip files larger than this.
 # drawers and therefore more storage, embedding, and processing work —
 # and file reads are not streamed (the whole content is loaded into
 # memory before chunking), so memory use scales with source size too.
+
+
+_NOVELTY_WARNED = False
+
+
+def _warn_novelty_once(exc) -> None:
+    """Warn once per process when novelty tagging degrades, then stay quiet.
+
+    Mining must never fail because of novelty scoring — this just surfaces
+    the degradation to stderr the first time so it isn't silent forever.
+    """
+    global _NOVELTY_WARNED
+    if not _NOVELTY_WARNED:
+        _NOVELTY_WARNED = True
+        sys.stderr.write(
+            f"[castle] novelty tagging degraded ({exc}); drawers filed without the key\n"
+        )
 
 
 # =============================================================================
@@ -737,7 +755,8 @@ def _build_drawer_metadata(
     chunk_index: int,
     agent: str,
     content: str,
-    source_mtime: Optional[float],
+    source_mtime: Optional[float] = None,
+    novelty: Optional[float] = None,
 ) -> dict:
     """Build the metadata dict for one drawer without upserting.
 
@@ -761,6 +780,8 @@ def _build_drawer_metadata(
     entities = _extract_entities_for_metadata(content)
     if entities:
         metadata["entities"] = entities
+    if novelty is not None:
+        metadata["novelty"] = novelty
     return metadata
 
 
@@ -852,15 +873,38 @@ def process_file(
         except OSError:
             source_mtime = None
 
+        from .embedding import embed_texts
+
         drawers_added = 0
         for batch_start in range(0, len(chunks), DRAWER_UPSERT_BATCH_SIZE):
-            batch_docs: list = []
-            batch_ids: list = []
-            batch_metas: list = []
-            for chunk in chunks[batch_start : batch_start + DRAWER_UPSERT_BATCH_SIZE]:
-                drawer_id = f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(chunk['chunk_index'])).encode()).hexdigest()[:24]}"
-                batch_docs.append(chunk["content"])
-                batch_ids.append(drawer_id)
+            batch = chunks[batch_start : batch_start + DRAWER_UPSERT_BATCH_SIZE]
+            batch_docs = [c["content"] for c in batch]
+            batch_ids = [
+                f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(c['chunk_index'])).encode()).hexdigest()[:24]}"
+                for c in batch
+            ]
+
+            # One forward pass; vectors reused for novelty AND storage.
+            try:
+                batch_vecs = embed_texts(batch_docs)
+            except Exception:
+                batch_vecs = None  # degrade: upsert embeds internally, no novelty
+
+            batch_metas = []
+            for j, chunk in enumerate(batch):
+                novelty = None
+                if batch_vecs is not None:
+                    try:
+                        novelty = compute_novelty(
+                            batch_vecs[j],
+                            collection,
+                            wing=wing,
+                            filed_at=datetime.now().isoformat(),
+                            self_id=batch_ids[j],
+                            exclude_source_file=source_file,
+                        )
+                    except Exception as e:  # noqa: BLE001 — never fail mining
+                        _warn_novelty_once(e)
                 batch_metas.append(
                     _build_drawer_metadata(
                         wing,
@@ -870,12 +914,15 @@ def process_file(
                         agent,
                         chunk["content"],
                         source_mtime,
+                        novelty=novelty,
                     )
                 )
+
             collection.upsert(
                 documents=batch_docs,
                 ids=batch_ids,
                 metadatas=batch_metas,
+                embeddings=batch_vecs,  # None → backend embeds internally
             )
             drawers_added += len(batch_docs)
 
