@@ -442,6 +442,7 @@ def _stage_llm_surprise(
     # in memory, GC won't reclaim yet). Still, dropping the 63k targets
     # we don't touch saves memory.
     import gc as _gc
+
     del rows
     _gc.collect()
 
@@ -741,6 +742,7 @@ def run_pipeline(config: Config) -> dict:
     # from `palace_table`, but we still want to drop table_a/table_b's
     # duplicate palace metadata to keep the resident set small.
     import gc as _gc
+
     table_c = _stage_llm_surprise(config, palace_table, subsample)
     del palace_table
     _gc.collect()

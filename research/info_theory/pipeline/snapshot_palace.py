@@ -19,9 +19,7 @@ def snapshot_palace(src: Path, dst: Path) -> Path:
     src = Path(src)
     dst = Path(dst)
     if dst.exists():
-        raise FileExistsError(
-            f"Snapshot target {dst} already exists; refusing to overwrite"
-        )
+        raise FileExistsError(f"Snapshot target {dst} already exists; refusing to overwrite")
     shutil.copytree(src, dst)
     return dst
 
@@ -33,9 +31,7 @@ def compute_fingerprint(rows: Iterable[dict]) -> str:
     lists would lose that binding — same values in different orders
     would collide.
     """
-    sortable = [
-        (r["drawer_id"], r["filed_at"], int(r["chunk_index"])) for r in rows
-    ]
+    sortable = [(r["drawer_id"], r["filed_at"], int(r["chunk_index"])) for r in rows]
     sortable.sort(key=lambda t: t[0])
     payload = json.dumps(sortable, separators=(",", ":")).encode()
     return hashlib.sha256(payload).hexdigest()

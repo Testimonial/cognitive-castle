@@ -14,8 +14,17 @@ def test_load_longmemeval_returns_arrow_table():
 def test_load_longmemeval_has_castle_compatible_schema():
     table = load_longmemeval(FIXTURE)
     cols = set(table.column_names)
-    required = {"text", "filed_at", "session_id", "question_id",
-                "question_type", "chunk_index", "wing", "room", "added_by"}
+    required = {
+        "text",
+        "filed_at",
+        "session_id",
+        "question_id",
+        "question_type",
+        "chunk_index",
+        "wing",
+        "room",
+        "added_by",
+    }
     assert required.issubset(cols)
 
 
@@ -29,9 +38,11 @@ def test_load_longmemeval_nulls_castle_fields():
 def test_load_longmemeval_preserves_session_ordering():
     table = load_longmemeval(FIXTURE)
     # q1 has two sessions; chunk_index should increase within session
-    q1_rows = [(r["session_id"], r["chunk_index"])
-               for r in table.to_pylist() if r["question_id"] == "q1"]
+    q1_rows = [
+        (r["session_id"], r["chunk_index"]) for r in table.to_pylist() if r["question_id"] == "q1"
+    ]
     from collections import defaultdict
+
     by_session = defaultdict(list)
     for sid, ci in q1_rows:
         by_session[sid].append(ci)

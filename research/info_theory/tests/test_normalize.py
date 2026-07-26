@@ -28,6 +28,7 @@ def test_truncate_to_tokens_long_text_truncated():
     long = " ".join(["word"] * 5000)
     result = truncate_to_tokens(long, max_tokens=100)
     import tiktoken
+
     enc = tiktoken.get_encoding("cl100k_base")
     assert len(enc.encode(result)) <= 100
 
@@ -37,6 +38,7 @@ def test_normalize_strips_then_truncates():
     out = normalize(text, max_tokens=50)
     assert "```" not in out
     import tiktoken
+
     enc = tiktoken.get_encoding("cl100k_base")
     assert len(enc.encode(out)) <= 50
 

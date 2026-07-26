@@ -21,14 +21,14 @@ from cognitive_castle.share import (
 
 def test_snippet_codex_unpinned_is_bare():
     out = snippet_codex(palace=None)
-    assert '[mcp_servers.castle]' in out
+    assert "[mcp_servers.castle]" in out
     assert 'command = "castle-mcp"' in out
     # No args line when unpinned
-    assert 'args' not in out
+    assert "args" not in out
 
 
 def test_snippet_codex_pinned_includes_args_toml_list():
-    out = snippet_codex(palace=Path('/tmp/palace'))
+    out = snippet_codex(palace=Path("/tmp/palace"))
     assert 'args = ["--palace", "/tmp/palace"]' in out
 
 
@@ -39,7 +39,7 @@ def test_snippet_json_mcp_shape_unpinned():
 
 
 def test_snippet_json_mcp_shape_pinned():
-    out = snippet_json_mcp(palace=Path('/tmp/p'))
+    out = snippet_json_mcp(palace=Path("/tmp/p"))
     data = json.loads(out)
     server = data["mcpServers"]["castle"]
     assert server["command"] == "castle-mcp"
@@ -52,7 +52,7 @@ def test_snippet_claude_unpinned():
 
 
 def test_snippet_claude_pinned_quotes_path_with_spaces():
-    out = snippet_claude(palace=Path('/tmp/with space/palace'))
+    out = snippet_claude(palace=Path("/tmp/with space/palace"))
     # shlex.quote wraps in single quotes when spaces are present
     assert "castle-mcp --palace '/tmp/with space/palace'" in out
 
@@ -132,9 +132,7 @@ def test_write_snippet_cursor_merges_into_existing_json(tmp_path):
 
 def test_write_snippet_cursor_noop_when_castle_already_present(tmp_path, capsys):
     target = tmp_path / "mcp.json"
-    target.write_text(
-        json.dumps({"mcpServers": {"castle": {"command": "pre-existing"}}})
-    )
+    target.write_text(json.dumps({"mcpServers": {"castle": {"command": "pre-existing"}}}))
     snippet = snippet_json_mcp(palace=None)
     result = write_snippet("cursor", snippet, path=target)
     assert result is None
@@ -153,6 +151,4 @@ def test_write_snippet_cursor_invalid_json_raises(tmp_path):
 
 def test_write_snippet_unmanaged_client_raises(tmp_path):
     with pytest.raises(ValueError, match="--write not supported"):
-        write_snippet(
-            "claude", snippet_claude(palace=None), path=tmp_path / "wrong.txt"
-        )
+        write_snippet("claude", snippet_claude(palace=None), path=tmp_path / "wrong.txt")

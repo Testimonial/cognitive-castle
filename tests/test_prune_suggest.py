@@ -61,9 +61,7 @@ def test_suggest_flags_below_threshold_ordered_ascending():
 
     backend.vector_search.side_effect = fake_vs
 
-    with patch(
-        "cognitive_castle.palace.get_collection", return_value=backend
-    ):
+    with patch("cognitive_castle.palace.get_collection", return_value=backend):
         result = suggest_candidates(palace_path="/tmp/p", sample=2, threshold=0.10)
 
     assert isinstance(result, PruneSuggestion)
@@ -79,9 +77,7 @@ def test_suggest_skips_drawers_without_vectors():
     """Missing vector field → drawer silently skipped."""
     backend = MagicMock()
     backend.get_all_drawers = MagicMock(return_value=[{"id": "d1", "wing": "w"}])
-    with patch(
-        "cognitive_castle.palace.get_collection", return_value=backend
-    ):
+    with patch("cognitive_castle.palace.get_collection", return_value=backend):
         result = suggest_candidates(palace_path="/tmp/p", sample=1, threshold=0.10)
     assert result.candidates == []
 
@@ -117,12 +113,12 @@ def test_fallback_get_all_used_when_backend_lacks_bulk_read():
 
     # A LanceCollection-shaped mock: no `get_all_drawers`, but has _table
     # exposing `.to_arrow()` (empty).
-    empty_table = pa.table({"id": pa.array([], type=pa.string()), "wing": pa.array([], type=pa.string())})
+    empty_table = pa.table(
+        {"id": pa.array([], type=pa.string()), "wing": pa.array([], type=pa.string())}
+    )
     col = MagicMock(spec=["vector_search", "connect", "_table"])
     col._table.to_arrow.return_value = empty_table
-    with patch(
-        "cognitive_castle.palace.get_collection", return_value=col
-    ):
+    with patch("cognitive_castle.palace.get_collection", return_value=col):
         result = suggest_candidates(palace_path="/tmp/p", sample=1, threshold=0.10)
     # Fallback consulted the underlying pyarrow table
     assert col._table.to_arrow.called

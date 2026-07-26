@@ -31,15 +31,14 @@ def read_cached(path: Path, expected_fingerprint: str):
     return None
 
 
-def write_cached(table, path: Path, inputs_fingerprint: str,
-                  extra_metadata: Optional[dict] = None) -> None:
+def write_cached(
+    table, path: Path, inputs_fingerprint: str, extra_metadata: Optional[dict] = None
+) -> None:
     """Write Parquet with inputs_fingerprint stamped in schema metadata."""
     meta = {b"inputs_fingerprint": inputs_fingerprint.encode()}
     if extra_metadata:
         for k, v in extra_metadata.items():
-            meta[k.encode() if isinstance(k, str) else k] = (
-                v.encode() if isinstance(v, str) else v
-            )
+            meta[k.encode() if isinstance(k, str) else k] = v.encode() if isinstance(v, str) else v
     stamped = table.replace_schema_metadata(meta)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(stamped, path)

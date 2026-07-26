@@ -442,9 +442,7 @@ class ClaudeCliProvider(LLMProvider):
     # zero MCP servers. `tempfile.gettempdir()` for cross-platform temp
     # location (Windows has no `/tmp`; older /tmp hardcode broke all
     # Windows CI runs of ClaudeCliProvider).
-    _EMPTY_MCP_CONFIG_PATH = os.path.join(
-        tempfile.gettempdir(), "castle-claude-cli-empty-mcp.json"
-    )
+    _EMPTY_MCP_CONFIG_PATH = os.path.join(tempfile.gettempdir(), "castle-claude-cli-empty-mcp.json")
 
     @classmethod
     def _ensure_empty_mcp_config(cls) -> str:

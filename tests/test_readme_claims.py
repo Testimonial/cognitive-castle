@@ -441,7 +441,8 @@ class TestDialectNotLosslessInDocs:
             if (
                 rel.startswith("docs/superpowers/")
                 or rel.startswith("docs/HISTORY.md")
-                or rel == "CHANGELOG.md"  # historical narration of the original fix mentions "lossless"
+                or rel
+                == "CHANGELOG.md"  # historical narration of the original fix mentions "lossless"
                 or rel.startswith("test_env/")
                 or rel.startswith(".pytest_cache/")
                 or rel.startswith("research/info_theory/paper/")

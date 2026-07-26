@@ -566,7 +566,9 @@ def tool_wake_up(wing: str = None):
     return {"text": text, "estimated_tokens": tokens, "wing": wing}
 
 
-def tool_prune_suggest(sample: int = 200, threshold: float = 0.10, wing: str = None, seed: int = 42):
+def tool_prune_suggest(
+    sample: int = 200, threshold: float = 0.10, wing: str = None, seed: int = 42
+):
     """Flag low-information drawers as pruning candidates. Read-only.
 
     Samples `sample` drawers, computes nn_novelty against each drawer's
