@@ -375,8 +375,10 @@ def _extract_novelty(row) -> float | None:
     try:
         import json as _json
 
-        value = _json.loads(raw).get("novelty")
-        value = float(value)
+        meta = _json.loads(raw)
+        if not isinstance(meta, dict):
+            return None
+        value = float(meta.get("novelty"))
     except (TypeError, ValueError):
         return None
     return value if value >= 0 else None

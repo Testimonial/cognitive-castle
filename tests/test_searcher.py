@@ -574,6 +574,13 @@ class TestNoveltyExtraction:
         assert _extract_novelty({"metadata_json": _json.dumps({"novelty": -0.5})}) is None
         assert _extract_novelty({"metadata_json": _json.dumps({"novelty": "high"})}) is None
 
+    def test_extract_novelty_non_dict_json_is_none(self):
+        from cognitive_castle.searcher import _extract_novelty
+
+        assert _extract_novelty({"metadata_json": "5"}) is None
+        assert _extract_novelty({"metadata_json": "null"}) is None
+        assert _extract_novelty({"metadata_json": "[1, 2]"}) is None
+
 
 class TestInfoWeightGate:
     def test_search_memories_accepts_info_weight_kwarg(self):
