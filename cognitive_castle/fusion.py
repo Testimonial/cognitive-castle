@@ -18,6 +18,7 @@ class CandidateRef:
 
     drawer_id: str
     timestamp_unix: float
+    novelty: float | None = None
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,7 @@ class ScoredCandidate:
     timestamp_unix: float
     score: float
     contributing_signals: frozenset[str] = frozenset()
+    novelty: float | None = None
 
 
 def weighted_rrf(
@@ -59,6 +61,7 @@ def weighted_rrf(
     """
     scores: dict[str, float] = {}
     timestamps: dict[str, float] = {}
+    novelties: dict[str, float] = {}
     contributing_signals_acc: dict[str, set[str]] = {}
 
     for signal_name, candidates in rank_lists.items():
@@ -67,11 +70,15 @@ def weighted_rrf(
             # Still capture timestamps for drawers we'd otherwise miss.
             for cand in candidates:
                 timestamps.setdefault(cand.drawer_id, cand.timestamp_unix)
+                if cand.novelty is not None and cand.drawer_id not in novelties:
+                    novelties[cand.drawer_id] = cand.novelty
             continue
         for rank, cand in enumerate(candidates, start=1):
             contribution = weight / (k_rrf + rank)
             scores[cand.drawer_id] = scores.get(cand.drawer_id, 0.0) + contribution
             timestamps.setdefault(cand.drawer_id, cand.timestamp_unix)
+            if cand.novelty is not None and cand.drawer_id not in novelties:
+                novelties[cand.drawer_id] = cand.novelty
             contributing_signals_acc.setdefault(cand.drawer_id, set()).add(signal_name)
 
     return sorted(
@@ -81,6 +88,7 @@ def weighted_rrf(
                 timestamp_unix=timestamps[did],
                 score=score,
                 contributing_signals=frozenset(contributing_signals_acc.get(did, set())),
+                novelty=novelties.get(did),
             )
             for did, score in scores.items()
         ),
@@ -126,7 +134,41 @@ def apply_recency(
                 timestamp_unix=c.timestamp_unix,
                 score=c.score * factor,
                 contributing_signals=c.contributing_signals,
+                novelty=c.novelty,
             )
         )
     boosted.sort(key=lambda s: (-s.score, s.drawer_id))
     return boosted
+
+
+def info_weight_factor(novelty: float | None, threshold: float, min_factor: float) -> float:
+    """Score multiplier for info-aware demotion (2026-07-26 spec).
+
+    1.0 when the feature is inert (threshold <= 0), the drawer is
+    untagged (novelty None), or novelty >= threshold. Below threshold:
+    linear ramp from min_factor (novelty 0) up to 1.0 (novelty at
+    threshold). Never amplifies; never drops.
+    """
+    if threshold <= 0 or novelty is None or novelty >= threshold:
+        return 1.0
+    return min_factor + (1.0 - min_factor) * (novelty / threshold)
+
+
+def apply_info_weight(
+    scored: list[ScoredCandidate],
+    threshold: float,
+    min_factor: float,
+) -> list[ScoredCandidate]:
+    """Demote low-novelty candidates and re-sort. Same contract as
+    ``apply_recency``: pure, deterministic tie-break by drawer_id."""
+    weighted = [
+        ScoredCandidate(
+            drawer_id=c.drawer_id,
+            timestamp_unix=c.timestamp_unix,
+            score=c.score * info_weight_factor(c.novelty, threshold, min_factor),
+            contributing_signals=c.contributing_signals,
+            novelty=c.novelty,
+        )
+        for c in scored
+    ]
+    return sorted(weighted, key=lambda s: (-s.score, s.drawer_id))

@@ -7,7 +7,9 @@ import pytest
 from cognitive_castle.fusion import (
     CandidateRef,
     ScoredCandidate,
+    apply_info_weight,
     apply_recency,
+    info_weight_factor,
     weighted_rrf,
 )
 
@@ -180,3 +182,70 @@ def test_weighted_rrf_zero_weight_signal_not_in_contributing():
 
     result = weighted_rrf(rank_lists, weights, k_rrf=60)
     assert result[0].contributing_signals == frozenset({"dense"})
+
+
+def _sc(did, score, novelty=None):
+    return ScoredCandidate(drawer_id=did, timestamp_unix=0.0, score=score, novelty=novelty)
+
+
+class TestInfoWeightFactor:
+    def test_none_passthrough(self):
+        assert info_weight_factor(None, 0.10, 0.5) == 1.0
+
+    def test_at_or_above_threshold_passthrough(self):
+        assert info_weight_factor(0.10, 0.10, 0.5) == 1.0
+        assert info_weight_factor(0.9, 0.10, 0.5) == 1.0
+
+    def test_floor_at_zero_novelty(self):
+        assert info_weight_factor(0.0, 0.10, 0.5) == 0.5
+
+    def test_linear_ramp_midpoint(self):
+        # novelty = threshold/2 → factor = (1 + min_factor)/2
+        assert abs(info_weight_factor(0.05, 0.10, 0.5) - 0.75) < 1e-9
+
+    def test_threshold_zero_is_inert(self):
+        assert info_weight_factor(0.0, 0.0, 0.5) == 1.0  # no div-by-zero
+        assert info_weight_factor(0.05, -1.0, 0.5) == 1.0
+
+
+class TestApplyInfoWeight:
+    def test_demotes_below_threshold_and_resorts(self):
+        scored = [_sc("dup", 1.0, novelty=0.0), _sc("fresh", 0.9, novelty=0.8)]
+        out = apply_info_weight(scored, threshold=0.10, min_factor=0.5)
+        # dup: 1.0 * 0.5 = 0.5; fresh: 0.9 * 1.0 = 0.9 → fresh first
+        assert [c.drawer_id for c in out] == ["fresh", "dup"]
+        assert abs(out[1].score - 0.5) < 1e-9
+
+    def test_none_novelty_never_punished(self):
+        scored = [_sc("untagged", 1.0, novelty=None)]
+        out = apply_info_weight(scored, threshold=0.10, min_factor=0.5)
+        assert out[0].score == 1.0
+
+    def test_tie_broken_by_drawer_id(self):
+        scored = [_sc("b", 0.5, novelty=0.9), _sc("a", 0.5, novelty=0.9)]
+        out = apply_info_weight(scored, threshold=0.10, min_factor=0.5)
+        assert [c.drawer_id for c in out] == ["a", "b"]
+
+    def test_novelty_field_survives(self):
+        out = apply_info_weight([_sc("x", 1.0, novelty=0.05)], 0.10, 0.5)
+        assert out[0].novelty == 0.05
+
+
+class TestNoveltyThreading:
+    def test_weighted_rrf_carries_novelty(self):
+        refs = [CandidateRef(drawer_id="d", timestamp_unix=1.0, novelty=0.3)]
+        out = weighted_rrf({"dense": refs}, {"dense": 1.0})
+        assert out[0].novelty == 0.3
+
+    def test_weighted_rrf_first_non_none_wins(self):
+        dense = [CandidateRef(drawer_id="d", timestamp_unix=1.0, novelty=None)]
+        sparse = [CandidateRef(drawer_id="d", timestamp_unix=1.0, novelty=0.3)]
+        out = weighted_rrf({"dense": dense, "sparse": sparse}, {"dense": 1.0, "sparse": 1.0})
+        assert out[0].novelty == 0.3
+
+    def test_apply_recency_preserves_novelty(self):
+        from datetime import datetime, timezone
+
+        sc = ScoredCandidate(drawer_id="d", timestamp_unix=0.0, score=1.0, novelty=0.2)
+        out = apply_recency([sc], now=datetime.now(timezone.utc), tau_days=90.0, max_boost=1.5)
+        assert out[0].novelty == 0.2
