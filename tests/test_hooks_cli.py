@@ -812,6 +812,50 @@ def test_precompact_mines_transcript_dir(tmp_path, monkeypatch):
     assert cmd[cmd.index("--wing") + 1] == "sessions"
 
 
+def test_transcript_ingest_does_not_double_spawn(tmp_path, monkeypatch):
+    """A second hook fire must NOT start a second mine over the same palace.
+
+    Observed in the wild: Stop and PreCompact fired ~2 s apart and each ran a
+    full `castle mine ... --mode convos --wing sessions`, two processes at
+    ~180% CPU writing into one palace. _ingest_transcript had no lock at all —
+    the pid guard lived only on the project-file path (_maybe_auto_ingest).
+    """
+    from cognitive_castle.hooks_cli import _ingest_transcript
+
+    monkeypatch.setattr("cognitive_castle.hooks_cli.STATE_DIR", tmp_path)
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text("x" * 200)
+
+    # First fire: spawns, and hands the lock to a pid that is alive (our own,
+    # standing in for the mine child).
+    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as first:
+        first.return_value.pid = os.getpid()
+        _ingest_transcript(str(transcript))
+    first.assert_called_once()
+
+    # Second fire while that "mine" is still alive: must skip.
+    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as second:
+        second.return_value.pid = os.getpid()
+        _ingest_transcript(str(transcript))
+    second.assert_not_called()
+
+
+def test_transcript_ingest_reclaims_a_stale_lock(tmp_path, monkeypatch):
+    """A lock left by a crashed mine must not block ingest forever."""
+    from cognitive_castle.hooks_cli import _ingest_transcript
+
+    monkeypatch.setattr("cognitive_castle.hooks_cli.STATE_DIR", tmp_path)
+    transcript = tmp_path / "t.jsonl"
+    transcript.write_text("x" * 200)
+    # PID 0 is never a live user process here — stands in for a dead holder.
+    (tmp_path / "mine_transcript.pid").write_text("999999999")
+
+    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+        mock_popen.return_value.pid = os.getpid()
+        _ingest_transcript(str(transcript))
+    mock_popen.assert_called_once()
+
+
 # --- run_hook ---
 
 

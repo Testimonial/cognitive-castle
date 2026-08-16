@@ -299,6 +299,24 @@ def _get_mine_targets() -> list[tuple[str, str]]:
 
 _MINE_PID_FILE = STATE_DIR / "mine.pid"
 
+# Transcript ingest gets its OWN lock file, deliberately separate from
+# mine.pid. Sharing one was rejected in #1231 because a single hook call can
+# fire both targets and the second would overwrite the first's pid — but the
+# fix there was to exclude transcripts from the lock entirely, which left
+# _ingest_transcript with no concurrency guard at all. Two files, two locks.
+_MINE_TRANSCRIPT_PID_FILE = STATE_DIR / "mine_transcript.pid"
+
+
+def _mine_transcript_pid_file() -> Path:
+    """Resolve the transcript lock path at CALL time, not import time.
+
+    STATE_DIR is a module constant, so a module-level lock path freezes to
+    whatever the state dir was when this module was first imported — tests
+    that redirect the state dir would still contend on the developer's real
+    ~/.castle lock, and one leaked claim there blocks every later ingest.
+    """
+    return STATE_DIR / "mine_transcript.pid"
+
 
 def _pid_alive(pid: int) -> bool:
     """Cross-platform existence check for a PID.
@@ -342,13 +360,74 @@ def _mine_already_running() -> bool:
     return _pid_alive(pid)
 
 
+def _claim_mine_lock(lock_path: Path) -> bool:
+    """Atomically claim ``lock_path``; False if a live process already holds it.
+
+    ``O_CREAT | O_EXCL`` is the primitive that makes this safe: exactly one of
+    two concurrent hook fires can create the file, so the loser never spawns.
+    Read-the-pid-then-write is NOT enough — both callers can pass the liveness
+    check before either has written anything, which is exactly how two full
+    transcript mines ended up running over the same palace 2 s apart, each
+    burning ~180% CPU.
+
+    Our OWN pid goes in the file immediately, before any subprocess exists, so
+    a racing caller that opens the file mid-claim sees a live pid and backs off
+    rather than reading an empty file and mistaking it for a stale lock. The
+    caller overwrites it with the child's pid once spawned.
+    """
+    for _ in range(2):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+        except FileExistsError:
+            try:
+                pid = int(lock_path.read_text().strip())
+            except (OSError, ValueError):
+                pid = None
+            if pid is not None and _pid_alive(pid):
+                return False
+            # Stale: holder died (crash/reboot) or never recorded a pid.
+            try:
+                lock_path.unlink()
+            except OSError:
+                return False
+            continue  # retry the atomic create exactly once
+        except OSError:
+            return False
+        try:
+            os.write(fd, str(os.getpid()).encode())
+        finally:
+            os.close(fd)
+        return True
+    return False
+
+
+def _release_mine_lock(lock_path: Path) -> None:
+    """Drop a claimed lock — used when the spawn itself failed."""
+    try:
+        lock_path.unlink()
+    except OSError:
+        pass
+
+
 def _spawn_mine(cmd: list) -> None:
-    """Spawn a mine subprocess, write its PID to the lock file, log to hook.log."""
+    """Spawn a mine subprocess under the pid lock, logging to hook.log.
+
+    The pid is written AFTER Popen, so `_mine_already_running()` alone leaves a
+    window where two callers both see a clear lock. Claiming atomically first
+    closes it; callers that lose the claim simply skip.
+    """
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    log_path = STATE_DIR / "hook.log"
-    with open(log_path, "a") as log_f:
-        proc = subprocess.Popen(cmd, stdout=log_f, stderr=log_f)
-    _MINE_PID_FILE.write_text(str(proc.pid))
+    if not _claim_mine_lock(_MINE_PID_FILE):
+        _log("Skipping auto-ingest: mine already running")
+        return
+    try:
+        log_path = STATE_DIR / "hook.log"
+        with open(log_path, "a") as log_f:
+            proc = subprocess.Popen(cmd, stdout=log_f, stderr=log_f)
+        _MINE_PID_FILE.write_text(str(proc.pid))
+    except OSError:
+        _release_mine_lock(_MINE_PID_FILE)
+        raise
 
 
 def _maybe_auto_ingest():
@@ -559,11 +638,20 @@ def _ingest_transcript(transcript_path: str):
     except Exception:
         return
 
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    # Stop and PreCompact can both fire within seconds of each other, and each
+    # reaches this function; without a lock they each spawn a full mine over
+    # the same transcript directory, writing into the same palace concurrently.
+    lock_path = _mine_transcript_pid_file()
+    if not _claim_mine_lock(lock_path):
+        _log("Skipping transcript ingest: mine already running")
+        return
+
+    handed_over = False
     try:
         log_path = STATE_DIR / "hook.log"
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a") as log_f:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [
                     _castle_script(),
                     "mine",
@@ -576,9 +664,21 @@ def _ingest_transcript(transcript_path: str):
                 stdout=log_f,
                 stderr=log_f,
             )
+        # Hand the lock to the child: this hook process is about to exit,
+        # leaving the mine reparented to init, so the lock must name the pid
+        # that is actually still working. Anything other than a real integer
+        # pid (a test double, say) means there is nothing to guard.
+        if isinstance(getattr(proc, "pid", None), int):
+            lock_path.write_text(str(proc.pid))
+            handed_over = True
         _log(f"Transcript ingest started: {path.name}")
     except OSError:
         pass
+    finally:
+        # Never leave the lock naming THIS process: the hook exits in a moment
+        # and a recycled pid would silently block every future ingest.
+        if not handed_over:
+            _release_mine_lock(lock_path)
 
 
 SUPPORTED_HARNESSES = {"claude-code", "codex"}
