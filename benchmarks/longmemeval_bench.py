@@ -39,7 +39,6 @@ from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 
-import chromadb
 
 # Add mempal to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -110,7 +109,18 @@ def apply_bench_info_weight(ranked, threshold: float, min_factor: float):
 # shared client and delete+recreate the collection between queries.
 # =============================================================================
 
-_bench_client = chromadb.EphemeralClient()
+_bench_client = None
+
+
+def _get_bench_client():
+    """Load optional benchmark storage only when running retrieval."""
+    global _bench_client
+    if _bench_client is None:
+        import chromadb
+
+        _bench_client = chromadb.EphemeralClient()
+    return _bench_client
+
 
 # Global embedding function — set by --embed-model arg before benchmark runs.
 # None = use ChromaDB default (all-MiniLM-L6-v2).
@@ -163,12 +173,12 @@ def _fresh_collection(name="mempal_drawers"):
     """Delete and recreate collection for a clean slate between queries."""
     global _bench_embed_fn
     try:
-        _bench_client.delete_collection(name)
+        _get_bench_client().delete_collection(name)
     except Exception:
         pass
     if _bench_embed_fn is not None:
-        return _bench_client.create_collection(name, embedding_function=_bench_embed_fn)
-    return _bench_client.create_collection(name)
+        return _get_bench_client().create_collection(name, embedding_function=_bench_embed_fn)
+    return _get_bench_client().create_collection(name)
 
 
 # =============================================================================

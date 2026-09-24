@@ -60,3 +60,16 @@ def test_bench_none_novelty_untouched():
     ranked = [("a", 0.9, None)]
     out = apply_bench_info_weight(ranked, threshold=0.10, min_factor=0.5)
     assert out[0][1] == 0.9
+
+
+def test_benchmark_helpers_import_without_chromadb(monkeypatch):
+    """Arithmetic tests must not require the optional legacy benchmark backend."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "chromadb", None)
+    spec = importlib.util.spec_from_file_location("bench_without_chroma", _BENCH_PATH)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module._bench_client is None
+    assert module._l2sq_to_cos_distance(1.0) == 0.5
+    assert module.apply_bench_info_weight([("a", 0.9, None)], 0.1, 0.5) == [("a", 0.9, None)]

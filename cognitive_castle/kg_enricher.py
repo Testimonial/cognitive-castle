@@ -16,7 +16,7 @@ from __future__ import annotations
 import sqlite3
 import time
 from collections import Counter, defaultdict
-from itertools import batched
+from itertools import islice
 from pathlib import Path
 from typing import Iterable
 
@@ -25,6 +25,15 @@ from . import palace as palace_mod
 
 
 ADAPTER_NAME = "entity-mention-indexer"
+
+
+def _batched(iterable, size):
+    """Yield bounded batches, including the tail, on Python 3.10 and later."""
+    if size < 1:
+        raise ValueError("batch size must be at least one")
+    iterator = iter(iterable)
+    while batch := tuple(islice(iterator, size)):
+        yield batch
 
 
 def enrich_palace(palace_path: str, cfg) -> dict:
@@ -123,7 +132,7 @@ def _walk_corpus(col, *, work_ids: Iterable[str], cfg) -> tuple[dict, Counter]:
     mention_map: dict[str, set[str]] = defaultdict(set)
     freq_by_name: Counter = Counter()
 
-    for batch in batched(work_ids, 1000):
+    for batch in _batched(work_ids, 1000):
         for row in col.get_by_ids(batch):
             per_drawer = entity_detector.extract_candidates(row["text"], cfg.languages)
             for name, count in per_drawer.items():
@@ -141,7 +150,7 @@ def _build_text_cache(col, *, drawer_ids: set[str], cfg) -> dict[str, str]:
         return {}
     batch_size = cfg.entity_fetch_batch_size
     text_by_id: dict[str, str] = {}
-    for batch in batched(sorted(drawer_ids), batch_size):
+    for batch in _batched(sorted(drawer_ids), batch_size):
         for row in col.get_by_ids(batch):
             text_by_id[row["id"]] = row["text"]
     return text_by_id
