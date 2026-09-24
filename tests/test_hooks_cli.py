@@ -29,6 +29,18 @@ from cognitive_castle.hooks_cli import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _isolate_background_processes():
+    """Hook unit tests must not leave real miners running after they finish.
+
+    Tests exercising launch arguments or errors can override this mock locally.
+    Keep the launch boundary mocked while still testing the hook's routing.
+    """
+    with patch("cognitive_castle.hooks_cli.subprocess.Popen") as launch:
+        launch.return_value.pid = 999_999_999
+        yield launch
+
+
 # --- _castle_python ---
 
 
