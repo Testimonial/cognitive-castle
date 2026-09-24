@@ -100,9 +100,11 @@
 
 ## The 30-second pitch
 
-Your AI forgets between sessions. Cognitive Castle stores every conversation and project file verbatim, organises them by entity (wings → rooms → drawers), and gives them back word-for-word in milliseconds. It runs entirely on your laptop — no API keys, no cloud, no summarisation.
+Your AI forgets between sessions. Cognitive Castle stores imported conversations and project files verbatim, organises them by entity (wings → rooms → drawers), and returns their original text. Core storage and retrieval run locally without an external API key. Optional LLM processing uses the provider you explicitly configure; choosing an external provider sends that operation’s input to it. Original drawers are never replaced by summaries.
 
-📦 **Verbatim** · 🔒 **100% Local** · 🔌 **MCP-native** · 🆓 **No API key**
+📦 **Verbatim** · 🔒 **Local by default** · 🔌 **MCP-native** · 🆓 **No API key required for core memory**
+
+The illustration above uses example wings and drawer counts. It is not a live dashboard or the research benchmark dataset.
 
 ---
 
@@ -151,7 +153,7 @@ castle search "auth flow" --wing myapp --room backend
 
 ## Retrieval modes
 
-`castle search` runs a multi-stage retrieval pipeline. Pick the mode by trade-off with `--mode`:
+`castle search` starts with Stage 1 (dense, full-text, and knowledge-graph recall) and Stage 2 (fusion and recency). All modes then run Stage 3 (cross-encoder reranking); the table lists Stage 3 and the additional stages selected by each mode:
 
 | Mode | Stages | Use when |
 |---|---|---|
@@ -170,24 +172,36 @@ llm_model: llama3.1:8b
 # llm_api_key:             # external providers only
 ```
 
-Or env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`, `CASTLE_LLM_JUDGE_TOP_N`. **Graceful fallback**: on any LLM failure, Castle returns Stage 3's ordering with a one-line stderr warning and a `JUDGE` audit line.
+Or env vars: `CASTLE_LLM_PROVIDER`, `CASTLE_LLM_MODEL`, `CASTLE_LLM_ENDPOINT`, `CASTLE_LLM_API_KEY`, `CASTLE_LLM_TIMEOUT`, `CASTLE_LLM_JUDGE_TOP_N`. The default provider is local Ollama; external providers are optional.
+
+**Failure behavior:** provider errors, timeouts, malformed JSON, and invalid rankings (missing, duplicate, or out-of-range indices) produce a stderr warning and preserve the ordering entering Stage 4. Enabled Stages 5 and 6 still run afterward, so the final ordering may change. The judge validates a complete permutation of candidate indices; it does not use a confidence threshold or certify factual truth. A `JUDGE` audit line appears when search attaches a judge status, not for every identity-order fallback.
 
 ### Stage 5 — SOAR symbolic re-ranking
 Four hand-crafted productions apply boost-tags with full audit trail. Boosts compound multiplicatively; final boost clamped to `[0.1, 10.0]`.
 
-- `recency-boost`: drawer accessed within 7 days → `score × 1.25`
+- `recency-boost`: drawer timestamp is less than 604,800 seconds old → `score × 1.25`. This uses `created_at` (populated from `filed_at` for pipeline rows), not a last-access counter. Exactly seven days is excluded; missing/invalid dates get no recency boost. Offset-aware dates use their UTC offset; naive dates use the host timezone. Future dates are clamped to age zero.
 - `same-project`: drawer's wing matches `CASTLE_PROJECT` env → `score × 1.15`
-- `entity-match`: drawer's entities overlap the query's
+- `entity-match`: the hit carries the knowledge-graph recall provenance flag
 - `type-match`: drawer source type aligns with the query intent
 
 Every boosted hit exposes three fields (`score_pre_soar`, `soar_boost`, `soar_tags`) so every score change has a name.
 
-Prerequisites: build Soar 9.6+ with SML Python bindings from [SoarGroup/Soar](https://github.com/SoarGroup/Soar) so `python -c "import Python_sml_ClientInterface"` succeeds. Point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend the production set.
+Prerequisites: build Soar 9.6+ with SML Python bindings from [SoarGroup/Soar](https://github.com/SoarGroup/Soar) so `python -c "import Python_sml_ClientInterface"` succeeds. Point `CASTLE_SOAR_RULES_PATH` at your own `.soar` file to extend the production set. Without the SML bindings, Stage 5 emits a warning once per process and returns unchanged scores with neutral SOAR audit fields. A fresh install can therefore search in `max` mode without Soar, but it will not receive symbolic boosts. Use `standard` to skip both the LLM judge and Soar.
 
 ### Stage 6 — Deterministic quality rerank
-Powered by the vendored [`understanding`](https://github.com/Testimonial/understanding) package: 31 standards-based metrics (IEEE 830, ISO 29148, readability formulas, cognitive load theory) applied as a two-tier threshold (medium ×1.15, high ×1.25) on top of relevance.
+Powered by the vendored [`understanding`](https://github.com/Testimonial/understanding) package: **34 text/specification-quality metrics in five layers**. These are heuristic quality signals informed by requirements-engineering and readability methods, not certification of compliance with a standard or factual truth.
 
-**MCP:** the `castle_search` tool takes the same `mode` parameter — `castle_search(query="...", mode="max")`. The v3.4.0 research shipped a companion tool `castle_info_score(text="...")` that returns a novelty score plus the top-k nearest drawers, callable by AI agents before they file candidate content.
+| Layer | Measures | Metrics |
+|---|---|---:|
+| 1 | Readability, structure, cognitive load | 18 |
+| 2 | Semantic category coverage | 6 |
+| 3 | Constraint testability | 3 |
+| 4 | Behavioral simulatability | 4 |
+| 5 | Specification depth | 3 |
+
+The analyzer combines normalized scores into a weighted average. Category weights are structure 15%, readability 10%, cognitive 10%, testability 20%, semantic 15%, behavioral 15%, and depth 15%. Castle applies the configured thresholds to that average: by default, scores ≥0.60 multiply relevance by 1.25, scores ≥0.53 by 1.15, and lower scores by 1.0. Results are sorted by the resulting scores, so a quality boost can move a less relevant candidate ahead of a more relevant one. Missing/malformed analyzer results or per-hit exceptions retain that hit’s original score with neutral audit fields and a warning. See [`quality_rerank.py`](cognitive_castle/quality_rerank.py).
+
+**MCP:** the `castle_search` tool takes the same `mode` parameter — `castle_search(query="...", mode="max")`. The v3.4.0 research shipped a companion tool `castle_info_score(text="...")` that returns a novelty score plus the top-k nearest drawers, callable by AI agents before they file candidate content. It is a separate read-only diagnostic: calling it does not file content or change search ranking. Novelty is not a truth score.
 
 <details>
 <summary><b>Migration from MiniLM</b> — click if you built your palace before the 2026-05 embedder cutover</summary>
@@ -233,7 +247,7 @@ Changing `embedder_model` / `embedder_dim` in `castle.yaml` without running `cas
 
 ```mermaid
 graph LR
-    A[project files] --> M[Miner]
+    A[project files] --> M[Project / conversation miners]
     B[chat exports] --> M
     C[Stop hook] --> M
     M --> P[(Palace<br/>LanceDB + SQLite KG)]
@@ -247,9 +261,9 @@ graph LR
     class P store
 ```
 
-Three input streams (project files, conversation exports, auto-save hooks) feed a single miner that chunks them into verbatim **drawers** and files them into **rooms** (topics) inside **wings** (people or projects). Search runs a 3-stage pipeline — dense embeddings + Tantivy full-text + knowledge-graph traversal, fused with weighted RRF and recency, then cross-encoder reranked. The retrieved drawers come back as the original text, never a summary.
+Three input streams (project files, conversation exports, auto-save hooks) feed the project and conversation miners, which chunk content into verbatim **drawers** and file them into **rooms** (topics) inside **wings** (people or projects). The first three search stages combine dense embeddings, Tantivy full-text and knowledge-graph traversal, fuse candidates with weighted RRF and recency, then apply cross-encoder reranking. The selected retrieval mode adds Stages 4–6 as described above. The retrieved drawers come back as the original text, never a summary.
 
-Importing a changed file or a growing transcript appends a source revision and preserves previous drawers and closet pointers. A revision is marked complete only after its writes succeed; an interrupted import is retried on the next run. Historical revisions remain searchable, so storage grows with source history. Normalization version 3 preserves short exchanges, whitespace, and code formatting, and disables automatic spelling correction and noise removal during transcript import. Existing sources are re-imported on the next `castle mine` without deleting their earlier records.
+A **closet pointer** is an entry in the compact AAAK index that refers to the original drawer IDs; it is not a replacement for their verbatim text. Importing a changed file or a growing transcript appends a source revision and preserves previous drawers and closet pointers. Each revision gets its own drawer IDs and index entries, so retrying an interrupted revision does not replace earlier source revisions. A revision is marked complete only after its writes succeed; an interrupted import is retried on the next run. Historical revisions remain searchable, so storage grows with source history. Normalization version 3 preserves short exchanges, whitespace, and code formatting, and disables automatic spelling correction and noise removal during transcript import. Existing sources are re-imported on the next `castle mine` without deleting their earlier records.
 
 ---
 
@@ -338,12 +352,12 @@ invalidate, timeline. Backed by local SQLite — no extra service to run.
 
 ## Auto-save hooks
 
-Two Claude Code hooks save context automatically in the background:
+The Claude Code Stop and PreCompact hooks attempt conversation capture:
 
-- **Stop hook** — fires every ~15 turns, mines the conversation into the palace without interrupting you
-- **PreCompact hook** — emergency save triggered before context compaction so nothing is lost
+- **Stop hook** — checks the transcript’s user-message count and attempts a save once at least 15 messages have accumulated since the last save marker. In the default silent mode, the marker advances only after a successful diary save. Ending a shorter session does not force this periodic save.
+- **PreCompact hook** — starts transcript ingestion before compaction. Transcript mining runs in a background process; returning from the hook is not confirmation that its writes finished. Project mining, when configured, is synchronous in this handler.
 
-Both hooks are auto-registered when you install the plugin. `castle sweep <transcript-dir>` provides per-message catch-up on top of the file-level chunks the hooks produce — idempotent and resume-safe.
+The plugin registers the hooks, but delivery, trust settings, process failures, and successful persistence are separate conditions. These hooks do not guarantee capture before an abrupt process termination or coordinate every overlapping invocation. Retain the source transcripts and verify saved drawers. `castle sweep <transcript-dir>` can catch up from retained Claude-format JSONL transcripts; it is idempotent and resume-safe on its own writes, but does not deduplicate against file-level miner records. For Codex capture and trust settings, see [the Codex guide](docs/codex-plugin.md).
 
 ---
 
@@ -351,9 +365,12 @@ Both hooks are auto-registered when you install the plugin. `castle sweep <trans
 
 - Python 3.9+
 - LanceDB (installed automatically)
-- ~2.3 GB disk + VRAM for the default embedding model (`BAAI/bge-m3`)
+- Approximately 2.3 GB for the default embedding model weights (`BAAI/bge-m3`); inference needs additional RAM or VRAM depending on device, inputs, and runtime.
+- Additional disk space for drawers, indexes, graph data, and retained source revisions. Palace storage grows with imported history; 2.3 GB is not a database size limit.
 
-No API key is required for the core path.
+Core memory means storing original text, building local indexes/embeddings, and retrieving drawers. It needs no external API key. Model weights may require an initial download. Optional LLM operations require a running local model or an explicitly configured external provider.
+
+For the distinction between stored evidence, quality metrics, and requirement analysis with SUE, see [SUE scope and evidence](docs/sue-scope.md).
 
 ---
 
@@ -419,16 +436,17 @@ box at the top for the full attribution).
 - SOAR symbolic re-ranking productions (Stage 5)
 - Claude Code session hooks for background Stop / PreCompact mining
 - MCP `initialize.instructions` injection that bakes `PALACE_PROTOCOL` +
-  AAAK spec + live palace state into the client's system prompt at
-  session start (PR #48)
+  AAAK spec into the client's startup context (PR #48); live palace
+  state is queried through tools, not scanned during initialization
 - `claude-cli` LLM provider — reuses parent Claude Code's auth for
   Stage 4 judge instead of a separate Messages API key (PR #49)
 - Stage 6 deterministic text-quality re-rank powered by the vendored
   [`understanding`](https://github.com/Testimonial/understanding) package
-  (v3.7.0, MIT, Ladislav Bihari) — 31 standards-based metrics (IEEE 830,
-  ISO 29148, readability, cognitive load) as a quality axis on top of
+  (v3.7.0, MIT, Ladislav Bihari) — 34 text/specification-quality metrics
+  (requirements structure, readability, cognitive load, and substance) on top of
   relevance ranking. Copied in-tree as `cognitive_castle/understanding/`
-  to avoid a Castle → echelon → MemPalace dependency chain.
+  so Castle can use the analyzer without depending on the separate Echelon
+  project or its transitive dependencies.
 
 Original benchmark methodology and the "wings/rooms/drawers" naming
 preserved with credit to the upstream authors.

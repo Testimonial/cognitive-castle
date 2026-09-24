@@ -4,7 +4,7 @@
 
 Memory is identity. When an AI forgets everything between conversations, it cannot build real understanding — of you, your work, your people, your life.
 
-Cognitive Castle exists to solve this. It is a memory system — not a search engine, not a RAG pipeline, not a vector database wrapper. It treats every word you have shared as sacred, stores it verbatim, and makes it instantly available. Your data never leaves your machine. We never summarize. We never paraphrase. We return your exact words.
+Cognitive Castle exists to solve this. It is a memory system — not a search engine, not a RAG pipeline, not a vector database wrapper. It treats every word you have shared as sacred, stores it verbatim, and makes it instantly available. Core memory stays on your machine; optional external LLM processing sends input only to a provider you explicitly configure. We never summarize. We never paraphrase. We return your exact words.
 
 100% recall is the design requirement — the target every search path is measured against. Anything less means forgetting, and forgetting means starting over.
 
@@ -24,7 +24,7 @@ These are non-negotiable. Every PR, every feature, every refactor must honor the
 - **Entity-first** — Everything is keyed by real names with disambiguation by DOB, ID, or context. People matter more than topics.
 - **Local-first, zero external API by default** — All extraction, chunking, embedding, and LLM-assisted refinement happens on the user's machine by default, using locally-hosted runtimes (Ollama, LM Studio, llama.cpp, vLLM, unsloth studio, etc.). External providers (Anthropic, OpenAI, Google) are supported via BYOK but are never required and never enabled silently. The system never sends user content to a service the user has not explicitly configured. "Local LLM" is not an external API — Ollama and equivalents running on localhost are part of the user's machine. External BYOK is always a deliberate user choice, never a default and never a silent fallback.
 - **Performance budgets** — Hooks under 500ms. Startup injection under 100ms. Memory should feel instant.
-- **Privacy by architecture** — The system physically cannot send your data because it never leaves your machine. No telemetry, no phone-home, no external service dependencies for core operations.
+- **Privacy by architecture** — Core storage and retrieval run locally, without telemetry, phone-home, or external service dependencies. Optional external LLM operations are a separate, explicit user choice; never claim that a configured external provider processes data locally.
 - **Background everything** — Filing, indexing, timestamps, and pipeline work happen via hooks in the background. Nothing interrupts the user's conversation. Zero tokens spent on bookkeeping in the chat window.
 
 ## Contributing
@@ -173,7 +173,7 @@ Knowledge Graph:
   ENTITY → PREDICATE → ENTITY (with valid_from / valid_to dates)
   (KG enrichment Phase 2 of `castle mine` / `reindex`: `kg_enricher.py` walks un-indexed drawers, auto-detects entity candidates via `entity_detector`, promotes high-confidence ones to `entity_registry.json`, writes `(entity, mentioned_in, drawer_id)` triples to `knowledge_graph.sqlite3`; unblocks the `entity-match` SOAR production)
 
-Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`):
+Retrieval pipeline (3 core stages plus mode-dependent stages, used by both `castle search` and `search_memories`):
   Query
     ├── Stage 1 (parallel recall, ~top-100 each):
     │     ├── Dense vector search (BAAI/bge-m3 default 1024-dim, paraphrase-multilingual-MiniLM-L12-v2 384-dim legacy via env var — see README)
@@ -187,12 +187,24 @@ Retrieval pipeline (3-stage, used by both `castle search` and `search_memories`)
     │     ├── --mode boosted   → Stage 3 + Stage 5 (SOAR boost-tags) + Stage 6
     │     └── --mode max       → Stage 3 + Stage 4 (LLM judge) + Stage 5 + Stage 6   ← default
     │           Stage 4 graceful-fallback: identity order on any LLM failure;
-    │           surfaces via JUDGE audit line.
+    │           stderr warning; JUDGE audit only when a status is attached.
     │           Stage 5: 4 SOAR symbolic productions (recency-boost,
     │           same-project, entity-match, type-match) add boost-tags.
     │           Stage 6: deterministic text-quality rerank via vendored
-    │           `understanding/` package — two-tier threshold (medium ×1.15, high ×1.25).
+    │           `understanding/` package — 34 metrics / 5 layers, two-tier threshold (medium ×1.15, high ×1.25).
 ```
+
+## Evidence and SUE
+
+Stored words are evidence of what a source said, not automatic proof that its
+claims are true. The five-layer quality analyzer, novelty scoring, and the
+local fact checker have different scopes; none certifies all palace content.
+SUE analyzes software requirements and interpretation ambiguity. It does not
+currently read Castle memory automatically or verify implementation correctness.
+The September 24 README diagnostic was exploratory and used no palace content.
+See [docs/sue-scope.md](docs/sue-scope.md) for the recorded inputs and the proposed,
+unimplemented adapter. Preserve source records and distinguish model suggestions
+from independently checked evidence.
 
 ## Key Files for Common Tasks
 

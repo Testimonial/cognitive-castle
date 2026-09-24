@@ -1,7 +1,7 @@
 """quality_rerank.py — Stage 6 of Castle's retrieval pipeline.
 
 ON by default. Opt-out via --mode fast (or mode:fast MCP).
-Re-ranks Stage 3+ candidates using the 31 deterministic text-quality
+Re-ranks Stage 3+ candidates using the 34 deterministic text-quality
 metrics from the vendored `understanding` package.
 
 Two-tier threshold-and-boost rule with defaults calibrated to the user's
