@@ -57,7 +57,7 @@ def test_normalize_already_has_markers(tmp_path):
     """Files with >= 3 '>' lines pass through unchanged."""
     content = "> question 1\nanswer 1\n> question 2\nanswer 2\n> question 3\nanswer 3\n"
     f = tmp_path / "markers.txt"
-    f.write_text(content)
+    f.write_bytes(content.encode("utf-8"))
     result = normalize(str(f))
     assert result == content
 

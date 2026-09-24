@@ -1,6 +1,7 @@
 """Unit tests for `cognitive_castle.share`."""
 
 import json
+import shlex
 from pathlib import Path
 
 import pytest
@@ -28,8 +29,21 @@ def test_snippet_codex_unpinned_is_bare():
 
 
 def test_snippet_codex_pinned_includes_args_toml_list():
-    out = snippet_codex(palace=Path("/tmp/palace"))
-    assert 'args = ["--palace", "/tmp/palace"]' in out
+    palace = Path("/tmp/palace")
+    out = snippet_codex(palace=palace)
+    assert f'args = ["--palace", {json.dumps(str(palace))}]' in out
+
+
+@pytest.mark.parametrize("path", ["C:\\Users\\Alice\\palace", '/tmp/a"b', "/tmp/český palác"])
+def test_snippet_codex_paths_round_trip_through_toml(path):
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+
+    palace = Path(path)
+    data = tomllib.loads(snippet_codex(palace))
+    assert data["mcp_servers"]["castle"]["args"] == ["--palace", str(palace)]
 
 
 def test_snippet_json_mcp_shape_unpinned():
@@ -43,7 +57,7 @@ def test_snippet_json_mcp_shape_pinned():
     data = json.loads(out)
     server = data["mcpServers"]["castle"]
     assert server["command"] == "castle-mcp"
-    assert server["args"] == ["--palace", "/tmp/p"]
+    assert server["args"] == ["--palace", str(Path("/tmp/p"))]
 
 
 def test_snippet_claude_unpinned():
@@ -54,7 +68,7 @@ def test_snippet_claude_unpinned():
 def test_snippet_claude_pinned_quotes_path_with_spaces():
     out = snippet_claude(palace=Path("/tmp/with space/palace"))
     # shlex.quote wraps in single quotes when spaces are present
-    assert "castle-mcp --palace '/tmp/with space/palace'" in out
+    assert shlex.split(out)[-3:] == ["castle-mcp", "--palace", str(Path("/tmp/with space/palace"))]
 
 
 def test_generate_unknown_client_raises():

@@ -21,6 +21,15 @@ pytest tests/ -v
 
 All tests must pass before submitting a PR. Tests should run without API keys or network access.
 
+CI measures Castle's own Python modules with an 85% coverage threshold from
+`pyproject.toml`. The vendored upstream package in `cognitive_castle/understanding/`
+is excluded from that measurement; its integration tests still run, and Castle's
+`quality_rerank.py` adapter remains measured. Run the same coverage check locally:
+
+```bash
+python -m pytest tests/ --ignore=tests/benchmarks --cov=cognitive_castle --cov-report=term-missing
+```
+
 ## Running Benchmarks
 
 ```bash

@@ -44,7 +44,7 @@ def snippet_codex(palace: Optional[Path]) -> str:
     argv = _server_argv(palace)
     if len(argv) == 1:
         return '[mcp_servers.castle]\ncommand = "castle-mcp"\n'
-    args_toml = ", ".join(f'"{a}"' for a in argv[1:])
+    args_toml = ", ".join(json.dumps(a, ensure_ascii=False) for a in argv[1:])
     return f'[mcp_servers.castle]\ncommand = "castle-mcp"\nargs = [{args_toml}]\n'
 
 

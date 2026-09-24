@@ -90,6 +90,8 @@ markers = [
 
 [tool.coverage.run]
 source = ["cognitive_castle"]
+# Vendored upstream package; Castle's adapter and integration tests remain measured.
+omit = ["cognitive_castle/understanding/*"]
 
 [tool.coverage.report]
 fail_under = 85
