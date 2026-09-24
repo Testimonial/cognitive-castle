@@ -112,26 +112,27 @@ class TestEditDistance:
         assert _edit_distance("abc", "") == 3
         assert _edit_distance("", "abc") == 3
 
-    def test_performance_bounded_by_mentioned_names(self):
+    def test_performance_bounded_by_mentioned_names(self, monkeypatch):
         """Regression: an earlier implementation did O(n²) pairwise
         edit-distance over every registry entry on every check_text call.
-        With 100 names and zero mentions, the call must return in a blink
-        because no edit-distance comparison should even start."""
-        import time
+        With 500 names and zero mentions, no edit-distance comparison
+        should start. Count calls rather than timing a shared CI runner."""
+        from unittest.mock import Mock
+
+        compare = Mock(wraps=_edit_distance)
+        monkeypatch.setattr("cognitive_castle.fact_checker._edit_distance", compare)
 
         # 500 random names, none of which appear in the text.
         registry = {"people": [f"Zelda{i:03d}" for i in range(500)]}
         text = "completely irrelevant prose with no registered names at all"
 
-        start = time.perf_counter()
         issues = _check_entity_confusion(text, registry)
-        elapsed = time.perf_counter() - start
 
         assert issues == []
-        # Even an unoptimized implementation should beat this by orders
-        # of magnitude once we've filtered to mentioned names (which is
-        # 0 here) — if it's still doing O(n²), we'll blow past.
-        assert elapsed < 0.2, f"entity confusion took {elapsed:.3f}s on empty mentions"
+        compare.assert_not_called()
+
+        _check_entity_confusion("Zelda000 said hello", registry)
+        assert compare.call_count == len(registry["people"]) - 1
 
 
 # ── _flatten_names helper ────────────────────────────────────────────
