@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cognitive Castle"
+  short_description: "Recall and preserve exact memories across sessions"
+  default_prompt: "Use $castle to find the relevant decisions from earlier sessions."

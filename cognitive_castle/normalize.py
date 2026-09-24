@@ -122,7 +122,7 @@ def normalize(filepath: str) -> str:
     if file_size > 500 * 1024 * 1024:  # 500 MB safety limit
         raise IOError(f"File too large ({file_size // (1024 * 1024)} MB): {filepath}")
     try:
-        with open(filepath, "r", encoding="utf-8", errors="replace") as f:
+        with open(filepath, "r", encoding="utf-8", errors="strict", newline="") as f:
             content = f.read()
     except OSError as e:
         raise IOError(f"Could not read {filepath}: {e}")
@@ -135,9 +135,8 @@ def normalize(filepath: str) -> str:
     if sum(1 for line in lines if line.strip().startswith(">")) >= 3:
         return content
 
-    # Try JSON normalization. strip_noise is applied inside the Claude Code
-    # JSONL parser (the only format that injects system tags/hook chrome);
-    # other formats pass through verbatim.
+    # Decode export envelopes without cleaning or spellchecking message text.
+    # Noise filtering belongs in the index, never in the stored source.
     ext = Path(filepath).suffix.lower()
     if ext in (".json", ".jsonl") or content.strip()[:1] in ("{", "["):
         normalized = _try_normalize_json(content)
@@ -208,10 +207,6 @@ def _try_claude_code_jsonl(content: str) -> Optional[str]:
                 isinstance(b, dict) and b.get("type") == "tool_result" for b in msg_content
             )
             text = _extract_content(msg_content, tool_use_map=tool_use_map)
-            # Strip Claude Code system-injected noise per message, never across
-            # message boundaries — prevents span-eating.
-            if text:
-                text = strip_noise(text)
             if text:
                 if is_tool_only and messages and messages[-1][0] == "assistant":
                     # Append tool results to the previous assistant message
@@ -221,8 +216,6 @@ def _try_claude_code_jsonl(content: str) -> Optional[str]:
                     messages.append(("user", text))
         elif msg_type == "assistant":
             text = _extract_content(msg_content, tool_use_map=tool_use_map)
-            if text:
-                text = strip_noise(text)
             if text:
                 # If previous message is also assistant (multi-turn tool loop),
                 # merge into the same assistant turn
@@ -240,12 +233,13 @@ def _try_claude_code_jsonl(content: str) -> Optional[str]:
 def _try_codex_jsonl(content: str) -> Optional[str]:
     """OpenAI Codex CLI sessions (~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl).
 
-    Uses only event_msg entries (user_message / agent_message) which represent
-    the canonical conversation turns. response_item entries are skipped because
-    they include synthetic context injections and duplicate the real messages.
+    Prefer canonical event_msg turns when available. Newer rollouts can contain
+    only response_item messages; use their user/assistant text as a fallback,
+    excluding developer/system instructions and non-message tool records.
     """
     lines = [line.strip() for line in content.strip().split("\n") if line.strip()]
     messages = []
+    response_messages = []
     has_session_meta = False
     for line in lines:
         try:
@@ -260,18 +254,31 @@ def _try_codex_jsonl(content: str) -> Optional[str]:
             has_session_meta = True
             continue
 
-        if entry_type != "event_msg":
-            continue
-
         payload = entry.get("payload", {})
         if not isinstance(payload, dict):
+            continue
+
+        if entry_type == "response_item" and payload.get("type") == "message":
+            role = payload.get("role")
+            blocks = payload.get("content", [])
+            if role in {"user", "assistant"} and isinstance(blocks, list):
+                text = "\n".join(
+                    block["text"]
+                    for block in blocks
+                    if isinstance(block, dict) and isinstance(block.get("text"), str)
+                )
+                if text:
+                    response_messages.append((role, text))
+            continue
+
+        if entry_type != "event_msg":
             continue
 
         payload_type = payload.get("type", "")
         msg = payload.get("message")
         if not isinstance(msg, str):
             continue
-        text = msg.strip()
+        text = msg
         if not text:
             continue
 
@@ -280,8 +287,9 @@ def _try_codex_jsonl(content: str) -> Optional[str]:
         elif payload_type == "agent_message":
             messages.append(("assistant", text))
 
-    if len(messages) >= 2 and has_session_meta:
-        return _messages_to_transcript(messages)
+    turns = messages or response_messages
+    if turns and has_session_meta:
+        return _messages_to_transcript(turns)
     return None
 
 
@@ -394,7 +402,7 @@ def _collect_claude_messages(items) -> list:
         if not isinstance(item, dict):
             continue
         role = item.get("role") or item.get("sender", "")
-        text = _extract_content(item.get("content", "")) or (item.get("text") or "").strip()
+        text = _extract_content(item.get("content", "")) or (item.get("text") or "")
         if role in ("user", "human") and text:
             messages.append(("user", text))
         elif role in ("assistant", "ai") and text:
@@ -431,7 +439,7 @@ def _try_chatgpt_json(data) -> Optional[str]:
                 role = msg.get("author", {}).get("role", "")
                 content = msg.get("content", {})
                 parts = content.get("parts", []) if isinstance(content, dict) else []
-                text = " ".join(str(p) for p in parts if isinstance(p, str) and p).strip()
+                text = "\n".join(p for p in parts if isinstance(p, str))
                 if role == "user" and text:
                     messages.append(("user", text))
                 elif role == "assistant" and text:
@@ -466,7 +474,7 @@ def _try_slack_json(data) -> Optional[str]:
         # Sanitize speaker ID: strip brackets, newlines, and control chars
         # to prevent chunk-boundary injection via crafted exports
         user_id = re.sub(r"[\[\]\n\r\x00-\x1f]", "_", raw_user_id).strip()
-        text = item.get("text", "").strip()
+        text = item.get("text", "")
         if not text or not user_id:
             continue
         if user_id not in seen_users:
@@ -494,7 +502,7 @@ def _extract_content(content, tool_use_map: dict = None) -> str:
                       select the right formatting strategy for tool_result blocks.
     """
     if isinstance(content, str):
-        return content.strip()
+        return content
     if isinstance(content, list):
         parts = []
         for item in content:
@@ -513,9 +521,9 @@ def _extract_content(content, tool_use_map: dict = None) -> str:
                     formatted = _format_tool_result(result_content, tname)
                     if formatted:
                         parts.append(formatted)
-        return "\n".join(p for p in parts if p).strip()
+        return "\n".join(p for p in parts if p)
     if isinstance(content, dict):
-        return content.get("text", "").strip()
+        return content.get("text", "")
     return ""
 
 
@@ -629,7 +637,7 @@ def _format_tool_result(content, tool_name: str) -> str:
     return "→ " + text
 
 
-def _messages_to_transcript(messages: list, spellcheck: bool = True) -> str:
+def _messages_to_transcript(messages: list, spellcheck: bool = False) -> str:
     """Convert [(role, text), ...] to transcript format with > markers."""
     if spellcheck:
         try:

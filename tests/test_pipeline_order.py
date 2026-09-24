@@ -232,7 +232,7 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
         def fts_search(self, query, n_results, where=None):
             return []
 
-        def get_by_ids(self, ids):
+        def get_by_ids(self, ids, where=None):
             id_to_row = {
                 "kg-hit": {
                     "id": "kg-hit",
@@ -301,11 +301,12 @@ def test_entity_match_flag_attaches_to_kg_hop_rows(monkeypatch, tmp_path):
 
     result = searcher_mod._new_pipeline_search(
         query="test",
-        palace_path=str(tmp_path),
+        palace_path=str(tmp_path / "palace"),
         wing=None,
         room=None,
         n_results=10,
         cfg=cfg,
+        mode="fast",
     )
 
     by_id = {hit["id"]: hit for hit in result}

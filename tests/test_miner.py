@@ -407,7 +407,7 @@ def test_process_file_uses_bounded_upsert_batches(tmp_path, monkeypatch):
         def get(self, *args, **kwargs):
             return {"ids": []}
 
-        def delete(self, *args, **kwargs):
+        def update(self, **kwargs):
             pass
 
         def upsert(self, documents, ids, metadatas, embeddings=None):

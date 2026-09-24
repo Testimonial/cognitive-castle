@@ -1,0 +1,39 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "castle hook run --hook session-start --harness codex",
+            "timeout": 3
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "castle hook run --hook stop --harness codex",
+            "timeout": 600,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "castle hook run --hook precompact --harness codex",
+            "timeout": 600,
+            "async": true
+          }
+        ]
+      }
+    ]
+  }
+}

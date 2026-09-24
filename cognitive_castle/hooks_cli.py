@@ -777,6 +777,20 @@ def run_hook(hook_name: str, harness: str):
         _log("WARNING: Failed to parse stdin JSON, proceeding with empty data")
         data = {}
 
+    if harness == "codex":
+        from .codex_hooks import handle_hook
+
+        if not isinstance(data, dict):
+            data = {}
+        try:
+            _output(handle_hook(hook_name, data))
+        except Exception as exc:
+            # Surface capture failures in the hook log without stopping the chat.
+            _log(f"Codex {hook_name} capture failed: {exc}")
+            print(f"[castle] Codex {hook_name} capture failed: {exc}", file=sys.stderr)
+            _output({})
+        return
+
     hooks = {
         "session-start": hook_session_start,
         "stop": hook_stop,

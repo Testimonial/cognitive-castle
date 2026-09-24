@@ -39,15 +39,40 @@ SKIP_DIRS = {
 
 _DEFAULT_BACKEND = LanceDBBackend()
 
-# Schema version for drawer normalization. Bump when the normalization
-# pipeline changes in a way that existing drawers should be rebuilt to pick up
-# (e.g., new noise-stripping rules). `file_already_mined` treats drawers with
-# a missing or stale `normalize_version` as "not mined", so the next mine pass
-# silently rebuilds them — users don't need to manually erase + re-mine.
-#
-# v2 (2026-04): introduced strip_noise() for Claude Code JSONL; previous
-#               drawers stored system tags / hook chrome verbatim.
-NORMALIZE_VERSION = 2
+# A normalization upgrade appends a fresh source revision; prior drawers stay
+# available. Completion metadata distinguishes a finished import from a crash.
+NORMALIZE_VERSION = 3  # lossless chunks and append-only source revisions
+
+
+def source_signature(source_file: str) -> dict:
+    """Capture the file state before reading; growing files remain eligible on retry."""
+    stat = os.stat(source_file)
+    return {"source_mtime_ns": stat.st_mtime_ns, "source_size": stat.st_size}
+
+
+def source_revision(content: str, mode: str = "project") -> str:
+    """Stable revision key makes interrupted writes retryable without overwriting history."""
+    return hashlib.sha256(f"{NORMALIZE_VERSION}:{mode}:{content}".encode()).hexdigest()[:24]
+
+
+def revision_drawer_id(source_file: str, wing: str, room: str, revision: str, index: int) -> str:
+    key = hashlib.sha256(f"{source_file}:{revision}:{index}".encode()).hexdigest()[:24]
+    return f"drawer_{wing}_{room}_{key}"
+
+
+def split_verbatim(content: str, size: int = 800) -> list:
+    """Partition text into bounded, exact slices, including whitespace and short tails."""
+    chunks = []
+    start = 0
+    while start < len(content):
+        end = min(start + size, len(content))
+        if end < len(content):
+            boundary = content.rfind("\n", start, end)
+            if boundary >= start + size // 2:
+                end = boundary + 1
+        chunks.append({"content": content[start:end], "chunk_index": len(chunks)})
+        start = end
+    return chunks
 
 
 def get_collection(
@@ -221,9 +246,8 @@ def build_closet_lines(source_file, drawer_ids, content, wing, room):
 def purge_file_closets(closets_col, source_file: str) -> None:
     """Delete every closet associated with ``source_file``.
 
-    Call this before ``upsert_closet_lines`` on a re-mine so stale topics
-    from a prior schema/version don't survive in the closet collection.
-    Mirrors the drawer-purge step in process_file().
+    Explicit maintenance operation. Normal ingestion preserves historical
+    closets and must not call this helper.
     """
     try:
         closets_col.delete(where={"source_file": source_file})
@@ -235,9 +259,8 @@ def upsert_closet_lines(closets_col, closet_id_base, lines, metadata):
     """Write topic lines to closets, packed greedily without splitting a line.
 
     Closets are deterministically numbered (``..._01``, ``..._02``, …) and
-    each ``upsert`` fully overwrites the prior content at that ID. Callers
-    are expected to ``purge_file_closets`` first when re-mining a source
-    file so stale-numbered closets from larger prior runs don't leak.
+    each ``upsert`` retries the same revision at that ID. Callers include
+    the source revision in ``closet_id_base`` to preserve historical pointers.
 
     Returns the number of closets written.
     """
@@ -275,8 +298,8 @@ def upsert_closet_lines(closets_col, closet_id_base, lines, metadata):
 def mine_lock(source_file: str):
     """Cross-platform file lock for mine operations.
 
-    Prevents multiple agents from mining the same file simultaneously,
-    which causes duplicate drawers when the delete+insert cycle interleaves.
+    Prevents simultaneous imports of the same source from interleaving batches
+    and completion markers.
     """
     lock_dir = os.path.join(os.path.expanduser("~"), ".castle", "locks")
     os.makedirs(lock_dir, exist_ok=True)
@@ -318,8 +341,8 @@ class MineAlreadyRunning(RuntimeError):
 def mine_palace_lock(palace_path: str):
     """Per-palace non-blocking lock around the full `mine` pipeline.
 
-    The per-file `mine_lock` only protects delete+insert interleave for a
-    single source; it does not prevent N copies of `castle mine <dir>`
+    The per-file `mine_lock` serializes writes for a single source;
+    it does not prevent N copies of `castle mine <dir>`
     from being spawned concurrently by hooks. When that happens, each copy
     drives vector inserts in parallel against the same palace,
     which can corrupt the index and produce unexpected blowups.
@@ -425,33 +448,40 @@ def clean_stale_locks(lock_dir: str, max_age_seconds: int = 86400) -> tuple[int,
 
 
 def file_already_mined(collection, source_file: str, check_mtime: bool = False) -> bool:
-    """Check if a file has already been filed in the palace.
+    """Return whether a complete, current-schema revision has been filed.
 
-    Returns False (so the file gets re-mined) when:
-      - no drawers exist for this source_file
-      - the stored `normalize_version` is missing or older than the current
-        schema (triggers silent rebuild after a normalization upgrade)
-      - `check_mtime=True` and the file's mtime differs from the stored one
-
-    When check_mtime=True (used by project miner), also re-mines on content
-    change. When check_mtime=False (used by convo miner), transcripts are
-    assumed immutable, so only the version gate triggers a rebuild.
+    Both miners use ``check_mtime=True`` to compare nanosecond mtime and size.
+    The default retains the existence-only contract for external callers.
+    Older metadata with no revision key keeps its legacy mtime check.
+    Paginate so a large or partially imported source cannot hide completion.
     """
     try:
-        results = collection.get(where={"source_file": source_file}, limit=1)
-        if not results.get("ids"):
-            return False
-        stored_meta = results.get("metadatas", [{}])[0] or {}
-        # Pre-v2 drawers have no version field — treat them as stale.
-        stored_version = stored_meta.get("normalize_version", 1)
-        if stored_version < NORMALIZE_VERSION:
-            return False
-        if check_mtime:
-            stored_mtime = stored_meta.get("source_mtime")
-            if stored_mtime is None:
+        signature = source_signature(source_file) if check_mtime else None
+        offset = 0
+        while True:
+            results = collection.get(
+                where={"source_file": source_file},
+                include=["metadatas"],
+                limit=1000,
+                offset=offset,
+            )
+            for meta in results.get("metadatas", []):
+                meta = meta or {}
+                if meta.get("normalize_version", 1) < NORMALIZE_VERSION:
+                    continue
+                if "source_revision" in meta:
+                    if not meta.get("ingest_complete"):
+                        continue
+                    if signature is None or all(meta.get(k) == v for k, v in signature.items()):
+                        return True
+                elif not check_mtime:
+                    return True
+                elif meta.get("source_mtime") is not None:
+                    if abs(float(meta["source_mtime"]) - os.path.getmtime(source_file)) < 0.001:
+                        return True
+            count = len(results.get("ids", []))
+            if count < 1000:
                 return False
-            current_mtime = os.path.getmtime(source_file)
-            return abs(float(stored_mtime) - current_mtime) < 0.001
-        return True
-    except Exception:
+            offset += count
+    except (OSError, TypeError, ValueError):
         return False

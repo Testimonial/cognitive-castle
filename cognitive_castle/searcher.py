@@ -613,13 +613,13 @@ def _new_pipeline_search(
 
     # ── Stage 1b: Tantivy FTS sparse search ────────────────────────────────
     try:
-        sparse_rows = col.fts_search(query, n_results=100)
+        sparse_rows = col.fts_search(query, n_results=100, where=where_sql)
     except Exception:
         sparse_rows = []
 
     # ── Stage 1c: KG-hop ───────────────────────────────────────────────────
     kg_rows: list = []
-    palace_dir = _Path(palace_path)
+    palace_dir = _Path(palace_path).parent
     entities_path = palace_dir / "entity_registry.json"
     kg_path = palace_dir / "knowledge_graph.sqlite3"
     if entities_path.exists() and kg_path.exists():
@@ -632,15 +632,39 @@ def _new_pipeline_search(
             matches = reg.lookup_in_text(query)
             if matches:
                 kg = KnowledgeGraph(db_path=str(kg_path))
-                kg_drawer_ids = kg.find_drawers_by_entities(
-                    [m.entity_id for m in matches],
-                    limit=cfg.kg_hop_top_n,
-                )
-                if kg_drawer_ids:
-                    kg_rows = col.get_by_ids(kg_drawer_ids)
+                try:
+                    offset = 0
+                    while len(kg_rows) < cfg.kg_hop_top_n:
+                        kg_drawer_ids = kg.find_drawers_by_entities(
+                            [m.entity_id for m in matches],
+                            limit=100,
+                            offset=offset,
+                        )
+                        if not kg_drawer_ids:
+                            break
+                        # Filter before the KG budget, preserving graph ranking.
+                        rows = col.get_by_ids(kg_drawer_ids, where=where_sql)
+                        by_id = {r["id"]: r for r in rows}
+                        kg_rows.extend(by_id[i] for i in kg_drawer_ids if i in by_id)
+                        offset += len(kg_drawer_ids)
+                        if len(kg_drawer_ids) < 100:
+                            break
+                    kg_rows = kg_rows[: cfg.kg_hop_top_n]
+                finally:
+                    kg.close()
         except Exception:
             # KG-hop is best-effort; degrade to dense+sparse only.
             kg_rows = []
+
+    # Defend the scope boundary even if a recall provider ignores its filter.
+    def in_scope(row):
+        return (wing is None or row.get("wing") == wing) and (
+            room is None or row.get("room") == room
+        )
+
+    dense_rows = [r for r in dense_rows if in_scope(r)]
+    sparse_rows = [r for r in sparse_rows if in_scope(r)]
+    kg_rows = [r for r in kg_rows if in_scope(r)]
 
     # ── Stage 2: fusion + recency boost ────────────────────────────────────
     def _to_refs(rows):
@@ -688,7 +712,7 @@ def _new_pipeline_search(
     # Derive entity-match flag from fusion provenance for the top-K candidates.
     entity_match_by_id = {sc.drawer_id: "kg" in sc.contributing_signals for sc in fused[:k_cap]}
 
-    top_k_rows = col.get_by_ids(top_k_ids)
+    top_k_rows = [r for r in col.get_by_ids(top_k_ids) if in_scope(r)]
     if not top_k_rows:
         return []
 

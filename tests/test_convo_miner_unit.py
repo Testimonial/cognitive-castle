@@ -45,10 +45,9 @@ class TestChunkExchanges:
         chunks = chunk_exchanges("")
         assert chunks == []
 
-    def test_short_content_skipped(self):
+    def test_short_content_preserved(self):
         chunks = chunk_exchanges("> hi\nbye")
-        # Too short to produce chunks (below MIN_CHUNK_SIZE)
-        assert isinstance(chunks, list)
+        assert "".join(c["content"] for c in chunks) == "> hi\nbye"
 
     def test_long_ai_response_not_truncated(self):
         """AI responses longer than 8 lines must be stored in full (verbatim principle)."""
@@ -117,14 +116,14 @@ class TestScanConvos:
 
 
 class TestFileChunksLocked:
-    def test_uses_bounded_upsert_batches(self, monkeypatch):
+    def test_uses_bounded_upsert_batches(self, monkeypatch, tmp_path):
         import cognitive_castle.convo_miner as convo_miner
 
         class FakeCol:
             def __init__(self):
                 self.batch_sizes = []
 
-            def delete(self, *args, **kwargs):
+            def update(self, *args, **kwargs):
                 pass
 
             def upsert(self, documents, ids, metadatas):
@@ -134,13 +133,15 @@ class TestFileChunksLocked:
         col = FakeCol()
         monkeypatch.setattr(convo_miner, "DRAWER_UPSERT_BATCH_SIZE", 2)
         monkeypatch.setattr(
-            convo_miner, "file_already_mined", lambda collection, source_file: False
+            convo_miner, "file_already_mined", lambda collection, source_file, **kw: False
         )
         monkeypatch.setattr(convo_miner, "mine_lock", lambda source_file: contextlib.nullcontext())
         monkeypatch.setattr(convo_miner, "_detect_hall_cached", lambda content: "conversations")
 
+        path = tmp_path / "chat.txt"
+        path.write_text("test")
         drawers, room_counts, skipped = _file_chunks_locked(
-            col, "chat.txt", chunks, "wing", "general", "agent", "exchange"
+            col, str(path), chunks, "wing", "general", "agent", "exchange"
         )
 
         assert drawers == 5

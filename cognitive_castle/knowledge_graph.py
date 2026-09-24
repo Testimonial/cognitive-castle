@@ -396,6 +396,7 @@ class KnowledgeGraph:
         self,
         entity_names: list,
         limit: int = 50,
+        offset: int = 0,
     ) -> list:
         """Return drawer IDs tagged with any of the supplied entities.
 
@@ -424,11 +425,11 @@ class KnowledgeGraph:
               AND t.source_drawer_id IS NOT NULL
             GROUP BY t.source_drawer_id
             ORDER BY match_count DESC, latest_extracted_at DESC, t.source_drawer_id ASC
-            LIMIT ?
+            LIMIT ? OFFSET ?
         """
         with self._lock:
             conn = self._conn()
-            rows = conn.execute(sql, entity_ids + entity_ids + [limit]).fetchall()
+            rows = conn.execute(sql, entity_ids + entity_ids + [limit, offset]).fetchall()
         return [r[0] for r in rows]
 
     # ── Seed from known facts ─────────────────────────────────────────────

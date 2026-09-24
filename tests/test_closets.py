@@ -276,7 +276,7 @@ class TestPurgeFileClosets:
 
 
 class TestMinerClosetRebuild:
-    def test_remine_replaces_closets_completely(self, tmp_path):
+    def test_remine_preserves_historical_closets(self, tmp_path):
         project = tmp_path / "proj"
         project.mkdir()
         (project / "castle.yaml").write_text(
@@ -308,16 +308,8 @@ class TestMinerClosetRebuild:
         second_pass = col.get(where={"source_file": str(target)})
         second_docs = "\n".join(second_pass["documents"]).lower()
         assert "only topic now" in second_docs
-        for i in range(15):
-            assert f"topic {i}\n" not in second_docs, (
-                f"stale 'Topic {i}' from first mine survived the rebuild"
-            )
-        # Numbered closets that existed only in the larger first run must be gone.
-        leftover = first_ids - set(second_pass["ids"])
-        for stale_id in leftover:
-            assert not col.get(ids=[stale_id])["ids"], (
-                f"orphan closet {stale_id} from larger first run survived purge"
-            )
+        assert first_ids < set(second_pass["ids"])
+        assert col.get(ids=list(first_pass["ids"]))["documents"] == first_pass["documents"]
 
 
 # ── _extract_drawer_ids_from_closet ───────────────────────────────────

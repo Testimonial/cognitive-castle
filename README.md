@@ -249,16 +249,28 @@ graph LR
 
 Three input streams (project files, conversation exports, auto-save hooks) feed a single miner that chunks them into verbatim **drawers** and files them into **rooms** (topics) inside **wings** (people or projects). Search runs a 3-stage pipeline — dense embeddings + Tantivy full-text + knowledge-graph traversal, fused with weighted RRF and recency, then cross-encoder reranked. The retrieved drawers come back as the original text, never a summary.
 
+Importing a changed file or a growing transcript appends a source revision and preserves previous drawers and closet pointers. A revision is marked complete only after its writes succeed; an interrupted import is retried on the next run. Historical revisions remain searchable, so storage grows with source history. Normalization version 3 preserves short exchanges, whitespace, and code formatting, and disables automatic spelling correction and noise removal during transcript import. Existing sources are re-imported on the next `castle mine` without deleting their earlier records.
+
 ---
 
 ## Connect to your MCP client
 
-Castle is MCP-native. Claude Code gets the fullest integration (plugin
-auto-registers MCP server + Stop/PreCompact hooks + slash commands).
-Other MCP clients (Codex, Cursor, VS Code + Copilot, Gemini CLI, any
-generic MCP consumer) get the same `castle_*` tools — see
+Castle is MCP-native. Claude Code and Codex plugins register the MCP server
+and conversation capture hooks. Other MCP clients (Cursor, VS Code + Copilot,
+Gemini CLI, any generic MCP consumer) get the same `castle_*` tools — see
 [**docs/MCP_CLIENTS.md**](docs/MCP_CLIENTS.md) for one-liner config
 per client and a feature-parity matrix.
+
+### Codex
+
+Install the `cognitive-castle` plugin for local MCP memory tools, the `castle`
+skill, and background capture of Codex conversations. The plugin lives at this
+repository's root; its runtime uses the installed `castle` / `castle-mcp` commands.
+Follow [Codex plugin setup](docs/codex-plugin.md) to install the runtime and
+plugin, activate **SessionStart / Stop / PreCompact** in `/hooks`, and verify
+an actual saved conversation. `/hooks` lists event names; open an event to see
+`cognitive-castle` as its source. Installing the plugin alone does not activate
+capture.
 
 ### Claude Code
 

@@ -11,6 +11,7 @@ Same palace as project mining. Different ingest strategy.
 import os
 import sys
 import hashlib
+import re
 from pathlib import Path
 from datetime import datetime
 from collections import defaultdict
@@ -22,6 +23,10 @@ from .palace import (
     file_already_mined,
     get_collection,
     mine_lock,
+    revision_drawer_id,
+    source_revision,
+    source_signature,
+    split_verbatim,
 )
 
 
@@ -53,7 +58,7 @@ CONVO_EXTENSIONS = {
     ".jsonl",
 }
 
-MIN_CHUNK_SIZE = 30
+MIN_CHUNK_SIZE = 30  # legacy export; no longer a storage cutoff
 CHUNK_SIZE = 800  # chars per drawer — align with miner.py
 DRAWER_UPSERT_BATCH_SIZE = 1000
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB — skip files larger than this.
@@ -66,13 +71,14 @@ MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB — skip files larger than this.
 # use also scales with source size.
 
 
-def _register_file(collection, source_file: str, wing: str, agent: str):
+def _register_file(collection, source_file: str, wing: str, agent: str, signature=None):
     """Write a sentinel so file_already_mined() returns True for 0-chunk files.
 
     Without this, files that normalize to nothing or produce zero chunks are
     re-read and re-processed on every mine run because nothing was written to
     the palace on the first pass.
     """
+    signature = signature if signature is not None else source_signature(source_file)
     sentinel_id = f"_reg_{hashlib.sha256(source_file.encode()).hexdigest()[:24]}"
     collection.upsert(
         documents=[f"[registry] {source_file}"],
@@ -85,6 +91,9 @@ def _register_file(collection, source_file: str, wing: str, agent: str):
                 "added_by": agent,
                 "filed_at": datetime.now().isoformat(),
                 "ingest_mode": "registry",
+                **signature,
+                "source_revision": "empty",
+                "ingest_complete": True,
                 "normalize_version": NORMALIZE_VERSION,
             }
         ],
@@ -97,92 +106,23 @@ def _register_file(collection, source_file: str, wing: str, agent: str):
 
 
 def chunk_exchanges(content: str) -> list:
-    """
-    Chunk by exchange pair: one > turn + AI response = one unit.
-    Falls back to paragraph chunking if no > markers.
-    """
-    lines = content.split("\n")
-    quote_lines = sum(1 for line in lines if line.strip().startswith(">"))
-
-    if quote_lines >= 3:
-        return _chunk_by_exchange(lines)
-    else:
-        return _chunk_by_paragraph(content)
+    """Split on exchange boundaries without altering or dropping any source text."""
+    starts = [m.start() for m in re.finditer(r"(?m)^>[ \t]?", content)]
+    boundaries = sorted({0, *starts, len(content)})
+    chunks = []
+    for start, end in zip(boundaries, boundaries[1:]):
+        for chunk in split_verbatim(content[start:end], CHUNK_SIZE):
+            chunk["chunk_index"] = len(chunks)
+            chunks.append(chunk)
+    return chunks
 
 
 def _chunk_by_exchange(lines: list) -> list:
-    """One user turn (>) + the AI response that follows = one or more chunks.
-
-    The full AI response is preserved verbatim.  When the combined
-    user-turn + response exceeds CHUNK_SIZE the response is split across
-    consecutive drawers so nothing is silently discarded.
-    """
-    chunks = []
-    i = 0
-
-    while i < len(lines):
-        line = lines[i]
-        if line.strip().startswith(">"):
-            user_turn = line.strip()
-            i += 1
-
-            ai_lines = []
-            while i < len(lines):
-                next_line = lines[i]
-                if next_line.strip().startswith(">") or next_line.strip().startswith("---"):
-                    break
-                if next_line.strip():
-                    ai_lines.append(next_line.strip())
-                i += 1
-
-            ai_response = " ".join(ai_lines)
-            content = f"{user_turn}\n{ai_response}" if ai_response else user_turn
-
-            # Split into multiple drawers when the exchange exceeds CHUNK_SIZE
-            if len(content) > CHUNK_SIZE:
-                # First chunk: user turn + as much response as fits
-                first_part = content[:CHUNK_SIZE]
-                if len(first_part.strip()) > MIN_CHUNK_SIZE:
-                    chunks.append({"content": first_part, "chunk_index": len(chunks)})
-                # Remaining response in CHUNK_SIZE-sized continuation drawers
-                remainder = content[CHUNK_SIZE:]
-                while remainder:
-                    part = remainder[:CHUNK_SIZE]
-                    remainder = remainder[CHUNK_SIZE:]
-                    if len(part.strip()) > MIN_CHUNK_SIZE:
-                        chunks.append({"content": part, "chunk_index": len(chunks)})
-            elif len(content.strip()) > MIN_CHUNK_SIZE:
-                chunks.append(
-                    {
-                        "content": content,
-                        "chunk_index": len(chunks),
-                    }
-                )
-        else:
-            i += 1
-
-    return chunks
+    return chunk_exchanges("\n".join(lines))
 
 
 def _chunk_by_paragraph(content: str) -> list:
-    """Fallback: chunk by paragraph breaks."""
-    chunks = []
-    paragraphs = [p.strip() for p in content.split("\n\n") if p.strip()]
-
-    # If no paragraph breaks and long content, chunk by line groups
-    if len(paragraphs) <= 1 and content.count("\n") > 20:
-        lines = content.split("\n")
-        for i in range(0, len(lines), 25):
-            group = "\n".join(lines[i : i + 25]).strip()
-            if len(group) > MIN_CHUNK_SIZE:
-                chunks.append({"content": group, "chunk_index": len(chunks)})
-        return chunks
-
-    for para in paragraphs:
-        if len(para) > MIN_CHUNK_SIZE:
-            chunks.append({"content": para, "chunk_index": len(chunks)})
-
-    return chunks
+    return split_verbatim(content, CHUNK_SIZE)
 
 
 # =============================================================================
@@ -280,8 +220,19 @@ def detect_convo_room(content: str) -> str:
 
 
 def scan_convos(convo_dir: str) -> list:
-    """Find all potential conversation files."""
-    convo_path = Path(convo_dir).expanduser().resolve()
+    """Find conversation files, or select exactly one explicitly supplied transcript."""
+    source = Path(convo_dir).expanduser()
+    if source.is_symlink():
+        return []
+    convo_path = source.resolve()
+    if convo_path.is_file():
+        if (
+            convo_path.suffix.lower() in CONVO_EXTENSIONS
+            and not convo_path.name.endswith(".meta.json")
+            and convo_path.stat().st_size <= MAX_FILE_SIZE
+        ):
+            return [convo_path]
+        return []
     files = []
     for root, dirs, filenames in os.walk(convo_path):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
@@ -307,31 +258,23 @@ def scan_convos(convo_dir: str) -> list:
 # =============================================================================
 
 
-def _file_chunks_locked(collection, source_file, chunks, wing, room, agent, extract_mode):
-    """Lock the source file, purge stale drawers, and upsert fresh chunks.
+def _file_chunks_locked(
+    collection, source_file, chunks, wing, room, agent, extract_mode, signature=None, revision=None
+):
+    """Append an idempotent source revision, marking completion after all batches.
 
-    Combines the per-file serialization that prevents concurrent agents from
-    duplicating work (via mine_lock) with the normalize-version rebuild
-    contract (purge-before-insert so pre-v2 drawers don't survive).
-
-    Returns (drawers_added, room_counts_delta, skipped).
+    Historical drawers are never removed. Returns
+    (drawers_added, room_counts_delta, skipped).
     """
+    signature = signature if signature is not None else source_signature(source_file)
+    revision = revision or source_revision("".join(c["content"] for c in chunks), extract_mode)
     room_counts_delta: dict = defaultdict(int)
     drawers_added = 0
     with mine_lock(source_file):
         # Re-check after lock — another agent may have just finished this file
-        # at the current schema. A stale-version hit here returns False, so we
-        # still fall through to the purge+rebuild path below.
-        if file_already_mined(collection, source_file):
+        # at the current schema. Interrupted revisions remain eligible.
+        if file_already_mined(collection, source_file, check_mtime=True):
             return 0, room_counts_delta, True
-
-        # Purge stale drawers first. When the normalize schema bumps,
-        # file_already_mined() returned False for pre-v2 drawers — clean
-        # them out so the source doesn't end up with mixed old/new drawers.
-        try:
-            collection.delete(where={"source_file": source_file})
-        except Exception:
-            pass
 
         # Batch chunks into bounded upserts so large transcripts keep most of
         # the embedding speedup without one huge Chroma/SQLite request. Keep
@@ -346,7 +289,9 @@ def _file_chunks_locked(collection, source_file, chunks, wing, room, agent, extr
                 chunk_room = chunk.get("memory_type", room) if extract_mode == "general" else room
                 if extract_mode == "general":
                     room_counts_delta[chunk_room] += 1
-                drawer_id = f"drawer_{wing}_{chunk_room}_{hashlib.sha256((source_file + str(chunk['chunk_index'])).encode()).hexdigest()[:24]}"
+                drawer_id = revision_drawer_id(
+                    source_file, wing, chunk_room, revision, chunk["chunk_index"]
+                )
                 batch_docs.append(chunk["content"])
                 batch_ids.append(drawer_id)
                 batch_metas.append(
@@ -360,19 +305,16 @@ def _file_chunks_locked(collection, source_file, chunks, wing, room, agent, extr
                         "filed_at": filed_at,
                         "ingest_mode": "convos",
                         "extract_mode": extract_mode,
+                        **signature,
+                        "source_revision": revision,
+                        "ingest_complete": False,
                         "normalize_version": NORMALIZE_VERSION,
                     }
                 )
-            try:
-                collection.upsert(
-                    documents=batch_docs,
-                    ids=batch_ids,
-                    metadatas=batch_metas,
-                )
-                drawers_added += len(batch_docs)
-            except Exception as e:
-                if "already exists" not in str(e).lower():
-                    raise
+            collection.upsert(documents=batch_docs, ids=batch_ids, metadatas=batch_metas)
+            drawers_added += len(batch_docs)
+        if chunks:
+            collection.update(ids=[batch_ids[-1]], metadatas=[{"ingest_complete": True}])
     return drawers_added, room_counts_delta, False
 
 
@@ -423,21 +365,21 @@ def mine_convos(
         source_file = str(filepath)
 
         # Skip if already filed
-        if not dry_run and file_already_mined(collection, source_file):
+        if not dry_run and file_already_mined(collection, source_file, check_mtime=True):
             files_skipped += 1
             continue
 
         # Normalize format
         try:
+            signature = source_signature(source_file)
             content = normalize(str(filepath))
         except (OSError, ValueError):
-            if not dry_run:
-                _register_file(collection, source_file, wing, agent)
+            # A transient read/parse failure must remain eligible for retry.
             continue
 
-        if not content or len(content.strip()) < MIN_CHUNK_SIZE:
+        if not content:
             if not dry_run:
-                _register_file(collection, source_file, wing, agent)
+                _register_file(collection, source_file, wing, agent, signature)
             continue
 
         # Chunk — either exchange pairs or general extraction
@@ -451,7 +393,7 @@ def mine_convos(
 
         if not chunks:
             if not dry_run:
-                _register_file(collection, source_file, wing, agent)
+                _register_file(collection, source_file, wing, agent, signature)
             continue
 
         # Detect room from content (general mode uses memory_type instead)
@@ -481,10 +423,17 @@ def mine_convos(
         if extract_mode != "general":
             room_counts[room] += 1
 
-        # Lock + purge stale + file fresh chunks. Lock serializes concurrent
-        # agents; purge removes pre-v2 drawers so the schema bump applies.
+        # Serialize this source and append the new revision without deleting history.
         drawers_added, room_delta, skipped = _file_chunks_locked(
-            collection, source_file, chunks, wing, room, agent, extract_mode
+            collection,
+            source_file,
+            chunks,
+            wing,
+            room,
+            agent,
+            extract_mode,
+            signature=signature,
+            revision=source_revision(content, extract_mode),
         )
         if skipped:
             files_skipped += 1

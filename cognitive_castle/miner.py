@@ -28,7 +28,10 @@ from .palace import (
     get_collection,
     mine_lock,
     mine_palace_lock,
-    purge_file_closets,
+    revision_drawer_id,
+    source_revision,
+    source_signature,
+    split_verbatim,
     upsert_closet_lines,
 )
 
@@ -67,8 +70,8 @@ SKIP_FILENAMES = {
 }
 
 CHUNK_SIZE = 800  # chars per drawer
-CHUNK_OVERLAP = 100  # overlap between chunks
-MIN_CHUNK_SIZE = 50  # skip tiny chunks
+CHUNK_OVERLAP = 100  # legacy export; exact partitions no longer overlap
+MIN_CHUNK_SIZE = 50  # legacy export; short text is preserved
 DRAWER_UPSERT_BATCH_SIZE = 1000
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB — skip files larger than this.
 # Long Claude Code sessions and large transcript exports routinely exceed
@@ -392,41 +395,7 @@ def chunk_text(content: str, source_file: str) -> list:
     Tries to split on paragraph/line boundaries.
     Returns list of {"content": str, "chunk_index": int}
     """
-    # Clean up
-    content = content.strip()
-    if not content:
-        return []
-
-    chunks = []
-    start = 0
-    chunk_index = 0
-
-    while start < len(content):
-        end = min(start + CHUNK_SIZE, len(content))
-
-        # Try to break at paragraph boundary
-        if end < len(content):
-            newline_pos = content.rfind("\n\n", start, end)
-            if newline_pos > start + CHUNK_SIZE // 2:
-                end = newline_pos
-            else:
-                newline_pos = content.rfind("\n", start, end)
-                if newline_pos > start + CHUNK_SIZE // 2:
-                    end = newline_pos
-
-        chunk = content[start:end].strip()
-        if len(chunk) >= MIN_CHUNK_SIZE:
-            chunks.append(
-                {
-                    "content": chunk,
-                    "chunk_index": chunk_index,
-                }
-            )
-            chunk_index += 1
-
-        start = end - CHUNK_OVERLAP if end < len(content) else end
-
-    return chunks
+    return split_verbatim(content, CHUNK_SIZE)
 
 
 # =============================================================================
@@ -833,36 +802,28 @@ def process_file(
         return 0, "general"
 
     try:
-        content = filepath.read_text(encoding="utf-8", errors="replace")
-    except OSError:
+        signature = source_signature(source_file)
+        with filepath.open(encoding="utf-8", errors="strict", newline="") as stream:
+            content = stream.read()
+    except (OSError, UnicodeError):
         return 0, "general"
 
-    content = content.strip()
-    if len(content) < MIN_CHUNK_SIZE:
+    if not content:
         return 0, "general"
 
     room = detect_room(filepath, content, rooms, project_path)
     chunks = chunk_text(content, source_file)
+    revision = source_revision(content)
 
     if dry_run:
         print(f"    [DRY RUN] {filepath.name} -> room:{room} ({len(chunks)} drawers)")
         return len(chunks), room
 
-    # Lock this file so concurrent agents don't interleave delete+insert.
-    # Without the lock, two agents can both pass file_already_mined(),
-    # both delete, and both insert — creating duplicates or losing data.
+    # Serialize batches and completion markers for this source.
     with mine_lock(source_file):
         # Re-check after acquiring lock — another agent may have just finished
         if file_already_mined(collection, source_file, check_mtime=True):
             return 0, room
-
-        # Purge stale drawers for this file before re-inserting the fresh chunks.
-        # Converts modified-file re-mines from upsert-over-existing-IDs into a
-        # clean delete+insert, bypassing any stale-index issues entirely.
-        try:
-            collection.delete(where={"source_file": source_file})
-        except Exception:
-            pass
 
         # Batch chunks into bounded upserts so the embedding model sees many
         # chunks per forward pass without building one huge Chroma/SQLite
@@ -880,7 +841,7 @@ def process_file(
             batch = chunks[batch_start : batch_start + DRAWER_UPSERT_BATCH_SIZE]
             batch_docs = [c["content"] for c in batch]
             batch_ids = [
-                f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(c['chunk_index'])).encode()).hexdigest()[:24]}"
+                revision_drawer_id(source_file, wing, room, revision, c["chunk_index"])
                 for c in batch
             ]
 
@@ -918,6 +879,8 @@ def process_file(
                     )
                 )
 
+            for meta in batch_metas:
+                meta.update(signature, source_revision=revision, ingest_complete=False)
             collection.upsert(
                 documents=batch_docs,
                 ids=batch_ids,
@@ -926,18 +889,14 @@ def process_file(
             )
             drawers_added += len(batch_docs)
 
-        # Build closet — the searchable index pointing to these drawers.
-        # Purge first: a re-mine (mtime change or normalize_version bump) must
-        # fully replace the prior closets, not append to them.
+        # Give each revision its own closet pointers, preserving older content.
         if closets_col and drawers_added > 0:
             drawer_ids = [
-                f"drawer_{wing}_{room}_{hashlib.sha256((source_file + str(c['chunk_index'])).encode()).hexdigest()[:24]}"
+                revision_drawer_id(source_file, wing, room, revision, c["chunk_index"])
                 for c in chunks
             ]
             closet_lines = build_closet_lines(source_file, drawer_ids, content, wing, room)
-            closet_id_base = (
-                f"closet_{wing}_{room}_{hashlib.sha256(source_file.encode()).hexdigest()[:24]}"
-            )
+            closet_id_base = f"closet_{wing}_{room}_{hashlib.sha256(source_file.encode()).hexdigest()[:24]}_{revision}"
             entities = _extract_entities_for_metadata(content)
             closet_meta = {
                 "wing": wing,
@@ -949,8 +908,11 @@ def process_file(
             }
             if entities:
                 closet_meta["entities"] = entities
-            purge_file_closets(closets_col, source_file)
+            closet_meta["source_revision"] = revision
             upsert_closet_lines(closets_col, closet_id_base, closet_lines, closet_meta)
+
+        # Publish completion only after every drawer and closet was persisted.
+        collection.update(ids=[batch_ids[-1]], metadatas=[{"ingest_complete": True}])
 
     return drawers_added, room
 

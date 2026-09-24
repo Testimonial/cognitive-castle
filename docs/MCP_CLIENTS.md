@@ -6,12 +6,10 @@ result is the same in every host: your AI agent gets `castle_*` tools
 in its tool palette and can read/write your local palace during
 conversation.
 
-The Claude Code plugin at `.claude-plugin/` is the highest-fidelity
-integration — auto-registered MCP server, Stop/PreCompact hooks that
-mine your conversations into the palace as they happen, and MCP
-`initialize.instructions` injection that bakes the `PALACE_PROTOCOL`
-into the client's system prompt at session start. Other clients get
-the tools; the hook-driven auto-mining is Claude-Code-specific for now.
+Claude Code and Codex have dedicated plugins with MCP tools and conversation
+capture hooks. Codex also bundles a recall/remember skill; follow the
+[Codex plugin setup guide](codex-plugin.md) for installation and hook activation.
+Other MCP clients can register `castle-mcp` directly for memory tools.
 
 ## Install prerequisites once
 
@@ -51,7 +49,14 @@ claude mcp add castle -- castle-mcp
 
 ## Codex (OpenAI's coding CLI)
 
-Codex reads MCP servers from `~/.codex/config.toml`. Simplest setup:
+For MCP tools, the `castle` skill, and automatic transcript capture, install the
+`cognitive-castle` plugin using the [step-by-step guide](codex-plugin.md).
+It covers PATH setup, the personal marketplace, `/hooks` trust, `/mcp`, updates,
+and verifying a saved conversation. In `/hooks`, select an event such as
+**Stop** to see the plugin name in its details.
+
+For **tools only**, Codex also reads MCP servers from `~/.codex/config.toml`.
+Use this as an alternative to the bundled plugin registration:
 
 ```toml
 [mcp_servers.castle]
@@ -97,27 +102,13 @@ Quick round-trip smoke test:
 If Codex retrieves the exact string Claude Code saved, both are wired
 to the same palace.
 
-### Auto-mining is Claude-Code-only — capture Codex sessions manually
+### Automatic capture with the Codex plugin
 
-Claude Code has plugin-level Stop / PreCompact hooks that mine your
-conversation into the palace as you talk (every ~15 turns). Codex has
-no equivalent hook interface yet, so Codex conversations aren't
-auto-filed. To catch up periodically:
-
-```bash
-castle mine ~/.codex/history --mode convos
-```
-
-Consider wiring this into a shell alias, cron, or an `after-session`
-Codex hook if a later Codex build adds one.
-
-### About `.codex-plugin/plugin.json`
-
-The repo ships `.codex-plugin/plugin.json` with the same manifest
-shape as `.claude-plugin/plugin.json` — if Codex ever grows a plugin
-marketplace with auto-registration + hook support like Claude Code,
-Castle is already packaged for it. Until then, the `config.toml`
-snippet above is the working install path.
+After trusting the plugin's Stop and PreCompact hooks, Codex captures the
+current transcript in the background under a `codex_<workspace-name>` wing.
+MCP-only registration does not enable capture. See
+[hook activation](codex-plugin.md#3-activate-the-capture-hooks) and
+[save verification](codex-plugin.md#4-verify-tools-and-an-actual-save).
 
 ### Env vars propagate
 
@@ -204,12 +195,11 @@ client makes at connection time.
 |---|---|---|---|---|---|---|
 | `castle_*` MCP tools | ✅ | ✅ | ✅ | ✅ (recent) | ✅ | ✅ |
 | Slash commands (`/castle:*`) | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Auto-mining Stop/PreCompact hooks | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Auto-mining Stop/PreCompact hooks | ✅ | ✅ (trusted plugin) | ❌ | ❌ | ❌ | ❌ |
 | MCP `initialize.instructions` injection | ✅ | ✅ (if client honours it) | ⚠️ | ⚠️ | ⚠️ | depends |
-| Skill loading | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Skill loading | ✅ | ✅ (plugin) | ❌ | ❌ | ❌ | ❌ |
 
-Claude Code has the fullest integration because the plugin protocol
-lets Castle register hooks and skills, not just an MCP server. All
-other clients get the tools and the palace state; auto-mining requires
-manually invoking `castle mine` (or a shell alias) after conversations
-end.
+Claude Code and Codex plugins provide tools and capture hooks. Codex requires
+explicit hook review after installation and when definitions change. Clients
+configured only with an MCP server need an explicit `castle mine` invocation
+or their own capture integration to import conversations.

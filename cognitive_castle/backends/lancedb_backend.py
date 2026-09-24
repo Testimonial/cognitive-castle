@@ -290,7 +290,9 @@ class LanceCollection(BaseCollection):
 
     # -- FTS search ----------------------------------------------------------
 
-    def fts_search(self, query: str, n_results: int = 100) -> list[dict]:
+    def fts_search(
+        self, query: str, n_results: int = 100, where: Optional[str] = None
+    ) -> list[dict]:
         """Sparse keyword search via Tantivy FTS.
 
         Returns rows ordered by relevance score.  Each row is a ``dict`` with
@@ -302,7 +304,10 @@ class LanceCollection(BaseCollection):
         if not query.strip():
             return []
         try:
-            results = self._table.search(query, query_type="fts").limit(n_results).to_list()
+            q = self._table.search(query, query_type="fts")
+            if where:
+                q = q.where(where, prefilter=True)
+            results = q.limit(n_results).to_list()
             return list(results)
         except Exception as exc:
             logger.debug("fts_search: FTS query failed (%s), returning []", exc)
@@ -323,21 +328,19 @@ class LanceCollection(BaseCollection):
         """
         q = self._table.search(vec, vector_column_name="vector").metric("cosine").limit(n_results)
         if where:
-            try:
-                q = q.where(where, prefilter=True)
-            except Exception as exc:
-                logger.debug("vector_search: where filter ignored (%s)", exc)
+            q = q.where(where, prefilter=True)
         return q.to_list()
 
     # -- ID fetch ------------------------------------------------------------
 
-    def get_by_ids(self, ids: list[str]) -> list[dict]:
+    def get_by_ids(self, ids: list[str], where: Optional[str] = None) -> list[dict]:
         """Return rows matching any of the supplied IDs (order not guaranteed)."""
         if not ids:
             return []
         quoted = ", ".join(_quote_val(i) for i in ids)
         try:
-            return self._table.search(None).where(f"id IN ({quoted})").limit(len(ids)).to_list()
+            predicate = _combine_sql(f"id IN ({quoted})", where)
+            return self._table.search(None).where(predicate).limit(len(ids)).to_list()
         except Exception as exc:
             logger.debug("get_by_ids: fetch failed (%s), returning []", exc)
             return []
@@ -396,7 +399,17 @@ class LanceCollection(BaseCollection):
             if metadatas is not None:
                 new_meta.update(metadatas[i] or {})
             merged_metas.append(new_meta)
-            merged_vecs.append(embeddings[i] if embeddings is not None else prev_vec)
+            merged_vecs.append(
+                embeddings[i]
+                if embeddings is not None
+                else (None if documents is not None else prev_vec)
+            )
+
+        missing = [i for i, vec in enumerate(merged_vecs) if vec is None]
+        if missing:
+            fresh = self._embed_if_needed([merged_docs[i] for i in missing], None)
+            for i, vec in zip(missing, fresh):
+                merged_vecs[i] = vec
 
         self.upsert(
             documents=merged_docs, ids=list(ids), metadatas=merged_metas, embeddings=merged_vecs

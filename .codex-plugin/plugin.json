@@ -1,12 +1,32 @@
 {
-  "name": "castle",
+  "name": "cognitive-castle",
   "version": "3.4.1",
-  "description": "Cognitive Castle — persistent verbatim memory for Codex agents. LanceDB-backed local search, MCP tools, auto-save hooks. Local-first, no API keys required.",
-  "author": { "name": "Ladislav Bihari" },
-  "license": "MIT",
-  "mcpServers": {
-    "castle": { "command": "castle-mcp" }
+  "description": "Persistent verbatim memory for Codex: local MCP search, exact recall, and background conversation capture.",
+  "author": {
+    "name": "Ladislav Bihari"
   },
-  "keywords": ["memory", "ai", "mcp", "lancedb", "palace", "search", "verbatim", "codex"],
-  "repository": "https://github.com/Testimonial/cognitive-castle"
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Cognitive Castle",
+    "shortDescription": "Local verbatim memory for Codex",
+    "longDescription": "Recall original words from earlier sessions, search project history, and preserve Codex conversations in a local LanceDB palace.",
+    "developerName": "Ladislav Bihari",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": [
+      "Find our earlier decisions about this project.",
+      "Remember these exact words for next time.",
+      "Show the status of my memory palace."
+    ]
+  },
+  "mcpServers": "./.mcp.json",
+  "license": "MIT",
+  "repository": "https://github.com/Testimonial/cognitive-castle",
+  "keywords": [
+    "memory",
+    "mcp",
+    "verbatim",
+    "codex",
+    "local"
+  ]
 }

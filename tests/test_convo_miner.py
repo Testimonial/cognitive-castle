@@ -29,7 +29,7 @@ def test_convo_mining():
 
 
 def test_mine_convos_does_not_reprocess_short_files(capsys):
-    """Files below MIN_CHUNK_SIZE get a sentinel so they are skipped on re-run."""
+    """Short files are stored verbatim and skipped only while unchanged."""
     tmpdir = tempfile.mkdtemp()
     try:
         # A file too short to produce any chunks
@@ -42,7 +42,7 @@ def test_mine_convos_does_not_reprocess_short_files(capsys):
         mine_convos(tmpdir, palace_path, wing="test")
         capsys.readouterr()  # drain output
 
-        # Verify sentinel was written (resolve path -- macOS /var -> /private/var)
+        # Verify the short text was filed (resolve path -- macOS /var -> /private/var)
         resolved_file = str(Path(tmpdir).resolve() / "tiny.txt")
         col = get_collection(palace_path)
         assert file_already_mined(col, resolved_file)
@@ -74,85 +74,27 @@ def test_mine_convos_does_not_reprocess_empty_chunk_files(capsys):
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def test_mine_convos_rebuilds_stale_drawers_after_schema_bump(capsys):
-    """When stored drawers have an older normalize_version, the next mine
-    silently purges them and refiles — no manual erase required.
+def test_schema_upgrade_preserves_previous_revision(tmp_path, monkeypatch):
+    from cognitive_castle import palace, convo_miner
 
-    This is what makes the strip_noise upgrade apply to existing corpora:
-    users just run `mempalace mine` again and old noise-filled drawers get
-    replaced with clean ones."""
-    from cognitive_castle.palace import NORMALIZE_VERSION
-
-    tmpdir = tempfile.mkdtemp()
-    try:
-        convo_path = Path(tmpdir) / "chat.txt"
-        convo_path.write_text(
-            "> What is memory?\nMemory is persistence.\n\n"
-            "> Why does it matter?\nIt enables continuity.\n\n"
-            "> How do we build it?\nWith structured storage.\n"
-        )
-        palace_path = os.path.join(tmpdir, "palace")
-
-        # First mine — stamps drawers with NORMALIZE_VERSION
-        mine_convos(tmpdir, palace_path, wing="test")
-        capsys.readouterr()
-
-        col = get_collection(palace_path)
-        resolved = str(Path(tmpdir).resolve() / "chat.txt")
-        first_pass = col.get(where={"source_file": resolved})
-        first_ids = set(first_pass["ids"])
-        assert first_ids, "first mine should produce drawers"
-        for meta in first_pass["metadatas"]:
-            assert meta.get("normalize_version") == NORMALIZE_VERSION
-
-        # Simulate pre-v2 drawers: rewrite metadata to an older version,
-        # and replace content with "noise" so we can see it get cleaned up.
-        stale_metas = []
-        for meta in first_pass["metadatas"]:
-            stale = dict(meta)
-            stale["normalize_version"] = 1
-            stale_metas.append(stale)
-        col.update(
-            ids=list(first_pass["ids"]),
-            documents=["STALE NOISE"] * len(first_pass["ids"]),
-            metadatas=stale_metas,
-        )
-        # Add an extra orphan drawer that should also be purged.
-        col.add(
-            ids=["orphan_drawer"],
-            documents=["OLD ORPHAN"],
-            metadatas=[
-                {
-                    "wing": "test",
-                    "room": "default",
-                    "source_file": resolved,
-                    "chunk_index": 999,
-                    "normalize_version": 1,
-                }
-            ],
-        )
-        del col
-
-        # Second mine — version gate should trigger rebuild
-        mine_convos(tmpdir, palace_path, wing="test")
-        out = capsys.readouterr().out
-        assert "Files skipped (already filed): 0" in out, (
-            "stale drawers should force a rebuild, not a skip"
-        )
-
-        col = get_collection(palace_path)
-        rebuilt = col.get(where={"source_file": resolved})
-        # Orphan is gone
-        assert "orphan_drawer" not in rebuilt["ids"]
-        # No stale content survived
-        assert all("STALE NOISE" not in d for d in rebuilt["documents"])
-        assert all("OLD ORPHAN" not in d for d in rebuilt["documents"])
-        # All rebuilt drawers carry the current version
-        for meta in rebuilt["metadatas"]:
-            assert meta.get("normalize_version") == NORMALIZE_VERSION
-        del col
-    finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+    source = tmp_path / "source"
+    source.mkdir()
+    path = source / "chat.txt"
+    path.write_text("> Original words.\nOriginal answer.\n")
+    palace_path = str(tmp_path / "palace")
+    with monkeypatch.context() as old_version:
+        old_version.setattr(palace, "NORMALIZE_VERSION", 2)
+        old_version.setattr(convo_miner, "NORMALIZE_VERSION", 2)
+        mine_convos(str(source), palace_path, wing="test")
+    col = get_collection(palace_path)
+    old = col.get(where={"source_file": str(path)})
+    assert old.ids
+    assert not file_already_mined(col, str(path), check_mtime=True)
+    mine_convos(str(source), palace_path, wing="test")
+    assert col.get(ids=old.ids).documents == old.documents
+    current = col.get(where={"source_file": str(path)})
+    assert set(old.ids) < set(current.ids)
+    assert file_already_mined(col, str(path), check_mtime=True)
 
 
 # ---------------------------------------------------------------------------
