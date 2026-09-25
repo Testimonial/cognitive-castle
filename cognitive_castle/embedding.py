@@ -120,9 +120,22 @@ def _resolve_device(device: str) -> str:
 
 
 def embed_texts(texts: list[str], device: str = "auto") -> list[list[float]]:
-    """Embed a list of strings. Returns a list of 384-dim float lists."""
+    """Embed complete inputs, retrying the same model on CPU after CUDA OOM."""
     model = _get_model(device)
-    vecs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+    try:
+        vecs = model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+    except Exception as exc:
+        # Loading can fit in VRAM while the batch's temporary tensors do not.
+        # Inspect the actual device: model loading may already have used CPU.
+        if str(getattr(model, "device", "")).split(":")[0] != "cuda" or not _is_cuda_oom(exc):
+            raise
+        logger.warning(
+            "CUDA embedding OOM (%s); retrying the same model on CPU", type(exc).__name__
+        )
+        # Use the CPU cache entry rather than moving the cached CUDA model.
+        # A failed CPU attempt propagates; no recursive retries or shorter input.
+        cpu_model = _get_model("cpu")
+        vecs = cpu_model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
     return vecs.tolist()
 
 

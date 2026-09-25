@@ -260,7 +260,9 @@ def test_invalid_request_creates_nothing(tmp_path, changes):
     assert not (tmp_path / ".sue").exists()
 
 
-@pytest.mark.parametrize("text", ["", " ", "x" * 100_001])
+@pytest.mark.parametrize(
+    "text", ["", " ", "x" * 100_001], ids=["empty", "whitespace", "over-byte-limit"]
+)
 def test_invalid_source_prevents_snapshot(tmp_path, text):
     col = SimpleNamespace(get=lambda **kw: GetResult(["one"], [text], [{}]))
     with pytest.raises(ValueError):

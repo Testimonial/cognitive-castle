@@ -1,4 +1,6 @@
 import pytest
+from types import SimpleNamespace
+from unittest.mock import Mock, call
 
 import cognitive_castle.embedding as embedding
 
@@ -96,6 +98,75 @@ def test_get_model_does_not_fall_back_on_non_oom_cuda_error(monkeypatch):
         raise AssertionError("expected RuntimeError")
     except RuntimeError as e:
         assert "unrelated error" in str(e)
+
+
+@pytest.mark.parametrize("device", ["auto", "cuda"])
+def test_encode_cuda_oom_retries_same_model_and_full_batch_on_cpu(monkeypatch, device):
+    vectors = [[0.6, 0.8], [0.0, 1.0]]
+    gpu = SimpleNamespace(
+        device="cuda:0", encode=Mock(side_effect=RuntimeError("CUDA out of memory"))
+    )
+    cpu = SimpleNamespace(
+        device="cpu", encode=Mock(return_value=SimpleNamespace(tolist=lambda: vectors))
+    )
+    models = {"cuda": gpu, "cpu": cpu}
+    loader = Mock(side_effect=lambda name, device: models[device])
+    monkeypatch.setattr("sentence_transformers.SentenceTransformer", loader)
+    monkeypatch.setattr(embedding, "_resolve_device", lambda d: "cuda" if d == "auto" else d)
+    texts = ["Žádné zkrácení.  ", "\nSecond source\n"]
+
+    assert embedding.embed_texts(texts, device=device) == vectors
+
+    assert loader.call_args_list == [
+        call("BAAI/bge-m3", device="cuda"),
+        call("BAAI/bge-m3", device="cpu"),
+    ]
+    for model in (gpu, cpu):
+        model.encode.assert_called_once_with(
+            texts, normalize_embeddings=True, show_progress_bar=False
+        )
+    # A CPU retry must not leave a moved model behind under its CUDA cache key.
+    assert embedding._model_cache["BAAI/bge-m3@cuda"] is gpu
+    assert embedding._model_cache["BAAI/bge-m3@cpu"] is cpu
+
+
+@pytest.mark.parametrize(
+    "actual_device,error",
+    [
+        ("cuda:0", RuntimeError("unrelated CUDA error")),
+        ("cpu", RuntimeError("out of memory")),
+        ("mps", RuntimeError("out of memory")),
+    ],
+)
+def test_encode_does_not_retry_other_devices_or_errors(monkeypatch, actual_device, error):
+    model = SimpleNamespace(device=actual_device, encode=Mock(side_effect=error))
+    getter = Mock(return_value=model)
+    monkeypatch.setattr(embedding, "_get_model", getter)
+
+    with pytest.raises(RuntimeError) as caught:
+        embedding.embed_texts(["unchanged input"])
+
+    assert caught.value is error
+    getter.assert_called_once_with("auto")
+    model.encode.assert_called_once()
+
+
+def test_encode_cpu_retry_failure_propagates_without_another_attempt(monkeypatch):
+    cpu_error = RuntimeError("CPU memory exhausted")
+    gpu = SimpleNamespace(
+        device="cuda:0", encode=Mock(side_effect=RuntimeError("CUDA out of memory"))
+    )
+    cpu = SimpleNamespace(device="cpu", encode=Mock(side_effect=cpu_error))
+    getter = Mock(side_effect=[gpu, cpu])
+    monkeypatch.setattr(embedding, "_get_model", getter)
+
+    with pytest.raises(RuntimeError) as caught:
+        embedding.embed_texts(["unchanged input"])
+
+    assert caught.value is cpu_error
+    assert getter.call_args_list == [call("auto"), call("cpu")]
+    gpu.encode.assert_called_once()
+    cpu.encode.assert_called_once()
 
 
 @pytest.mark.slow

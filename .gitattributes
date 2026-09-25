@@ -1,0 +1,2 @@
+# Vendored source bytes are checked against the pinned upstream SHA-256 digests.
+cognitive_castle/_vendor/sue/*.py text eol=lf

@@ -133,11 +133,53 @@ Stop and PreCompact import only the transcript supplied by Codex, with
 `added_by=codex`. They run asynchronously and preserve message text without
 creating diary summaries. SessionStart does not import the transcript.
 
+### Starting another project
+
+With the personal plugin enabled and its hooks trusted, start Codex in the new
+project's root directory. Conversation capture uses the existing palace; no new
+palace or per-project plugin installation is required. For `/work/my-app`, the
+conversation wing is `codex_my_app`. SessionStart adds a small reminder to use
+Castle; earlier project decisions are retrieved through memory tools when
+needed, rather than loading the entire palace into every new conversation.
+
+| Information | How it reaches Castle |
+|---|---|
+| Your prompts and the assistant's text replies | Stop captures the current transcript after a turn; PreCompact also attempts capture before compaction. This includes requirements, decisions, explanations, and code pasted into those messages. |
+| Source code, README, specifications, and other project files | Explicit `castle mine` import, described below. The Codex capture hook does not scan the repository or watch file edits. |
+| Tool calls/results, internal reasoning records, image/audio payloads, and system/developer-role instructions | The current Codex transcript parser does not import these record types. Text repeated in an ordinary user/assistant message is part of that message. |
+| Entity references | After mining, local extraction can add names and `mentioned_in` links to the SQLite graph. These are source references, not verified facts. |
+| SUE questions and findings | An explicitly requested review selects requirement drawers; results are stored separately under `<palace>/.sue/runs/`. Chat capture does not invoke SUE automatically. |
+
+Capture reads the actual transcript, converts its message envelopes to a text
+transcript, and splits it into exact slices of up to 800 characters without
+summarizing message text. A local embedding is attached for retrieval and the
+text is stored in LanceDB. Each drawer retains the source transcript path,
+chunk order, ingest time, source revision, wing, room, and `added_by=codex`.
+Rooms are assigned from keyword matches against the conversation; the fallback
+is `general`. Capture is not restricted to selected "important" messages.
+
+An unchanged source is skipped. When a transcript grows, the current importer
+appends a new revision of its normalized content and keeps older revisions;
+unchanged earlier passages can therefore occur in multiple revisions. It does
+not currently store only the latest appended message. Project grouping uses the
+directory basename, so two different directories with the same basename share
+a conversation wing; source transcript paths still distinguish their records.
+
+Codex capture has no 15-message threshold. That threshold belongs to the separate
+Claude Stop hook. Background capture can fail or be cancelled when Codex exits;
+verify a completed save by retrieving its drawer and source. See the official
+[hook lifecycle and background execution documentation](https://learn.chatgpt.com/docs/hooks).
+
 Project files are imported separately:
 
 ```bash
 castle mine /path/to/project
 ```
+
+The project miner selects supported text/code formats and respects `.gitignore`
+by default. To file project sources alongside the example conversation wing,
+use `castle mine /work/my-app --wing codex_my_app`. This is a one-time import;
+rerun it when you want to capture subsequent file revisions.
 
 The importer supports Codex rollouts using canonical `event_msg` turns or newer
 `response_item` message records. In the latter format, developer/system messages
