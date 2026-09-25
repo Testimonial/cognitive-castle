@@ -370,7 +370,24 @@ The plugin registers the hooks, but delivery, trust settings, process failures, 
 
 Core memory means storing original text, building local indexes/embeddings, and retrieving drawers. It needs no external API key. Model weights may require an initial download. Optional LLM operations require a running local model or an explicitly configured external provider.
 
-For the distinction between stored evidence, quality metrics, and requirement analysis with SUE, see [SUE scope and evidence](docs/sue-scope.md).
+### Examine requirements stored in Castle with SUE
+
+Select requirement drawers and the interpretation to examine. Castle snapshots
+their exact text, runs SUE in the background, and stores a separate dialogue,
+questions, understanding profile, and source references inside the palace:
+
+```bash
+castle sue review --drawer DRAWER_ID --decision "What exactly does this requirement commit us to?"
+castle sue status RUN_ID
+```
+
+The default uses local Ollama (`qwen3.5:latest`). For explicitly authorized
+external processing, add `--provider codex` (default `gpt-5.6-luna`, low reasoning).
+MCP clients use `castle_sue_review` and `castle_sue_status`; restart an existing
+Castle MCP connection after upgrading to discover the new tools. All nine SUE
+lenses are included. Original drawers stay unchanged. See [SUE scope and
+evidence](docs/sue-scope.md) for complete usage and the distinction between
+requirement interpretation, factual evidence, and implementation tests.
 
 ---
 

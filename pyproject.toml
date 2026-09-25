@@ -65,7 +65,7 @@ packages = ["cognitive_castle"]
 required-version = "==0.15.12"
 line-length = 100
 target-version = "py39"
-extend-exclude = ["benchmarks", "cognitive_castle/understanding"]
+extend-exclude = ["benchmarks", "cognitive_castle/understanding", "cognitive_castle/_vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "C901"]
@@ -91,7 +91,7 @@ markers = [
 [tool.coverage.run]
 source = ["cognitive_castle"]
 # Vendored upstream package; Castle's adapter and integration tests remain measured.
-omit = ["cognitive_castle/understanding/*"]
+omit = ["cognitive_castle/understanding/*", "cognitive_castle/_vendor/*"]
 
 [tool.coverage.report]
 fail_under = 85

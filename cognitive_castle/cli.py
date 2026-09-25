@@ -1146,6 +1146,10 @@ def build_parser() -> _ParserBundle:
 
     sub = parser.add_subparsers(dest="command")
 
+    from .sue import configure_parser
+
+    configure_parser(sub)
+
     # init
     p_init = sub.add_parser("init", help="Detect rooms from your folder structure")
     p_init.add_argument("dir", help="Project directory to set up")
@@ -1541,7 +1545,10 @@ def main():
         cmd_instructions(args)
         return
 
+    from .sue import cmd_sue
+
     dispatch = {
+        "sue": cmd_sue,
         "init": cmd_init,
         "mine": cmd_mine,
         "split": cmd_split,

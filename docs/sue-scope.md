@@ -3,7 +3,93 @@
 SUE analyzes software specifications and the consequences of interpreting their
 requirements. It does **not** independently establish factual truth, inspect a
 running application, or validate every record in a memory palace. Cognitive
-Castle does not currently integrate SUE into ingestion or retrieval.
+Castle now includes a source-scoped SUE adapter, callable through its CLI and
+MCP tools. It reviews explicitly selected drawers on demand; ordinary ingestion
+and retrieval do not trigger model calls or acquire truth labels.
+
+## Run a Castle review now
+
+Use `castle_search` to locate the requirements, then `castle_get_drawer` to check
+their exact content and IDs. Include definitions, exceptions, and relevant
+historical/revision context. Select the bounded specification deliberately;
+retrieval ranking alone is not a reliable specification boundary.
+
+```bash
+# Default: local Ollama on http://127.0.0.1:11434, qwen3.5:latest.
+castle sue review --drawer DRAWER_ID --drawer CONTEXT_DRAWER_ID \
+  --decision "What does enabled mean, and when is an audit event required?"
+
+# Read the saved run; no new model call. Omit RUN_ID to list recent runs.
+castle sue status RUN_ID
+
+# Explicit external processing of this selected bundle through Codex.
+castle sue review --drawer DRAWER_ID --decision "What does enabled mean?" \
+  --provider codex --model gpt-5.6-luna --lens parmenides --wait
+
+# A different palace: put the global option before the command.
+castle --palace /path/to/palace sue status
+```
+
+Install/run the selected Ollama model separately, or use your installed and
+authenticated Codex CLI. No model download, external fallback, or provider
+change happens silently. This adapter currently supports these two transports;
+it deliberately ignores ambient `CASTLE_LLM_*`, `ECHELON_LLM`, and Codex markers
+for provider/endpoint selection. Supply `--model` for a different local model.
+Codex runs in an isolated reader context with tools, project instructions,
+memory and MCP disabled; the provider remains external.
+
+MCP equivalents (tool arguments):
+
+```json
+{"name":"castle_sue_review","arguments":{"drawer_ids":["DRAWER_ID"],"decision":"What does enabled mean?","provider":"ollama","lens":"euthyphro"}}
+{"name":"castle_sue_status","arguments":{"run_id":"RUN_ID"}}
+```
+
+Restart an existing Castle MCP connection after installing this code. The review
+tool returns a run ID immediately after snapshotting selected drawers; a worker
+does the model calls. Status without a run ID lists the last 20 reviews and all
+nine lenses: Euthyphro, Meno, Parmenides, Cratylus, Theaetetus, Sophist, Gorgias,
+Republic, and Philebus. One run uses one selected lens, not nine model campaigns.
+
+The default budget is seven turns, at most two provider attempts per turn, and
+120 seconds per attempt. `--max-turns` accepts 1–14; `--timeout` accepts 1–300.
+A short budget can produce `BOUNDED_STOP`, which is not a substantive verdict.
+Local model output is validated against the same evidence/turn contract as
+Codex output. Invalid output gets one corrective retry, then the partial trace
+and call evidence remain available with `status=failed`.
+
+Each run is saved under `<palace>/.sue/runs/<RUN_ID>/`:
+
+- `source-001.txt`, etc.: exact UTF-8 drawer text, including original whitespace.
+- `specification.txt`: the selected text with labeled source/context boundaries.
+- `manifest.json`: ordered drawer IDs, full source metadata (including revision
+  and supersession labels when present), SHA-256 hashes, byte/line mappings,
+  the stated decision, provider/model and call limits, plus engine provenance.
+- `report.md` and `trace.json`: the dialogue, current-claim understanding profile,
+  unresolved questions, explicit/inferred/assumed premises, revisions, stop
+  reason, and citation links back to drawer IDs and hashes.
+- `calls/`: outputs and validation/transport evidence for every provider attempt.
+- `state.json` and `worker.log`: execution status and launch/runtime diagnostics.
+
+Files are separate derived review records in the same palace. They are retrieved
+through SUE status, not inserted into the drawer search index as original memory.
+Every rerun has a new identity. Snapshot hashes are checked before a model call;
+source drawers are never rewritten. Findings concern those frozen revisions:
+editing or deleting a drawer later does not update an earlier finding. Start a
+new review for a new revision. Interrupted workers are reported as interrupted;
+there is no automatic provider retry across runs.
+
+The bundled engine is the repaired Echelon `a4286d83` dialectic implementation
+(policy `2026-09-24`, trace schema 2). Its four source files are preserved
+byte-for-byte with hashes and MIT license in
+[`cognitive_castle/_vendor/sue/`](../cognitive_castle/_vendor/sue/UPSTREAM.json).
+Castle adds an explicit per-operator response instruction for smaller models;
+the trace records this prompt policy. Upstream validation and dialogue routing
+are unchanged. A successful provider call can still be rejected by validation.
+The seven profile dimensions are definition, distinctions, criterion/cause,
+division into cases, counterexample, consequences, and the opposite hypothesis.
+`RESOLVED` means this model run examined the required dimensions of its current
+claim; it is not certified human understanding or a truth score.
 
 ## What the September 24, 2026 diagnostic actually did
 
@@ -78,27 +164,23 @@ measure text and specification quality. They are separate from SUE, from the
 fact checker, and from the four-layer L0–L3 memory wake-up stack. A high quality
 score or high novelty score is not evidence that a claim is true.
 
-## A future Castle-to-SUE adapter: proposal, not implemented
+## Where SUE fits in the proposed five evidence checks
 
-For requirements stored in Castle, an adapter could:
+These are verification responsibilities, not the existing five quality layers.
 
-1. Select an explicitly scoped project specification and revision for a stated
-   decision, such as implementing a particular behavior. Preserve examples,
-   exceptions, and definitions needed to interpret it.
-2. Export the selected original passages unchanged into a frozen specification
-   bundle. Record drawer IDs, source files/spans, revision timestamps, and hashes
-   in a provenance manifest. Keep historical or superseded passages labeled;
-   never silently convert conversation into new requirements.
-3. Run SUE on that bundle with an explicit provider/model, call budget, and
-   isolated context. Choosing Codex for a public README is not blanket permission
-   to send private palace contents to an external provider.
-4. Store findings as separate derived records linked to their exact sources,
-   preserving run identity and disagreements. Do not rewrite source drawers or
-   mark a finding as fact solely because the model produced it.
-5. Verify proposed consequences separately against code and executed tests at a
-   recorded commit. A graph could link requirement → function → dependency →
-   test → test result. Parser-derived edges, LLM proposals, and executed evidence
-   must remain distinguishable; a later commit can make old evidence stale.
+| Check | Castle responsibility / current boundary |
+|---|---|
+| 1. Source fidelity | Exact drawer snapshots and hashes; originals remain unchanged |
+| 2. Attribution and scope | Preserve source metadata/revisions; the caller selects requirements and context; the adapter does not infer normative authority |
+| 3. Factual consistency | Existing local fact checker / temporal graph, with the limitations above; SUE does not replace them |
+| 4. Depth of requirement interpretation | **Implemented here:** selected Castle drawers → bounded SUE dialogue → source-linked derived report in Castle |
+| 5. Implementation evidence | Separate code inspection and executed tests at a recorded commit; automatic requirement → function → test graph is still future work |
+
+A future graph could link requirement → function → dependency → test → test
+result. Parser-derived edges, LLM proposals, and executed evidence must remain
+distinguishable; a later commit can make old evidence stale. This integration
+does not claim to implement that graph or automatically select complete project
+specifications from arbitrary conversation memories.
 
 For ordinary memories, a factual-consistency checker needs a different contract:
 what claim is being checked, whose statement it is, when it applies, which

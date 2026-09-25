@@ -97,8 +97,19 @@ details to check trust or disabled state. Additional plugins can increase counts
 
 ## 4. Verify tools and an actual save
 
-Enter `/mcp` and check that `castle` connected. This version exposes 32 tools,
-including `castle_search`, `castle_get_drawer`, and `castle_add_drawer`.
+Enter `/mcp` and check that `castle` connected. This checkout exposes 34 tools,
+including `castle_search`, `castle_get_drawer`, `castle_add_drawer`,
+`castle_sue_review`, and `castle_sue_status`. Restart an existing MCP connection
+after updating the editable Castle installation to refresh its tool list.
+
+For requirement reviews, ask Codex to select the relevant drawers, state the
+decision, and call `castle_sue_review`; call `castle_sue_status` with its returned
+run ID to read the dialogue and source links. SUE runs separately in the
+background. Its default provider is local Ollama. Explicitly choosing
+`provider="codex"` sends that selected bundle to the configured Codex provider,
+using `gpt-5.6-luna` / low reasoning unless a model is supplied. Merely running
+Castle inside Codex does not choose external processing. See the
+[complete SUE guide](sue-scope.md).
 
 To test automatic capture, send a distinctive sentence, for example:
 

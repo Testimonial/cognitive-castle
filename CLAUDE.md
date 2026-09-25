@@ -199,12 +199,17 @@ Retrieval pipeline (3 core stages plus mode-dependent stages, used by both `cast
 Stored words are evidence of what a source said, not automatic proof that its
 claims are true. The five-layer quality analyzer, novelty scoring, and the
 local fact checker have different scopes; none certifies all palace content.
-SUE analyzes software requirements and interpretation ambiguity. It does not
-currently read Castle memory automatically or verify implementation correctness.
-The September 24 README diagnostic was exploratory and used no palace content.
-See [docs/sue-scope.md](docs/sue-scope.md) for the recorded inputs and the proposed,
-unimplemented adapter. Preserve source records and distinguish model suggestions
-from independently checked evidence.
+SUE examines explicitly selected requirement drawers through `castle sue review`
+or `castle_sue_review`. State the decision, retain relevant context and revisions,
+then retrieve the background run with `castle_sue_status`. Local Ollama is the
+default; selecting Codex requires authorization to send that bundle externally.
+Derived dialogues and provenance live in `<palace>/.sue/runs/`, separate from
+original memories. SUE does not automatically review all ingests, certify factual
+truth, or verify implementation correctness. All nine sourced lenses are bundled
+from Echelon; Castle's adapter is in `sue.py` and `sue_worker.py`.
+See [docs/sue-scope.md](docs/sue-scope.md) for usage and the earlier README
+diagnostic. Preserve source records and distinguish model suggestions from
+independently checked evidence.
 
 ## Key Files for Common Tasks
 

@@ -280,7 +280,8 @@ def tool_status():
 
 PALACE_PROTOCOL = """Castle is a local verbatim memory palace storing this user's past
 conversations, decisions, and entity facts. The palace is on the
-user's machine — no data leaves it.
+user's machine. Core memory stays local; optional external SUE processing
+sends only an explicitly selected bundle to the chosen provider.
 
 Behavioral protocol:
 - Before answering about a person, project, design decision, or past
@@ -289,6 +290,11 @@ Behavioral protocol:
   rationale via castle_add_drawer in wing_<project> / decisions.
 - If a fact has changed (renamed function, moved file, person's role):
   call castle_kg_invalidate on the old, castle_kg_add for the new.
+- To examine requirement interpretation, select drawer IDs and a decision,
+  then use castle_sue_review; retrieve its dialogue via castle_sue_status.
+  Default Ollama is local. Use provider=codex only when external processing
+  of those selected records is authorized. SUE findings are derived model
+  interpretations, never truth labels or verification of implementation.
 - After significant work (decisions made, problems solved, milestones
   reached), call castle_diary_write with a brief summary of what
   happened, what you learned, and what matters.
@@ -1283,9 +1289,97 @@ def tool_reconnect():
         return {"success": False, "error": str(e)}
 
 
+def tool_sue_review(
+    drawer_ids,
+    decision,
+    provider="ollama",
+    model=None,
+    lens="euthyphro",
+    max_turns=7,
+    timeout=120,
+):
+    """Snapshot selected requirements and enqueue a bounded, isolated SUE dialogue."""
+    from .sue import start_review
+
+    try:
+        col = _get_collection()
+        if col is None:
+            return _no_palace()
+        return start_review(
+            _config.palace_path,
+            drawer_ids,
+            decision,
+            collection_name=_config.collection_name,
+            collection=col,
+            provider=provider,
+            model=model,
+            lens=lens,
+            max_turns=max_turns,
+            timeout=timeout,
+        )
+    except (ValueError, OSError) as exc:
+        return {"error": str(exc)}
+
+
+def tool_sue_status(run_id=None):
+    """Read derived findings and source links without another model call."""
+    from .sue import review_status
+
+    try:
+        return review_status(_config.palace_path, run_id)
+    except (ValueError, OSError) as exc:
+        return {"error": str(exc)}
+
+
 # ==================== MCP PROTOCOL ====================
 
 TOOLS = {
+    "castle_sue_review": {
+        "description": "Start a background SUE dialogue about selected requirement drawers and a stated decision. Preserves exact sources; stores derived findings separately in this palace. Default Ollama runs on localhost. Explicit provider=codex sends the selected text/context to the configured Codex provider. Does not verify truth or implementation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "drawer_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "description": "Exact IDs of requirements and context, including exceptions/revisions",
+                },
+                "decision": {
+                    "type": "string",
+                    "description": "Requirement or interpretation to examine",
+                },
+                "provider": {"type": "string", "enum": ["ollama", "codex"], "default": "ollama"},
+                "model": {
+                    "type": "string",
+                    "description": "Default qwen3.5:latest for Ollama; gpt-5.6-luna / low for Codex",
+                },
+                "lens": {
+                    "type": "string",
+                    "default": "euthyphro",
+                    "description": "One of the nine SUE lenses; castle_sue_status lists them",
+                },
+                "max_turns": {"type": "integer", "minimum": 1, "maximum": 14, "default": 7},
+                "timeout": {"type": "integer", "minimum": 1, "maximum": 300, "default": 120},
+            },
+            "required": ["drawer_ids", "decision"],
+        },
+        "handler": tool_sue_review,
+    },
+    "castle_sue_status": {
+        "description": "List the palace's recent SUE runs and available lenses, or get a run's full dialogue, understanding profile, questions, exact source references and report. No model call. Findings concern frozen source revisions and remain model interpretations.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "run_id": {
+                    "type": "string",
+                    "description": "Run ID returned by castle_sue_review; omit to list",
+                }
+            },
+        },
+        "handler": tool_sue_status,
+    },
     "castle_status": {
         "description": "Palace overview — total drawers, wing and room counts",
         "input_schema": {"type": "object", "properties": {}},

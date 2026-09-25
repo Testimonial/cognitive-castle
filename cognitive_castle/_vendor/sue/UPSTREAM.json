@@ -1,0 +1,13 @@
+{
+  "repository": "https://github.com/B3Cognition/echelon",
+  "commit": "a4286d83427d03b1b1d019c98c68f5d2e0fac741",
+  "policy_version": "2026-09-24",
+  "schema_version": 2,
+  "files_sha256": {
+    "sue_dialectic.py": "ba0523c407f0b96d269412c7f02dd371165944cfe044b8143be526022ae05da0",
+    "sue_lenses.py": "b26d4c60d95420e2c06eabff6c933df2a25093a6a35ecfe0b07b5cc5b84064ed",
+    "sue_challenge.py": "d4b1d64878a44d2dc922881c68286bf4820bc6a0679868f22ef1fb6747172482",
+    "sue_runner.py": "3b133597c88bf37d13e9ecae34a68fbd5dad0815cdcdc8431b7625f46c7ac74c"
+  },
+  "modifications": "None. Castle adapters live outside this package."
+}
