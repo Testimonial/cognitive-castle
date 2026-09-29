@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import shlex
 import sys
 import time
 
@@ -126,15 +127,38 @@ def _turn_prompt(original, success_results):
     return prompt
 
 
+def _claude_command(model):
+    """Isolated `claude -p` reader: no settings, hooks, plugins, MCP, skills, tools or session."""
+    return shlex.join(
+        [
+            "claude",
+            "--model",
+            model,
+            "--setting-sources",
+            "",
+            "--strict-mcp-config",
+            "--tools",
+            "",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ]
+    )
+
+
 def _examine(directory, manifest, text):
     from ._vendor.sue import sue_dialectic as engine
 
-    codex = manifest["provider"] == "codex"
+    provider = manifest["provider"]
+    codex = provider == "codex"
+    command, protocol = {
+        "codex": ("codex", "codex-stdin"),
+        "claude": (_claude_command(manifest["model"]), "claude-stdin"),
+    }.get(provider, ("", "ollama-http"))
     config = engine.v1.RunConfig(
         spec_path=directory / "specification.txt",
         max_questions=manifest["max_turns"],
-        model_command="codex" if codex else "",
-        model_protocol="codex-stdin" if codex else "ollama-http",
+        model_command=command,
+        model_protocol=protocol,
         model=manifest["model"],
         reasoning_effort="low" if codex else None,
         timeout_seconds=manifest["timeout"],
@@ -154,7 +178,7 @@ def _examine(directory, manifest, text):
     calls = []
     try:
         engine.build_turn_prompt = _turn_prompt(original_prompt, engine.SUCCESS_RESULT)
-        if not codex:
+        if provider == "ollama":
             engine.v1.run_model_call = _ollama_transport(engine, manifest)
         turns, terminal, error = engine.run_dialogue(
             config,
