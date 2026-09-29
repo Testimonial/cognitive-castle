@@ -124,6 +124,8 @@ def _turn_prompt(original, success_results):
             "Every line a premise cites must also be listed in evidence_lines and quoted in "
             "evidence. A stated premise's statement must be an exact substring of the evidence "
             "quote for one of its cited lines; otherwise label it inferred. "
+            "State a claim only with verdict SUPPORTED or PARTIAL; with CONTRADICTED or SILENT the claim "
+            "field must be null and the conflict goes in witness. "
         )
         if operator not in ("DEFINE", "REVISE"):
             contract += "For this operator, claim=null and revision_reason=null in every outcome. "
