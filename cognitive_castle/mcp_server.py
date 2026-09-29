@@ -1343,7 +1343,7 @@ TOOLS = {
                     "type": "array",
                     "items": {"type": "string"},
                     "minItems": 1,
-                    "maxItems": 20,
+                    "maxItems": 2000,
                     "description": "Exact IDs of requirements and context, including exceptions/revisions",
                 },
                 "decision": {
@@ -1361,7 +1361,7 @@ TOOLS = {
                     "description": "One of the nine SUE lenses; castle_sue_status lists them",
                 },
                 "max_turns": {"type": "integer", "minimum": 1, "maximum": 14, "default": 7},
-                "timeout": {"type": "integer", "minimum": 1, "maximum": 300, "default": 120},
+                "timeout": {"type": "integer", "minimum": 1, "maximum": 900, "default": 120},
             },
             "required": ["drawer_ids", "decision"],
         },

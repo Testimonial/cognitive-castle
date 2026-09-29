@@ -52,7 +52,8 @@ nine lenses: Euthyphro, Meno, Parmenides, Cratylus, Theaetetus, Sophist, Gorgias
 Republic, and Philebus. One run uses one selected lens, not nine model campaigns.
 
 The default budget is seven turns, at most two provider attempts per turn, and
-120 seconds per attempt. `--max-turns` accepts 1–14; `--timeout` accepts 1–300.
+120 seconds per attempt. `--max-turns` accepts 1–14; `--timeout` accepts 1–900. One review takes 1–2000 drawers
+and at most 2 MiB of bundled text (about 850k tokens, so the dialogue still fits a 1M context).
 A short budget can produce `BOUNDED_STOP`, which is not a substantive verdict.
 Local model output is validated against the same evidence/turn contract as
 Codex output. Invalid output gets one corrective retry, then the partial trace

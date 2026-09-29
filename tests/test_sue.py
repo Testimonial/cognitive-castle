@@ -261,7 +261,7 @@ def test_tampering_stops_before_model(monkeypatch, queued, tmp_path, target):
         {"drawer_ids": "one"},
         {"drawer_ids": [False]},
         {"drawer_ids": ["one", "one"]},
-        {"drawer_ids": ["x"] * 21},
+        {"drawer_ids": ["x"] * (sue.MAX_DRAWERS + 1)},
         {"decision": " "},
         {"decision": None},
         {"model": ""},
@@ -272,7 +272,7 @@ def test_tampering_stops_before_model(monkeypatch, queued, tmp_path, target):
         {"max_turns": 15},
         {"max_turns": 0},
         {"timeout": 0},
-        {"timeout": 301},
+        {"timeout": sue.MAX_TIMEOUT + 1},
     ],
 )
 def test_invalid_request_creates_nothing(tmp_path, changes):
@@ -284,7 +284,7 @@ def test_invalid_request_creates_nothing(tmp_path, changes):
 
 
 @pytest.mark.parametrize(
-    "text", ["", " ", "x" * 100_001], ids=["empty", "whitespace", "over-byte-limit"]
+    "text", ["", " ", "x" * (sue.MAX_SOURCE_BYTES + 1)], ids=["empty", "whitespace", "over-byte-limit"]
 )
 def test_invalid_source_prevents_snapshot(tmp_path, text):
     col = SimpleNamespace(get=lambda **kw: GetResult(["one"], [text], [{}]))
