@@ -121,6 +121,9 @@ def _turn_prompt(original, success_results):
             "Each stated premise must reproduce exact source words; label paraphrases inferred. "
             "Give exactly one evidence item per evidence_lines entry, in the same order: never "
             "two quotes from one line (quote the one fragment that matters, or the whole line). "
+            "Every line a premise cites must also be listed in evidence_lines and quoted in "
+            "evidence. A stated premise's statement must be an exact substring of the evidence "
+            "quote for one of its cited lines; otherwise label it inferred. "
         )
         if operator not in ("DEFINE", "REVISE"):
             contract += "For this operator, claim=null and revision_reason=null in every outcome. "
