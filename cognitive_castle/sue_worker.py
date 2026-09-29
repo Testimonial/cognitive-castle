@@ -119,6 +119,8 @@ def _turn_prompt(original, success_results):
             "and incomplete tests explicit. The controller alone chooses the next operator; "
             "a validation retry still answers the same operator. "
             "Each stated premise must reproduce exact source words; label paraphrases inferred. "
+            "Give exactly one evidence item per evidence_lines entry, in the same order: never "
+            "two quotes from one line (quote the one fragment that matters, or the whole line). "
         )
         if operator not in ("DEFINE", "REVISE"):
             contract += "For this operator, claim=null and revision_reason=null in every outcome. "
@@ -212,7 +214,7 @@ def _examine(directory, manifest, text):
     # Upstream's protocol lookup only names its CLI transports.
     trace["provider"] = manifest["provider"]
     trace["kind"] = manifest["kind"]
-    trace["castle_prompt_policy"] = "operator-contract-2026-09-25"
+    trace["castle_prompt_policy"] = "operator-contract-2026-09-29"
     trace["source_links"] = _source_links(turns, manifest["sources"])
     trace["source_policy"] = "Frozen selected revisions only; source changes require a new review."
     report = engine.render_report(
