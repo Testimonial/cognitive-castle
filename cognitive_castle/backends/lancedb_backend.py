@@ -561,9 +561,28 @@ class LanceCollection(BaseCollection):
         if self._table is None:
             return []
         try:
-            return self._table.to_arrow().column("id").to_pylist()
-        except (KeyError, AttributeError):
-            return []
+            # Read the id column only: to_arrow() materialised every column,
+            # vectors and text included (13 GB on a 500K-drawer palace).
+            return self._table.to_lance().to_table(columns=["id"]).column("id").to_pylist()
+        except Exception:
+            try:
+                return self._table.to_arrow().column("id").to_pylist()
+            except (KeyError, AttributeError):
+                return []
+
+    def iter_id_text(self, batch_size: int = 10_000):
+        """Yield ``(id, text)`` for every drawer in one sequential pass.
+
+        Reads only the two columns. For bulk reads this beats ``get_by_ids``
+        by orders of magnitude: its ``id IN (...)`` filter has no index and
+        scans the whole table per call.
+        """
+        if self._table is None:
+            return
+        for batch in self._table.to_lance().to_batches(
+            columns=["id", "text"], batch_size=batch_size
+        ):
+            yield from zip(batch.column("id").to_pylist(), batch.column("text").to_pylist())
 
     def health(self) -> HealthStatus:
         try:

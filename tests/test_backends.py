@@ -105,3 +105,21 @@ def test_list_drawer_ids_returns_all_ids(collection):
     )
     ids = collection.list_drawer_ids()
     assert sorted(ids) == ["id-a", "id-b", "id-c"]
+
+
+def test_iter_id_text_yields_every_drawer_once(collection):
+    """iter_id_text streams (id, text) for the whole collection in one pass."""
+    collection.add(
+        documents=["alpha text", "beta text", "gamma text"],
+        ids=["id-a", "id-b", "id-c"],
+        metadatas=[{"wing": "w", "room": "r"} for _ in range(3)],
+    )
+    assert sorted(collection.iter_id_text(batch_size=2)) == [
+        ("id-a", "alpha text"),
+        ("id-b", "beta text"),
+        ("id-c", "gamma text"),
+    ]
+
+
+def test_iter_id_text_empty_palace(collection):
+    assert list(collection.iter_id_text()) == []

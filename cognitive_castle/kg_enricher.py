@@ -87,6 +87,9 @@ def enrich_palace(palace_path: str, cfg) -> dict:
 
     kg = KnowledgeGraph(db_path=kg_path)
     triples_written = _write_triples(mention_map=mention_map, registry=registry, kg=kg)
+    # Only after Stage C: an interrupted run leaves its drawers unmarked, so
+    # the next run redoes them (self-healing, as before).
+    _record_scanned(kg_path=kg_path, drawer_ids=work_ids)
 
     return _result(
         drawers_scanned=len(work_ids),
@@ -97,9 +100,10 @@ def enrich_palace(palace_path: str, cfg) -> dict:
 
 
 def _select_work_ids(*, all_ids: list[str], kg_path: str) -> list[str]:
-    """all_ids − done_ids (this-adapter triples). Returns a list (Stage A
-    iterates it). Order matches all_ids minus removed entries."""
-    done_ids = _query_done_ids(kg_path=kg_path)
+    """all_ids − done_ids (this-adapter triples, plus drawers a finished
+    run already scanned). Returns a list (Stage A iterates it). Order
+    matches all_ids minus removed entries."""
+    done_ids = _query_done_ids(kg_path=kg_path) | _query_scanned_ids(kg_path=kg_path)
     return [i for i in all_ids if i not in done_ids]
 
 
@@ -125,6 +129,34 @@ def _query_done_ids(*, kg_path: str) -> set[str]:
         return set()
 
 
+# Drawers a completed run has scanned. Triples alone cannot mark a drawer
+# done: one that mentions no promotable entity gets none, and every later
+# run re-read it — on a 500K-drawer palace, nearly all of them, each time.
+_SCANNED_TABLE = "kg_enricher_scanned"
+
+
+def _query_scanned_ids(*, kg_path: str) -> set[str]:
+    if not Path(kg_path).exists():
+        return set()
+    try:
+        with sqlite3.connect(kg_path) as conn:
+            rows = conn.execute(f"SELECT drawer_id FROM {_SCANNED_TABLE}").fetchall()
+        return {row[0] for row in rows}
+    except sqlite3.Error:
+        # No ledger yet (older KG, or first run).
+        return set()
+
+
+def _record_scanned(*, kg_path: str, drawer_ids: Iterable[str]) -> None:
+    with sqlite3.connect(kg_path) as conn:
+        conn.execute(f"CREATE TABLE IF NOT EXISTS {_SCANNED_TABLE} (drawer_id TEXT PRIMARY KEY)")
+        for batch in _batched(drawer_ids, 10_000):
+            conn.executemany(
+                f"INSERT OR IGNORE INTO {_SCANNED_TABLE} (drawer_id) VALUES (?)",
+                [(d,) for d in batch],
+            )
+
+
 def _walk_corpus(col, *, work_ids: Iterable[str], cfg) -> tuple[dict, Counter]:
     """Stage A: single regex pass per drawer. Returns
     ``(mention_map, freq_by_name)`` where mention_map is
@@ -132,12 +164,11 @@ def _walk_corpus(col, *, work_ids: Iterable[str], cfg) -> tuple[dict, Counter]:
     mention_map: dict[str, set[str]] = defaultdict(set)
     freq_by_name: Counter = Counter()
 
-    for batch in _batched(work_ids, 1000):
-        for row in col.get_by_ids(batch):
-            per_drawer = entity_detector.extract_candidates(row["text"], cfg.entity_languages)
-            for name, count in per_drawer.items():
-                mention_map[name].add(row["id"])
-                freq_by_name[name] += count
+    for drawer_id, text in _iter_texts(col, work_ids, batch_size=1000):
+        per_drawer = entity_detector.extract_candidates(text, cfg.entity_languages)
+        for name, count in per_drawer.items():
+            mention_map[name].add(drawer_id)
+            freq_by_name[name] += count
 
     return dict(mention_map), freq_by_name
 
@@ -148,12 +179,29 @@ def _build_text_cache(col, *, drawer_ids: set[str], cfg) -> dict[str, str]:
     from each returned row."""
     if not drawer_ids:
         return {}
-    batch_size = cfg.entity_fetch_batch_size
-    text_by_id: dict[str, str] = {}
-    for batch in _batched(sorted(drawer_ids), batch_size):
+    return dict(_iter_texts(col, sorted(drawer_ids), batch_size=cfg.entity_fetch_batch_size))
+
+
+def _iter_texts(col, ids: Iterable[str], *, batch_size: int):
+    """Yield ``(drawer_id, text)`` for each of ``ids`` present in ``col``.
+
+    A collection with ``iter_id_text`` is read in one sequential pass and
+    filtered here. ``get_by_ids`` is an unindexed ``id IN (...)`` query —
+    on LanceDB each batch scans the whole table, so fetching a large palace
+    batch by batch took hours where one pass takes seconds. Collections
+    without it keep the batched fetch.
+    """
+    if hasattr(col, "iter_id_text"):
+        wanted = set(ids)
+        if not wanted:
+            return
+        for drawer_id, text in col.iter_id_text():
+            if drawer_id in wanted:
+                yield drawer_id, text or ""
+        return
+    for batch in _batched(ids, batch_size):
         for row in col.get_by_ids(batch):
-            text_by_id[row["id"]] = row["text"]
-    return text_by_id
+            yield row["id"], row["text"]
 
 
 def _classify_and_promote(

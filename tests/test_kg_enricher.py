@@ -45,6 +45,23 @@ class FakeCollection:
         return [self._rows[i] for i in ids if i in self._rows]
 
 
+class StreamingCollection(FakeCollection):
+    """A collection that can stream (id, text) — the LanceDB shape. Its
+    get_by_ids fails the test: bulk reads must not fall back to it."""
+
+    def __init__(self, rows: list[dict]):
+        super().__init__(rows)
+        self.passes = 0
+
+    def iter_id_text(self, batch_size: int = 10_000):
+        self.passes += 1
+        for r in self._rows.values():
+            yield r["id"], r["text"]
+
+    def get_by_ids(self, ids):
+        raise AssertionError("bulk read went through get_by_ids")
+
+
 # ── Stage A tests ────────────────────────────────────────────────────────
 
 
@@ -583,3 +600,97 @@ def test_enrich_palace_idempotent_on_rerun(tmp_path, monkeypatch):
     assert "entities_promoted" in second
     assert "triples_written" in second
     assert "elapsed_s" in second
+
+
+# ── Scaling: one sequential pass, scanned drawers remembered ─────────────
+
+
+def _plain_rows(n):
+    return [
+        {"id": f"d{i}", "text": "no entities here", "wing": "p", "room": "r", "source_file": "f"}
+        for i in range(n)
+    ]
+
+
+def test_walk_corpus_streams_once_and_keeps_only_work_ids():
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = _plain_rows(3) + [
+        {
+            "id": "riley",
+            "text": "Riley went to the store. Riley likes apples. Riley is happy.",
+            "wing": "p",
+            "room": "r",
+            "source_file": "f",
+        }
+    ]
+    col = StreamingCollection(rows)
+
+    mention_map, _ = kg_enricher._walk_corpus(col, work_ids=["d0", "riley"], cfg=_mock_cfg())
+
+    assert col.passes == 1
+    assert mention_map.get("Riley") == {"riley"}
+
+
+def test_build_text_cache_streams_once():
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    col = StreamingCollection(_plain_rows(5))
+    text_by_id = kg_enricher._build_text_cache(col, drawer_ids={"d1", "d3"}, cfg=_mock_cfg())
+
+    assert col.passes == 1
+    assert text_by_id == {"d1": "no entities here", "d3": "no entities here"}
+
+
+def test_drawers_without_entities_are_scanned_only_once(tmp_path, monkeypatch):
+    """A drawer that yields no triple used to stay in the work set forever —
+    every run re-read the whole palace."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = _plain_rows(4)
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: StreamingCollection(rows=rows),
+    )
+    palace_dir = tmp_path / ".castle" / "palace"
+    palace_dir.mkdir(parents=True)
+
+    first = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+    second = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    assert first["drawers_scanned"] == 4
+    assert second["drawers_scanned"] == 0
+
+    rows.append(_plain_rows(5)[-1])  # a newly mined drawer
+    third = kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+    assert third["drawers_scanned"] == 1
+
+
+def test_interrupted_run_leaves_drawers_to_redo(tmp_path, monkeypatch):
+    """Drawers are marked scanned only after Stage C, so a crash mid-run
+    does not lose them."""
+    import pytest
+
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    rows = _plain_rows(2)
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: StreamingCollection(rows=rows),
+    )
+    palace_dir = tmp_path / ".castle" / "palace"
+    palace_dir.mkdir(parents=True)
+
+    def boom(**kw):
+        raise RuntimeError("interrupted")
+
+    monkeypatch.setattr(kg_enricher, "_write_triples", boom)
+    with pytest.raises(RuntimeError):
+        kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())
+
+    monkeypatch.undo()
+    monkeypatch.setattr(
+        "cognitive_castle.palace.get_collection",
+        lambda *a, **kw: StreamingCollection(rows=rows),
+    )
+    assert kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())["drawers_scanned"] == 2
