@@ -295,6 +295,10 @@ def _get_mine_targets() -> list[tuple[str, str]]:
 
 
 _MINE_PID_FILE = STATE_DIR / "mine.pid"
+# Transcript ingest keeps its own PID file: sharing mine.pid would let a
+# transcript mine and a project mine block — or overwrite — each other
+# (#1231 review).
+_TRANSCRIPT_MINE_PID_FILE = STATE_DIR / "transcript_mine.pid"
 
 
 def _pid_alive(pid: int) -> bool:
@@ -330,13 +334,18 @@ def _pid_alive(pid: int) -> bool:
         return False
 
 
-def _mine_already_running() -> bool:
-    """Return True if a background mine process from a previous hook fire is still alive."""
+def _pid_file_alive(pid_file: Path) -> bool:
+    """True when ``pid_file`` names a process that is still running."""
     try:
-        pid = int(_MINE_PID_FILE.read_text().strip())
+        pid = int(pid_file.read_text().strip())
     except (OSError, ValueError):
         return False
     return _pid_alive(pid)
+
+
+def _mine_already_running() -> bool:
+    """Return True if a background mine process from a previous hook fire is still alive."""
+    return _pid_file_alive(_MINE_PID_FILE)
 
 
 def _spawn_mine(cmd: list) -> None:
@@ -556,11 +565,19 @@ def _ingest_transcript(transcript_path: str):
     except Exception:
         return
 
+    # Single flight: on a long session one mine outlives SAVE_INTERVAL, and
+    # without this guard every later fire stacked another `castle mine` on the
+    # same transcript — three at once, two of them pinning a CPU each. The
+    # skipped fire loses nothing: the next one re-mines the whole directory.
+    if _pid_file_alive(_TRANSCRIPT_MINE_PID_FILE):
+        _log(f"Skipping transcript ingest: previous mine still running ({path.name})")
+        return
+
     try:
         log_path = STATE_DIR / "hook.log"
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         with open(log_path, "a") as log_f:
-            subprocess.Popen(
+            proc = subprocess.Popen(
                 [
                     _castle_script(),
                     "mine",
@@ -573,6 +590,7 @@ def _ingest_transcript(transcript_path: str):
                 stdout=log_f,
                 stderr=log_f,
             )
+        _TRANSCRIPT_MINE_PID_FILE.write_text(str(proc.pid))
         _log(f"Transcript ingest started: {path.name}")
     except OSError:
         pass

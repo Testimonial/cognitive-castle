@@ -16,6 +16,7 @@ from cognitive_castle.hooks_cli import (
     _log,
     _maybe_auto_ingest,
     _castle_python,
+    _ingest_transcript,
     _mine_already_running,
     _mine_sync,
     _parse_harness_input,
@@ -574,6 +575,69 @@ def test_maybe_auto_ingest_skips_when_mine_running(tmp_path):
                 with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
                     _maybe_auto_ingest()
                     mock_popen.assert_not_called()
+
+
+# --- _ingest_transcript: single-flight ---
+#
+# The Stop hook mines the session transcript every SAVE_INTERVAL exchanges.
+# On a long session one mine outlives the interval, and without a guard the
+# next fire started another: three `castle mine` processes stacked on one
+# transcript, two of them pinning a CPU each.
+
+
+def _transcript(tmp_path):
+    t = tmp_path / "session.jsonl"
+    t.write_text('{"type": "user"}\n' * 20)
+    return t
+
+
+def test_ingest_transcript_spawns_and_records_its_pid(tmp_path):
+    pid_file = tmp_path / "transcript_mine.pid"
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._TRANSCRIPT_MINE_PID_FILE", pid_file):
+            with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+                mock_popen.return_value.pid = 4242
+                _ingest_transcript(str(_transcript(tmp_path)))
+                mock_popen.assert_called_once()
+    assert pid_file.read_text() == "4242"
+
+
+def test_ingest_transcript_skips_while_the_previous_mine_runs(tmp_path):
+    pid_file = tmp_path / "transcript_mine.pid"
+    pid_file.write_text(str(os.getpid()))  # a live process
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._TRANSCRIPT_MINE_PID_FILE", pid_file):
+            with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+                _ingest_transcript(str(_transcript(tmp_path)))
+                mock_popen.assert_not_called()
+
+
+def test_ingest_transcript_runs_again_once_the_previous_mine_ended(tmp_path):
+    pid_file = tmp_path / "transcript_mine.pid"
+    pid_file.write_text("999999999")  # almost certainly not a real PID
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._TRANSCRIPT_MINE_PID_FILE", pid_file):
+            with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+                mock_popen.return_value.pid = 5151
+                _ingest_transcript(str(_transcript(tmp_path)))
+                mock_popen.assert_called_once()
+
+
+def test_ingest_transcript_does_not_block_or_overwrite_the_project_mine(tmp_path):
+    """Transcript and project mining keep separate PID files (#1231 review)."""
+    project_pid = tmp_path / "mine.pid"
+    project_pid.write_text(str(os.getpid()))  # a project mine is running
+    with patch("cognitive_castle.hooks_cli.STATE_DIR", tmp_path):
+        with patch("cognitive_castle.hooks_cli._MINE_PID_FILE", project_pid):
+            with patch(
+                "cognitive_castle.hooks_cli._TRANSCRIPT_MINE_PID_FILE",
+                tmp_path / "transcript_mine.pid",
+            ):
+                with patch("cognitive_castle.hooks_cli.subprocess.Popen") as mock_popen:
+                    mock_popen.return_value.pid = 6161
+                    _ingest_transcript(str(_transcript(tmp_path)))
+                    mock_popen.assert_called_once()
+    assert project_pid.read_text() == str(os.getpid())
 
 
 # --- _mine_already_running ---
