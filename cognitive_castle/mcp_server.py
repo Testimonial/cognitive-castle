@@ -292,7 +292,7 @@ Behavioral protocol:
   call castle_kg_invalidate on the old, castle_kg_add for the new.
 - To examine requirement interpretation, select drawer IDs and a decision,
   then use castle_sue_review; retrieve its dialogue via castle_sue_status.
-  Default Ollama is local. Use provider=codex only when external processing
+  Default Ollama is local. Use provider=codex or provider=claude only when external processing
   of those selected records is authorized. SUE findings are derived model
   interpretations, never truth labels or verification of implementation.
 - After significant work (decisions made, problems solved, milestones
@@ -1335,7 +1335,7 @@ def tool_sue_status(run_id=None):
 
 TOOLS = {
     "castle_sue_review": {
-        "description": "Start a background SUE dialogue about selected requirement drawers and a stated decision. Preserves exact sources; stores derived findings separately in this palace. Default Ollama runs on localhost. Explicit provider=codex sends the selected text/context to the configured Codex provider. Does not verify truth or implementation.",
+        "description": "Start a background SUE dialogue about selected requirement drawers and a stated decision. Preserves exact sources; stores derived findings separately in this palace. Default Ollama runs on localhost. Explicit provider=codex or provider=claude sends the selected text/context to that external provider (claude runs an isolated `claude -p`, default claude-opus-5-5). Does not verify truth or implementation.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1343,14 +1343,18 @@ TOOLS = {
                     "type": "array",
                     "items": {"type": "string"},
                     "minItems": 1,
-                    "maxItems": 20,
+                    "maxItems": 2000,
                     "description": "Exact IDs of requirements and context, including exceptions/revisions",
                 },
                 "decision": {
                     "type": "string",
                     "description": "Requirement or interpretation to examine",
                 },
-                "provider": {"type": "string", "enum": ["ollama", "codex"], "default": "ollama"},
+                "provider": {
+                    "type": "string",
+                    "enum": ["ollama", "codex", "claude"],
+                    "default": "ollama",
+                },
                 "model": {
                     "type": "string",
                     "description": "Default qwen3.5:latest for Ollama; gpt-5.6-luna / low for Codex",
@@ -1361,7 +1365,7 @@ TOOLS = {
                     "description": "One of the nine SUE lenses; castle_sue_status lists them",
                 },
                 "max_turns": {"type": "integer", "minimum": 1, "maximum": 14, "default": 7},
-                "timeout": {"type": "integer", "minimum": 1, "maximum": 300, "default": 120},
+                "timeout": {"type": "integer", "minimum": 1, "maximum": 900, "default": 120},
             },
             "required": ["drawer_ids", "decision"],
         },

@@ -220,6 +220,29 @@ def test_explicit_codex_uses_hardened_schema_and_light_model(monkeypatch, queued
     assert result["trace"]["provider"] == "codex"
 
 
+def test_explicit_claude_uses_isolated_print_mode_and_opus(monkeypatch, queued):
+    calls = []
+
+    def run(config, prompt, schema):
+        calls.append((config, prompt, schema))
+        return engine.v1.CallOutcome("ok", reply(), "", 0.01)
+
+    monkeypatch.setattr(engine.v1, "run_model_call", run)
+    result = queued(provider="claude", max_turns=1, wait=True)
+    assert result["manifest"]["external_processing"] is True
+    config, _, _ = calls[0]
+    assert (config.model_protocol, config.model, config.reasoning_effort) == (
+        "claude-stdin",
+        "claude-opus-5-5",
+        None,
+    )
+    assert config.model_command == (
+        "claude --model claude-opus-5-5 --setting-sources '' --strict-mcp-config "
+        "--tools '' --disable-slash-commands --no-session-persistence"
+    )
+    assert result["trace"]["provider"] == "claude"
+
+
 @pytest.mark.parametrize("target", ["specification.txt", "source-001.txt"])
 def test_tampering_stops_before_model(monkeypatch, queued, tmp_path, target):
     result = queued()
@@ -238,18 +261,18 @@ def test_tampering_stops_before_model(monkeypatch, queued, tmp_path, target):
         {"drawer_ids": "one"},
         {"drawer_ids": [False]},
         {"drawer_ids": ["one", "one"]},
-        {"drawer_ids": ["x"] * 21},
+        {"drawer_ids": ["x"] * (sue.MAX_DRAWERS + 1)},
         {"decision": " "},
         {"decision": None},
         {"model": ""},
         {"lens": "unknown"},
         {"lens": []},
-        {"provider": "claude"},
+        {"provider": "copilot"},
         {"max_turns": True},
         {"max_turns": 15},
         {"max_turns": 0},
         {"timeout": 0},
-        {"timeout": 301},
+        {"timeout": sue.MAX_TIMEOUT + 1},
     ],
 )
 def test_invalid_request_creates_nothing(tmp_path, changes):
@@ -261,7 +284,9 @@ def test_invalid_request_creates_nothing(tmp_path, changes):
 
 
 @pytest.mark.parametrize(
-    "text", ["", " ", "x" * 100_001], ids=["empty", "whitespace", "over-byte-limit"]
+    "text",
+    ["", " ", "x" * (sue.MAX_SOURCE_BYTES + 1)],
+    ids=["empty", "whitespace", "over-byte-limit"],
 )
 def test_invalid_source_prevents_snapshot(tmp_path, text):
     col = SimpleNamespace(get=lambda **kw: GetResult(["one"], [text], [{}]))

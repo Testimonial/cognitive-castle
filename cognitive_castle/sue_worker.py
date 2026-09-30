@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import shlex
 import sys
 import time
 
@@ -118,6 +119,13 @@ def _turn_prompt(original, success_results):
             "and incomplete tests explicit. The controller alone chooses the next operator; "
             "a validation retry still answers the same operator. "
             "Each stated premise must reproduce exact source words; label paraphrases inferred. "
+            "Give exactly one evidence item per evidence_lines entry, in the same order: never "
+            "two quotes from one line (quote the one fragment that matters, or the whole line). "
+            "Every line a premise cites must also be listed in evidence_lines and quoted in "
+            "evidence. A stated premise's statement must be an exact substring of the evidence "
+            "quote for one of its cited lines; otherwise label it inferred. "
+            "State a claim only with verdict SUPPORTED or PARTIAL; with CONTRADICTED or SILENT the claim "
+            "field must be null and the conflict goes in witness. "
         )
         if operator not in ("DEFINE", "REVISE"):
             contract += "For this operator, claim=null and revision_reason=null in every outcome. "
@@ -126,15 +134,38 @@ def _turn_prompt(original, success_results):
     return prompt
 
 
+def _claude_command(model):
+    """Isolated `claude -p` reader: no settings, hooks, plugins, MCP, skills, tools or session."""
+    return shlex.join(
+        [
+            "claude",
+            "--model",
+            model,
+            "--setting-sources",
+            "",
+            "--strict-mcp-config",
+            "--tools",
+            "",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ]
+    )
+
+
 def _examine(directory, manifest, text):
     from ._vendor.sue import sue_dialectic as engine
 
-    codex = manifest["provider"] == "codex"
+    provider = manifest["provider"]
+    codex = provider == "codex"
+    command, protocol = {
+        "codex": ("codex", "codex-stdin"),
+        "claude": (_claude_command(manifest["model"]), "claude-stdin"),
+    }.get(provider, ("", "ollama-http"))
     config = engine.v1.RunConfig(
         spec_path=directory / "specification.txt",
         max_questions=manifest["max_turns"],
-        model_command="codex" if codex else "",
-        model_protocol="codex-stdin" if codex else "ollama-http",
+        model_command=command,
+        model_protocol=protocol,
         model=manifest["model"],
         reasoning_effort="low" if codex else None,
         timeout_seconds=manifest["timeout"],
@@ -154,7 +185,7 @@ def _examine(directory, manifest, text):
     calls = []
     try:
         engine.build_turn_prompt = _turn_prompt(original_prompt, engine.SUCCESS_RESULT)
-        if not codex:
+        if provider == "ollama":
             engine.v1.run_model_call = _ollama_transport(engine, manifest)
         turns, terminal, error = engine.run_dialogue(
             config,
@@ -188,7 +219,7 @@ def _examine(directory, manifest, text):
     # Upstream's protocol lookup only names its CLI transports.
     trace["provider"] = manifest["provider"]
     trace["kind"] = manifest["kind"]
-    trace["castle_prompt_policy"] = "operator-contract-2026-09-25"
+    trace["castle_prompt_policy"] = "operator-contract-2026-09-29"
     trace["source_links"] = _source_links(turns, manifest["sources"])
     trace["source_policy"] = "Frozen selected revisions only; source changes require a new review."
     report = engine.render_report(

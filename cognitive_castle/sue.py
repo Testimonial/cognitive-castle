@@ -16,9 +16,13 @@ import uuid
 
 from ._vendor.sue.sue_lenses import LENSES
 
-MAX_SOURCE_BYTES = 100_000
-PROVIDERS = ("ollama", "codex")
-DEFAULT_MODELS = {"ollama": "qwen3.5:latest", "codex": "gpt-5.6-luna"}
+# ~850k tokens of a spec corpus, so the dialogue still fits inside a 1M-token context.
+MAX_SOURCE_BYTES = 2 * 1024 * 1024
+MAX_DRAWERS = 2000
+MAX_TIMEOUT = 900
+PROVIDERS = ("ollama", "codex", "claude")
+DEFAULT_MODELS = {"ollama": "qwen3.5:latest", "codex": "gpt-5.6-luna", "claude": "claude-opus-5-5"}
+EXTERNAL_PROVIDERS = ("codex", "claude")
 
 
 def digest(data):
@@ -49,25 +53,27 @@ def _bounded_int(value, name, low, high):
 def _validate(drawer_ids, decision, provider, model, lens, max_turns, timeout):
     if (
         not isinstance(drawer_ids, list)
-        or not 1 <= len(drawer_ids) <= 20
+        or not 1 <= len(drawer_ids) <= MAX_DRAWERS
         or any(not isinstance(d, str) or not d or len(d) > 512 for d in drawer_ids)
         or len(set(drawer_ids)) != len(drawer_ids)
     ):
         raise ValueError(
-            "Select 1–20 distinct drawer IDs containing requirements and their context"
+            f"Select 1–{MAX_DRAWERS} distinct drawer IDs containing requirements and their context"
         )
     if not isinstance(decision, str) or not decision.strip() or len(decision) > 4000:
         raise ValueError(
             "decision must state the requirement or interpretation to examine (1–4000 chars)"
         )
     if provider not in PROVIDERS:
-        raise ValueError("provider must be ollama (local) or explicitly selected codex (external)")
+        raise ValueError(
+            "provider must be ollama (local) or explicitly selected codex/claude (external)"
+        )
     if model is not None and (not isinstance(model, str) or not model.strip() or len(model) > 200):
         raise ValueError("model must be a nonempty model name")
     if not isinstance(lens, str) or lens not in LENSES:
         raise ValueError(f"Unknown lens; choose from {', '.join(LENSES)}")
     _bounded_int(max_turns, "max_turns", 1, 14)
-    _bounded_int(timeout, "timeout", 1, 300)
+    _bounded_int(timeout, "timeout", 1, MAX_TIMEOUT)
 
 
 def _snapshot(collection, drawer_ids):
@@ -157,7 +163,7 @@ def start_review(
         "max_turns": max_turns,
         "timeout": timeout,
         "max_provider_attempts": max_turns * 2,
-        "external_processing": provider == "codex",
+        "external_processing": provider in EXTERNAL_PROVIDERS,
         "engine": json.loads((Path(__file__).parent / "_vendor/sue/UPSTREAM.json").read_text()),
     }
     write_json(directory / "manifest.json", manifest)
@@ -255,13 +261,13 @@ def configure_parser(subparsers):
         "--provider",
         choices=PROVIDERS,
         default="ollama",
-        help="codex explicitly sends the selected bundle to its configured provider",
+        help="codex/claude explicitly send the selected bundle to their configured provider",
     )
     review.add_argument("--model", default=None)
     review.add_argument("--lens", choices=sorted(LENSES), default="euthyphro")
     review.add_argument("--max-turns", type=int, default=7)
     review.add_argument(
-        "--timeout", type=int, default=120, help="Seconds per model attempt (max 300)"
+        "--timeout", type=int, default=120, help=f"Seconds per model attempt (max {MAX_TIMEOUT})"
     )
     review.add_argument("--wait", action="store_true", help="Wait for the result in the CLI")
     status = actions.add_parser("status", help="List recent runs or retrieve one complete review")
