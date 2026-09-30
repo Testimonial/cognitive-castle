@@ -284,7 +284,9 @@ def test_invalid_request_creates_nothing(tmp_path, changes):
 
 
 @pytest.mark.parametrize(
-    "text", ["", " ", "x" * (sue.MAX_SOURCE_BYTES + 1)], ids=["empty", "whitespace", "over-byte-limit"]
+    "text",
+    ["", " ", "x" * (sue.MAX_SOURCE_BYTES + 1)],
+    ids=["empty", "whitespace", "over-byte-limit"],
 )
 def test_invalid_source_prevents_snapshot(tmp_path, text):
     col = SimpleNamespace(get=lambda **kw: GetResult(["one"], [text], [{}]))

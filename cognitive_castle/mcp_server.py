@@ -1350,7 +1350,11 @@ TOOLS = {
                     "type": "string",
                     "description": "Requirement or interpretation to examine",
                 },
-                "provider": {"type": "string", "enum": ["ollama", "codex", "claude"], "default": "ollama"},
+                "provider": {
+                    "type": "string",
+                    "enum": ["ollama", "codex", "claude"],
+                    "default": "ollama",
+                },
                 "model": {
                     "type": "string",
                     "description": "Default qwen3.5:latest for Ollama; gpt-5.6-luna / low for Codex",

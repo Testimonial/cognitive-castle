@@ -16,7 +16,8 @@ import uuid
 
 from ._vendor.sue.sue_lenses import LENSES
 
-MAX_SOURCE_BYTES = 2 * 1024 * 1024  # ~850k tokens of this corpus; keeps the dialogue inside a 1M context
+# ~850k tokens of a spec corpus, so the dialogue still fits inside a 1M-token context.
+MAX_SOURCE_BYTES = 2 * 1024 * 1024
 MAX_DRAWERS = 2000
 MAX_TIMEOUT = 900
 PROVIDERS = ("ollama", "codex", "claude")
