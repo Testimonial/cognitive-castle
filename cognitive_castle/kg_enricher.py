@@ -134,7 +134,7 @@ def _walk_corpus(col, *, work_ids: Iterable[str], cfg) -> tuple[dict, Counter]:
 
     for batch in _batched(work_ids, 1000):
         for row in col.get_by_ids(batch):
-            per_drawer = entity_detector.extract_candidates(row["text"], cfg.languages)
+            per_drawer = entity_detector.extract_candidates(row["text"], cfg.entity_languages)
             for name, count in per_drawer.items():
                 mention_map[name].add(row["id"])
                 freq_by_name[name] += count
@@ -174,7 +174,7 @@ def _classify_and_promote(
     """
     sample_n = cfg.entity_score_sample_drawers
     threshold = cfg.entity_promote_threshold
-    languages = cfg.languages
+    languages = cfg.entity_languages
 
     candidates_to_score = [
         name for name in freq_by_name if registry.lookup(name).get("type") == "unknown"

@@ -17,12 +17,18 @@ def _mock_cfg(
     fetch_batch=1000,
     languages=("en",),
 ):
-    """Minimal cfg exposing only the fields kg_enricher reads."""
-    cfg = MagicMock()
+    """Minimal cfg exposing only the fields kg_enricher reads.
+
+    ``spec_set`` ties the mock to the real config: reading or setting a name
+    CognitiveCastleConfig does not have fails here instead of only in a real
+    mine (it once read ``cfg.languages`` and every KG enrichment failed)."""
+    from cognitive_castle.config import CognitiveCastleConfig
+
+    cfg = MagicMock(spec_set=CognitiveCastleConfig)
     cfg.entity_promote_threshold = threshold
     cfg.entity_score_sample_drawers = sample_drawers
     cfg.entity_fetch_batch_size = fetch_batch
-    cfg.languages = languages
+    cfg.entity_languages = languages
     return cfg
 
 
