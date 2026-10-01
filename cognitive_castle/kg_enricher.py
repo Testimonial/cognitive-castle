@@ -13,6 +13,7 @@ See spec: docs/superpowers/specs/2026-05-14-kg-enrichment-design.md
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 from collections import Counter, defaultdict
@@ -25,6 +26,12 @@ from . import palace as palace_mod
 
 
 ADAPTER_NAME = "entity-mention-indexer"
+
+# Entities are read from the first MAX_DRAWER_CHARS of a drawer. Most drawers
+# are under 1 KB, but a whole session file filed as one drawer can run to
+# 100+ MB: on one palace 344 such drawers held 12 of its 13.5 GB of text, and
+# every stage spent its time in them.
+MAX_DRAWER_CHARS = 200_000
 
 
 def _batched(iterable, size):
@@ -197,11 +204,11 @@ def _iter_texts(col, ids: Iterable[str], *, batch_size: int):
             return
         for drawer_id, text in col.iter_id_text():
             if drawer_id in wanted:
-                yield drawer_id, text or ""
+                yield drawer_id, (text or "")[:MAX_DRAWER_CHARS]
         return
     for batch in _batched(ids, batch_size):
         for row in col.get_by_ids(batch):
-            yield row["id"], row["text"]
+            yield row["id"], (row["text"] or "")[:MAX_DRAWER_CHARS]
 
 
 def _classify_and_promote(
@@ -238,7 +245,9 @@ def _classify_and_promote(
                 del mention_map[name]
             continue
         sample = "\n".join(sample_texts)
-        scores = entity_detector.score_entity(name, sample, sample.splitlines(), languages)
+        scores = entity_detector.score_entity(
+            name, _near_name(name, sample), sample.splitlines(), languages
+        )
         cls = entity_detector.classify_entity(name, freq_by_name[name], scores)
 
         if cls["type"] in ("person", "project") and cls["confidence"] >= threshold:
@@ -249,6 +258,66 @@ def _classify_and_promote(
                 del mention_map[name]
 
     return promoted
+
+
+# Every scoring pattern embeds the name and reaches at most a few words past
+# it (``pip install NAME``, ``the NAME architecture``), so only the text
+# around each occurrence can match. Scanning whole 20-drawer samples with ~40
+# regexes per candidate made Stage B take hours on a large palace.
+_NAME_WINDOW_CHARS = 80
+# Every window reaches _NAME_WINDOW_CHARS past each occurrence it holds, so
+# no pattern can start in one window and finish in the next, and a window
+# never starts at the name itself (no false ``^NAME``).
+_WINDOW_SEPARATOR = "\n"
+
+
+def _near_name(name: str, text: str) -> str:
+    """The text around each occurrence of ``name``, as scoring sees it.
+
+    Windows are widened to whole words (so ``\\b`` behaves as in the full
+    text) and through whitespace runs (so ``\\s+`` is not cut short), then
+    merged.
+    """
+    n = len(text)
+    spans: list[list[int]] = []
+    for m in re.finditer(re.escape(name), text, re.IGNORECASE):
+        lo = _widen_left(text, max(0, m.start() - _NAME_WINDOW_CHARS))
+        hi = _widen_right(text, min(n, m.end() + _NAME_WINDOW_CHARS))
+        if spans and lo <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], hi)
+        else:
+            spans.append([lo, hi])
+    return _WINDOW_SEPARATOR.join(text[lo:hi] for lo, hi in spans)
+
+
+def _widen_left(text: str, lo: int) -> int:
+    """Move a window start off a cut word, and back over a cut whitespace
+    run plus the word before it."""
+    while 0 < lo < len(text) and _is_word(text[lo - 1]) and _is_word(text[lo]):
+        lo -= 1
+    if lo > 0 and text[lo - 1].isspace():
+        while lo > 0 and text[lo - 1].isspace():
+            lo -= 1
+        while lo > 0 and _is_word(text[lo - 1]):
+            lo -= 1
+    return lo
+
+
+def _widen_right(text: str, hi: int) -> int:
+    """Mirror of ``_widen_left`` for a window end (exclusive)."""
+    n = len(text)
+    while 0 < hi < n and _is_word(text[hi - 1]) and _is_word(text[hi]):
+        hi += 1
+    if hi < n and text[hi].isspace():
+        while hi < n and text[hi].isspace():
+            hi += 1
+        while hi < n and _is_word(text[hi]):
+            hi += 1
+    return hi
+
+
+def _is_word(ch: str) -> bool:
+    return ch.isalnum() or ch == "_"
 
 
 def _write_triples(*, mention_map: dict, registry, kg) -> int:

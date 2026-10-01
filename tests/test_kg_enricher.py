@@ -694,3 +694,71 @@ def test_interrupted_run_leaves_drawers_to_redo(tmp_path, monkeypatch):
         lambda *a, **kw: StreamingCollection(rows=rows),
     )
     assert kg_enricher.enrich_palace(str(palace_dir), _mock_cfg())["drawers_scanned"] == 2
+
+
+# ── Scoring reads only the text around the name ──────────────────────────
+
+
+def _score(name, text):
+    from cognitive_castle import entity_detector
+
+    return entity_detector.score_entity(name, text, text.splitlines(), ("en",))
+
+
+def test_near_name_scores_like_the_full_text():
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    filler = "lorem ipsum dolor sit amet " * 40
+    text = "\n".join(
+        [
+            "Riley: morning",
+            filler,
+            "Riley: all good",
+            filler + " hey Riley, " + filler,
+            "we are deploying Riley today and pip install Riley too",
+            filler,
+            "Riley said it was fine. Riley wants more.",
+        ]
+    )
+    focused = kg_enricher._near_name("Riley", text)
+
+    assert len(focused) < len(text) / 2
+    full, near = _score("Riley", text), _score("Riley", focused)
+    assert (near["person_score"], near["project_score"]) == (
+        full["person_score"],
+        full["project_score"],
+    )
+
+
+def test_near_name_does_not_invent_a_line_start():
+    """``^Riley:`` is dialogue only at a real line start."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    text = ("x" * 50 + " ") * 4 + "Riley: not a speaker\nRiley: a speaker"
+    assert _score("Riley", kg_enricher._near_name("Riley", text)) == _score("Riley", text)
+
+
+def test_near_name_does_not_bridge_distant_windows():
+    """``Riley\\s+said`` must not match across two distant windows."""
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    text = "Riley" + " word" * 200 + "\nsaid Riley"
+    assert _score("Riley", kg_enricher._near_name("Riley", text)) == _score("Riley", text)
+
+
+def test_near_name_follows_a_long_whitespace_run():
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    text = "hey" + " " * 300 + "Riley"
+    assert _score("Riley", kg_enricher._near_name("Riley", text))["person_score"] > 0
+
+
+def test_huge_drawers_are_read_up_to_the_cap():
+    import cognitive_castle.kg_enricher as kg_enricher
+
+    huge = "Riley said hi. " * (kg_enricher.MAX_DRAWER_CHARS // 10)
+    col = StreamingCollection(
+        [{"id": "big", "text": huge, "wing": "p", "room": "r", "source_file": "f"}]
+    )
+    [(drawer_id, text)] = list(kg_enricher._iter_texts(col, ["big"], batch_size=1000))
+    assert len(text) == kg_enricher.MAX_DRAWER_CHARS
